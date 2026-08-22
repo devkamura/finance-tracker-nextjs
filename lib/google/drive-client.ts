@@ -1,12 +1,10 @@
 import { google } from "googleapis";
 
-import { prisma } from "@/lib/prisma";
+import { getGoogleTokens, updateGoogleAccessToken } from "@/lib/google/tokens";
 
 async function getDriveClientForUser(userId: string) {
-  const account = await prisma.account.findFirst({
-    where: { userId, provider: "google" },
-  });
-  if (!account) {
+  const tokenRow = await getGoogleTokens(userId);
+  if (!tokenRow) {
     throw new Error(
       "Googleアカウントが連携されていません。再ログインしてください。"
     );
@@ -17,33 +15,31 @@ async function getDriveClientForUser(userId: string) {
     process.env.GOOGLE_CLIENT_SECRET
   );
 
+  // 60秒のバッファを持たせ、期限直前でのAPI呼び出し失敗を避ける。
   const isExpired =
-    !account.expires_at || account.expires_at * 1000 < Date.now();
+    new Date(tokenRow.expires_at).getTime() - 60_000 < Date.now();
 
   if (isExpired) {
-    if (!account.refresh_token) {
+    if (!tokenRow.refresh_token) {
       throw new Error(
         "リフレッシュトークンがありません。再ログインしてください。"
       );
     }
-    oauth2Client.setCredentials({ refresh_token: account.refresh_token });
+    oauth2Client.setCredentials({ refresh_token: tokenRow.refresh_token });
     const { credentials } = await oauth2Client.refreshAccessToken();
 
-    await prisma.account.update({
-      where: { id: account.id },
-      data: {
-        access_token: credentials.access_token,
-        expires_at: credentials.expiry_date
-          ? Math.floor(credentials.expiry_date / 1000)
-          : null,
-      },
+    await updateGoogleAccessToken(userId, {
+      accessToken: credentials.access_token!,
+      expiresAt: credentials.expiry_date
+        ? new Date(credentials.expiry_date)
+        : new Date(Date.now() + 3600 * 1000),
     });
 
     oauth2Client.setCredentials(credentials);
   } else {
     oauth2Client.setCredentials({
-      access_token: account.access_token,
-      refresh_token: account.refresh_token,
+      access_token: tokenRow.access_token,
+      refresh_token: tokenRow.refresh_token,
     });
   }
 

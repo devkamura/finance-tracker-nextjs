@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
 
-import { auth, signIn } from "@/auth";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function LoginPage() {
-  const session = await auth();
-  if (session) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
     redirect("/");
   }
 
@@ -20,7 +23,23 @@ export default async function LoginPage() {
           className="mt-8"
           action={async () => {
             "use server";
-            await signIn("google", { redirectTo: "/" });
+            const supabase = await createClient();
+            const { data, error } = await supabase.auth.signInWithOAuth({
+              provider: "google",
+              options: {
+                redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+                scopes:
+                  "openid email profile https://www.googleapis.com/auth/drive.file",
+                queryParams: {
+                  access_type: "offline",
+                  prompt: "consent",
+                },
+              },
+            });
+            if (error || !data.url) {
+              throw new Error("Googleログインの開始に失敗しました。");
+            }
+            redirect(data.url);
           }}
         >
           <button

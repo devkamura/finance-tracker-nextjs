@@ -1,22 +1,34 @@
+import { redirect } from "next/navigation";
+
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
 
-import { auth, signOut } from "@/auth";
+import { DisplayNameEditor } from "@/components/DisplayNameEditor";
+import { getDisplayName } from "@/lib/supabase/profile";
+import { createClient } from "@/lib/supabase/server";
 
 export async function AppHeader() {
-  const session = await auth();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const displayName = user
+    ? await getDisplayName(supabase, user.id, user.email ?? "")
+    : null;
 
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
         <h1 className="text-lg font-bold text-slate-900">家計簿</h1>
-        {session?.user && (
+        {user && displayName && (
           <div className="flex items-center gap-3 text-sm text-slate-600">
-            <span>{session.user.email}</span>
+            <DisplayNameEditor initialDisplayName={displayName} />
             <form
               action={async () => {
                 "use server";
-                await signOut({ redirectTo: "/login" });
+                const supabase = await createClient();
+                await supabase.auth.signOut();
+                redirect("/login");
               }}
             >
               <button

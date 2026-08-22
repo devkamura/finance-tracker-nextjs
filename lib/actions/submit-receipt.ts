@@ -1,8 +1,9 @@
 "use server";
 
-import { auth } from "@/auth";
 import { buildReceiptJson } from "@/lib/google/build-receipt-json";
 import { uploadJsonToDrive } from "@/lib/google/drive-client";
+import { getDisplayName } from "@/lib/supabase/profile";
+import { createClient } from "@/lib/supabase/server";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState } from "@/types/receipt";
 
@@ -21,8 +22,11 @@ function toYYYYMMDDHHmm(date: Date): string {
 export async function submitReceipt(
   state: ReceiptFormState
 ): Promise<SubmitReceiptResult> {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
     return { success: false, errors: ["ログインが必要です。"] };
   }
 
@@ -33,9 +37,10 @@ export async function submitReceipt(
 
   try {
     const now = new Date();
-    const json = await buildReceiptJson(state, session.user.email ?? "", now);
+    const displayName = await getDisplayName(supabase, user.id, user.email ?? "");
+    const json = await buildReceiptJson(supabase, state, displayName, now);
     const filename = `receipt_${toYYYYMMDDHHmm(now)}.json`;
-    await uploadJsonToDrive(session.user.id, filename, json);
+    await uploadJsonToDrive(user.id, filename, json);
     return { success: true };
   } catch (e) {
     console.error("Failed to upload receipt to Google Drive", e);
