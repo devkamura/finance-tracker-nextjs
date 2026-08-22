@@ -78,17 +78,9 @@ types/                # 型定義
 supabase gen types typescript --local > lib/supabase/database.types.ts
 ```
 
-## 本番/ステージング環境
+## 本番環境（Vercel）
 
-Next.jsはDockerを使わず、ビルド成果物をそのまま実行します。
-
-```bash
-npm ci
-npm run build
-npm run start
-```
-
-常駐プロセスの管理には PM2 や systemd 等のプロセスマネージャーをご利用ください。`.env.staging` / `.env.production` を用意してください（`.env.example` を参照）。クラウドのSupabaseプロジェクトを作成し、`NEXT_PUBLIC_SUPABASE_URL` 等をそのプロジェクトの値に、`NEXT_PUBLIC_SITE_URL` をデプロイ先ドメインに合わせて変更してください。マイグレーションは `supabase db push` で反映します。
+本番はVercel（GitHubリポジトリを直接インポート）+ クラウドのSupabaseプロジェクトで運用します。Google Cloud Console・Supabase・Vercelそれぞれで必要な設定、各キー/IDの用途と取得方法、トラブルシューティングは [docs/deployment-guide.md](docs/deployment-guide.md) を参照してください。
 
 ## 手動確認チェックリスト
 
