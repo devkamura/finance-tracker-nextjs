@@ -11,8 +11,20 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
 
   if (code) {
+    console.log("[auth/callback] received code present");
     const supabase = await createClient();
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    let data, error;
+    try {
+      ({ data, error } = await supabase.auth.exchangeCodeForSession(code));
+    } catch (e) {
+      console.error("[auth/callback] exchangeCodeForSession threw", e);
+    }
+
+    console.log("[auth/callback] exchange result:", {
+      error: error ? (error.message || error) : null,
+      hasSession: !!data?.session?.user,
+      userId: data?.session?.user?.id ?? null,
+    });
 
     if (error) {
       console.error("exchangeCodeForSession failed", error);
@@ -35,6 +47,7 @@ export async function GET(request: Request) {
           return NextResponse.redirect(`${origin}/login?error=google_token`);
         }
       }
+      console.log("[auth/callback] redirecting to origin root", origin);
       return NextResponse.redirect(`${origin}/`);
     }
   }
