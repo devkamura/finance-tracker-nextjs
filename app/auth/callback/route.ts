@@ -13,12 +13,15 @@ export async function GET(request: Request) {
   if (code) {
     console.log("[auth/callback] received code present");
     const supabase = await createClient();
-    let data, error;
+    let res;
     try {
-      ({ data, error } = await supabase.auth.exchangeCodeForSession(code));
+      res = await supabase.auth.exchangeCodeForSession(code);
     } catch (e) {
       console.error("[auth/callback] exchangeCodeForSession threw", e);
     }
+
+    const error = res?.error ?? null;
+    const data = res?.data ?? null;
 
     console.log("[auth/callback] exchange result:", {
       error: error ? (error.message || error) : null,
@@ -30,7 +33,7 @@ export async function GET(request: Request) {
       console.error("exchangeCodeForSession failed", error);
     }
 
-    if (!error && data.session?.user) {
+    if (!error && data?.session?.user) {
       const { session } = data;
       if (session.provider_token) {
         try {
