@@ -70,13 +70,13 @@ export function ReceiptItemCard({
               inputMode="numeric"
               value={item.price}
               onChange={(e) => onChange({ price: e.target.value })}
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             {showSameAsAmountButton && (
               <button
                 type="button"
                 onClick={() => onChange({ price: amount })}
-                className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
               >
                 <FontAwesomeIcon icon={faEquals} />
                 合計と同じ
