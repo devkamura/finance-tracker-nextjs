@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
+import { faGear, faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
 
-import { DisplayNameEditor } from "@/components/DisplayNameEditor";
+import { getCurrentMembership } from "@/lib/supabase/group";
 import { getDisplayName } from "@/lib/supabase/profile";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,6 +16,9 @@ export async function AppHeader() {
   const displayName = user
     ? await getDisplayName(supabase, user.id, user.email ?? "")
     : null;
+  const membership = user
+    ? await getCurrentMembership(supabase, user.id)
+    : null;
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -22,7 +26,16 @@ export async function AppHeader() {
         <h1 className="text-lg font-bold text-slate-900">家計簿</h1>
         {user && displayName && (
           <div className="flex items-center gap-3 text-sm text-slate-600">
-            <DisplayNameEditor initialDisplayName={displayName} />
+            <span>{displayName}</span>
+            {membership?.role === "admin" && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-1 hover:text-slate-900"
+              >
+                <FontAwesomeIcon icon={faGear} />
+                管理画面
+              </Link>
+            )}
             <form
               action={async () => {
                 "use server";

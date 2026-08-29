@@ -1,17 +1,8 @@
-import { redirect } from "next/navigation";
-
 import { createClient } from "@/lib/supabase/server";
-import { AppHeader } from "@/components/AppHeader";
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
 
 export default async function Home() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/login");
-  }
 
   const [
     { data: stores, error: storesError },
@@ -44,21 +35,18 @@ export default async function Home() {
     transactionTypes!.find((t) => t.name === "支出") ?? transactionTypes![0];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <AppHeader />
-      <main className="mx-auto max-w-2xl px-4 py-8">
-        <ReceiptForm
-          masterData={{
-            stores: stores!,
-            transactionTypes: transactionTypes!,
-            consumptionTaxes: consumptionTaxes!,
-            categories: categories!,
-            purposes: purposes!,
-            scenes: scenes!,
-          }}
-          defaultTransactionTypeId={String(defaultTransactionType?.id ?? "")}
-        />
-      </main>
-    </div>
+    <main className="mx-auto max-w-2xl px-4 py-8">
+      <ReceiptForm
+        masterData={{
+          stores: stores!,
+          transactionTypes: transactionTypes!,
+          consumptionTaxes: consumptionTaxes!,
+          categories: categories!,
+          purposes: purposes!,
+          scenes: scenes!,
+        }}
+        defaultTransactionTypeId={String(defaultTransactionType?.id ?? "")}
+      />
+    </main>
   );
 }

@@ -1,22 +1,7 @@
 -- 元となるDjango版の実データ（src/fixtures/initial_data.json）を移植。
 -- 「該当なし」はUI側の定数として扱うためここには含めない。
-
-insert into public.stores (name) values
-  ('OK'),
-  ('APITA'),
-  ('マツモトキヨシ'),
-  ('スシロー'),
-  ('セブンイレブン'),
-  ('ファミリーマート'),
-  ('マクドナルド'),
-  ('メルカリ'),
-  ('Amazon'),
-  ('吉野家'),
-  ('すき家'),
-  ('Seria'),
-  ('ほねごり'),
-  ('くら寿司')
-on conflict (name) do nothing;
+-- storesはグループ単位のデータになったため、ここでのシードは行わない。
+-- 各グループの管理者が /admin/stores から必要な店舗を登録する。
 
 insert into public.transaction_types (name) values
   ('支出'),

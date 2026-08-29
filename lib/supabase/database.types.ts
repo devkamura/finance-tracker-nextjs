@@ -97,19 +97,84 @@ export type Database = {
         }
         Relationships: []
       }
+      group_members: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          invited_display_name: string | null
+          invited_email: string | null
+          role: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          invited_display_name?: string | null
+          invited_email?: string | null
+          role?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          invited_display_name?: string | null
+          invited_email?: string | null
+          role?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           display_name: string
+          email: string | null
           id: string
           updated_at: string
         }
         Insert: {
           display_name: string
+          email?: string | null
           id: string
           updated_at?: string
         }
         Update: {
           display_name?: string
+          email?: string | null
           id?: string
           updated_at?: string
         }
@@ -147,18 +212,29 @@ export type Database = {
       }
       stores: {
         Row: {
+          group_id: string
           id: number
           name: string
         }
         Insert: {
+          group_id: string
           id?: never
           name: string
         }
         Update: {
+          group_id?: string
           id?: never
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stores_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transaction_types: {
         Row: {
@@ -180,7 +256,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      _link_group_membership: {
+        Args: { p_email: string; p_user_id: string }
+        Returns: undefined
+      }
+      admin_manages_user: { Args: { p_user_id: string }; Returns: boolean }
+      create_group_with_admin: {
+        Args: { p_name: string }
+        Returns: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "groups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      is_group_admin: { Args: { p_group_id: string }; Returns: boolean }
+      link_pending_group_memberships: { Args: never; Returns: undefined }
+      my_group_ids: { Args: never; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
