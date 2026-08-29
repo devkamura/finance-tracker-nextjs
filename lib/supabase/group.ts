@@ -26,3 +26,22 @@ export async function getCurrentMembership(
 
   return { groupId: data.group_id, role: data.role as "admin" | "member" };
 }
+
+// 指定グループの管理者のuser_idを取得する。
+// レシートのGoogle Driveアップロード先を「投稿者本人」ではなく
+// 「グループ管理者」のDriveに一本化するために使う（各メンバーは
+// 管理者のDriveへのアクセス権を持たないため、投稿者自身のトークンでは
+// アップロードできない）。
+export async function getGroupAdminUserId(
+  supabase: SupabaseClient,
+  groupId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("group_members")
+    .select("user_id")
+    .eq("group_id", groupId)
+    .eq("role", "admin")
+    .maybeSingle();
+
+  return data?.user_id ?? null;
+}
