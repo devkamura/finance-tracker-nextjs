@@ -48,13 +48,13 @@ export function OcrUploadSection({ onExtracted, onError }: OcrUploadSectionProps
         画像をアップロードすると、Geminiがレシートを読み取り下記のフォームに自動入力します。読み取り結果は送信前に必ず確認してください。
       </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           ref={inputRef}
           type="file"
           accept="image/png,image/jpeg,image/heic,image/heif"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="min-w-0 flex-1 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-slate-700 hover:file:bg-slate-50"
+          className="min-w-0 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-slate-700 hover:file:bg-slate-50 sm:flex-1"
         />
         <Button
           type="button"

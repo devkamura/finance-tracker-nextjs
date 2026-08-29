@@ -36,6 +36,8 @@ export function ReceiptItemsSection({
   masterData,
 }: ReceiptItemsSectionProps) {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  // 一度に開けるのは1項目のみ（アコーディオン）。既定はすべて折りたたみ。
+  const [openItemId, setOpenItemId] = useState<string | null>(null);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -61,8 +63,15 @@ export function ReceiptItemsSection({
             key={item.clientId}
             index={index}
             item={item}
+            isOpen={openItemId === item.clientId}
+            onToggleOpen={() =>
+              setOpenItemId((prev) =>
+                prev === item.clientId ? null : item.clientId
+              )
+            }
             amount={amount}
             showSameAsAmountButton={items.length === 1}
+            showRemoveButton={items.length > 1}
             onChange={(patch) => onUpdateItem(item.clientId, patch)}
             onRemove={() => onRemoveItem(item.clientId)}
             masterData={masterData}
