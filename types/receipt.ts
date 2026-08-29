@@ -25,3 +25,16 @@ export type MasterData = {
   purposes: { id: number; name: string }[];
   scenes: { id: number; name: string }[];
 };
+
+// Gemini APIによるレシート画像の読み取り結果
+export type OcrReceiptItem = {
+  name: string;
+  price: number;
+};
+
+export type OcrReceiptResult = {
+  storeName: string | null;
+  datetime: string | null; // "YYYY-MM-DDTHH:mm" 形式（<input type="datetime-local"> 互換）
+  totalPrice: number | null;
+  items: OcrReceiptItem[];
+};

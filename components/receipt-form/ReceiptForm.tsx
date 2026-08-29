@@ -5,19 +5,29 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { ReceiptUnitSection } from "@/components/receipt-form/ReceiptUnitSection";
 import { ReceiptItemsSection } from "@/components/receipt-form/ReceiptItemsSection";
+import { OcrUploadSection } from "@/components/receipt-form/OcrUploadSection";
 import { ConfirmSubmitModal } from "@/components/receipt-form/ConfirmSubmitModal";
 import { SubmitLoadingOverlay } from "@/components/receipt-form/SubmitLoadingOverlay";
 import { Toast, type ToastState } from "@/components/receipt-form/Toast";
 import { submitReceipt } from "@/lib/actions/submit-receipt";
+import { SELECT_NONE_VALUE } from "@/lib/constants";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
-import type { MasterData, ReceiptFormState, ReceiptItem } from "@/types/receipt";
+import type {
+  MasterData,
+  OcrReceiptResult,
+  ReceiptFormState,
+  ReceiptItem,
+} from "@/types/receipt";
+
+function generateClientId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `item-${Date.now()}-${Math.random()}`;
+}
 
 function createEmptyItem(): ReceiptItem {
   return {
-    clientId:
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `item-${Date.now()}-${Math.random()}`,
+    clientId: generateClientId(),
     name: "",
     price: "",
     taxRateId: "",
@@ -25,6 +35,46 @@ function createEmptyItem(): ReceiptItem {
     purposeId: "",
     sceneIds: [],
   };
+}
+
+// OCR読み取り結果を既存フォームの状態にマッピングする。
+// 税率・カテゴリー・目的・シーンはマスタ選択式でOCRからは判定できないため空のままとし、
+// 店舗名は登録済みマスタと名称が一致すればプルダウン選択、一致しなければ手入力欄に反映する。
+function buildOcrPatch(
+  result: OcrReceiptResult,
+  stores: MasterData["stores"]
+): Partial<ReceiptFormState> {
+  const patch: Partial<ReceiptFormState> = {};
+
+  if (result.datetime) {
+    patch.datetime = result.datetime;
+  }
+  if (result.totalPrice !== null) {
+    patch.amount = String(result.totalPrice);
+  }
+  if (result.storeName) {
+    const matched = stores.find((store) => store.name === result.storeName);
+    if (matched) {
+      patch.storeSelect = String(matched.id);
+      patch.storeInputText = "";
+    } else {
+      patch.storeSelect = SELECT_NONE_VALUE;
+      patch.storeInputText = result.storeName;
+    }
+  }
+  if (result.items.length > 0) {
+    patch.items = result.items.map((item) => ({
+      clientId: generateClientId(),
+      name: item.name,
+      price: String(item.price),
+      taxRateId: "",
+      categoryId: "",
+      purposeId: "",
+      sceneIds: [],
+    }));
+  }
+
+  return patch;
 }
 
 function createInitialState(defaultTransactionTypeId: string): ReceiptFormState {
@@ -100,6 +150,18 @@ export function ReceiptForm({
     setConfirmOpen(true);
   };
 
+  const handleOcrExtracted = (result: OcrReceiptResult) => {
+    updateState(buildOcrPatch(result, masterData.stores));
+    setToast({
+      type: "success",
+      message: "レシートを読み取りました。内容を確認してください。",
+    });
+  };
+
+  const handleOcrError = (message: string) => {
+    setToast({ type: "error", message });
+  };
+
   const handleConfirm = () => {
     setConfirmOpen(false);
     startTransition(async () => {
@@ -134,6 +196,8 @@ export function ReceiptForm({
           </ul>
         </div>
       )}
+
+      <OcrUploadSection onExtracted={handleOcrExtracted} onError={handleOcrError} />
 
       <ReceiptUnitSection
         state={state}
