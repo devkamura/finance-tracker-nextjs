@@ -35,6 +35,17 @@ export async function GET(request: Request) {
 
     if (!error && data?.session?.user) {
       const { session } = data;
+
+      // 管理者が事前にGmailアドレスだけで招待登録していた場合、
+      // ここで本人のuser_idと突き合わせてグループメンバーとして紐付ける。
+      // 失敗してもログイン自体は継続させる（招待紐付けの失敗は致命的ではない）。
+      const { error: linkError } = await supabase.rpc(
+        "link_pending_group_memberships"
+      );
+      if (linkError) {
+        console.error("Failed to link pending group memberships", linkError);
+      }
+
       if (session.provider_token) {
         try {
           await upsertGoogleTokens(session.user.id, {

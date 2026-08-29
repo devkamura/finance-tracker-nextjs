@@ -5,15 +5,24 @@ import { useState, useTransition } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCheck, faPen, faXmark } from "@fortawesome/free-solid-svg-icons";
 
-import { updateDisplayName } from "@/lib/actions/update-display-name";
+export type SaveDisplayNameResult =
+  | { success: true; displayName: string }
+  | { success: false; error: string };
 
-type DisplayNameEditorProps = {
+type MemberDisplayNameEditorProps = {
   initialDisplayName: string;
+  placeholder?: string;
+  onSave: (displayName: string) => Promise<SaveDisplayNameResult>;
 };
 
-export function DisplayNameEditor({
+// 旧DisplayNameEditor.tsx（本人による自己編集）の管理者専用版。
+// 参加済みメンバー・招待中(未参加)メンバーのどちらの表示名編集にも使えるよう、
+// 保存処理はonSaveとして呼び出し側（MemberList）から注入する。
+export function MemberDisplayNameEditor({
   initialDisplayName,
-}: DisplayNameEditorProps) {
+  placeholder,
+  onSave,
+}: MemberDisplayNameEditorProps) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(initialDisplayName);
@@ -33,7 +42,7 @@ export function DisplayNameEditor({
 
   const save = () => {
     startTransition(async () => {
-      const result = await updateDisplayName(draft);
+      const result = await onSave(draft);
       if (result.success) {
         setDisplayName(result.displayName);
         setEditing(false);
@@ -53,7 +62,7 @@ export function DisplayNameEditor({
           onChange={(e) => setDraft(e.target.value)}
           disabled={isPending}
           autoFocus
-          className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-32 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button
           type="button"
@@ -82,9 +91,11 @@ export function DisplayNameEditor({
     <button
       type="button"
       onClick={startEdit}
-      className="flex items-center gap-1 hover:text-slate-900"
+      className="flex items-center gap-1 text-sm text-slate-900 hover:text-slate-700"
     >
-      <span>{displayName}</span>
+      <span className={displayName ? "" : "text-slate-400"}>
+        {displayName || placeholder || "未設定"}
+      </span>
       <FontAwesomeIcon icon={faPen} className="text-xs text-slate-400" />
     </button>
   );
