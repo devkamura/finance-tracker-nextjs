@@ -31,7 +31,7 @@ export default async function ReceiptEditPage({
     getReceiptForEdit(supabase, membership!.groupId, id),
     getGroupMembers(supabase, membership!.groupId),
     Promise.all([
-      supabase.from("stores").select("id, name").order("id"),
+      supabase.from("payees").select("id, name").order("id"),
       supabase.from("transaction_types").select("id, name").order("id"),
       supabase.from("consumption_taxes").select("id, name").order("id"),
       supabase.from("categories").select("id, name").order("id"),
@@ -45,7 +45,7 @@ export default async function ReceiptEditPage({
   }
 
   const [
-    { data: stores, error: storesError },
+    { data: payees, error: payeesError },
     { data: transactionTypes, error: transactionTypesError },
     { data: consumptionTaxes, error: consumptionTaxesError },
     { data: categories, error: categoriesError },
@@ -54,7 +54,7 @@ export default async function ReceiptEditPage({
   ] = masters;
 
   const error =
-    storesError ||
+    payeesError ||
     transactionTypesError ||
     consumptionTaxesError ||
     categoriesError ||
@@ -96,7 +96,7 @@ export default async function ReceiptEditPage({
         initialImageUrl={editData.receiptImageUrl}
         redirectHref={detailHref}
         masterData={{
-          stores: stores!,
+          payees: payees!,
           transactionTypes: transactionTypes!,
           consumptionTaxes: consumptionTaxes!,
           categories: categories!,

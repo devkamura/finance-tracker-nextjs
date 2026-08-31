@@ -108,33 +108,33 @@ describe("グループベース管理画面機能のRLS/RPC", () => {
     }
   });
 
-  it("I-04: グループBのセッションからグループAの店舗は見えない", async () => {
-    const { data: storeA, error: insertError } = await adminA.client
-      .from("stores")
-      .insert({ group_id: groupAId, name: "グループA専用店舗" })
+  it("I-04: グループBのセッションからグループAの支払い先は見えない", async () => {
+    const { data: payeeA, error: insertError } = await adminA.client
+      .from("payees")
+      .insert({ group_id: groupAId, name: "グループA専用支払い先" })
       .select("id")
       .single();
     expect(insertError).toBeNull();
 
     const { data: visibleFromB } = await adminB.client
-      .from("stores")
+      .from("payees")
       .select("id")
-      .eq("id", storeA!.id);
+      .eq("id", payeeA!.id);
     expect(visibleFromB).toEqual([]);
   });
 
-  it("I-05: 一般メンバーは店舗をINSERTできない", async () => {
-    const { error } = await memberA1.client.from("stores").insert({
+  it("I-05: 一般メンバーは支払い先をINSERTできない", async () => {
+    const { error } = await memberA1.client.from("payees").insert({
       group_id: groupAId,
-      name: "一般メンバーが登録しようとした店舗",
+      name: "一般メンバーが登録しようとした支払い先",
     });
     expect(error).not.toBeNull();
   });
 
-  it("I-06: 管理者は他グループのgroup_idを指定して店舗を書き込めない", async () => {
+  it("I-06: 管理者は他グループのgroup_idを指定して支払い先を書き込めない", async () => {
     const { data } = await adminA.client
-      .from("stores")
-      .insert({ group_id: groupBId, name: "越境登録の店舗" })
+      .from("payees")
+      .insert({ group_id: groupBId, name: "越境登録の支払い先" })
       .select("id");
     expect(data === null || data.length === 0).toBe(true);
   });

@@ -40,8 +40,8 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
 
 function buildState(overrides: Partial<ReceiptFormState> = {}): ReceiptFormState {
   return {
-    storeSelect: "1",
-    storeInputText: "",
+    payeeSelect: "1",
+    payeeInputText: "",
     datetime: "2026-08-10T12:00",
     transactionTypeId: "1",
     amount: "100",
@@ -96,7 +96,7 @@ function fakeSupabase({
           update: () => ({ eq: vi.fn().mockResolvedValue({ error: null }) }),
         };
       }
-      if (table === "stores") {
+      if (table === "payees") {
         return {
           select: () => ({
             eq: () => ({

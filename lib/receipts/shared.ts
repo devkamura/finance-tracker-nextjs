@@ -5,24 +5,24 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { OWNER_JOINT_VALUE, SELECT_NONE_VALUE } from "@/lib/constants";
 import type { ReceiptItem } from "@/types/receipt";
 
-export async function resolveStoreName(
+export async function resolvePayeeName(
   supabase: SupabaseClient,
-  storeSelect: string,
-  storeInputText: string
-): Promise<{ storeId: number | null; storeName: string }> {
-  if (!storeSelect || storeSelect === SELECT_NONE_VALUE) {
-    return { storeId: null, storeName: storeInputText };
+  payeeSelect: string,
+  payeeInputText: string
+): Promise<{ payeeId: number | null; payeeName: string }> {
+  if (!payeeSelect || payeeSelect === SELECT_NONE_VALUE) {
+    return { payeeId: null, payeeName: payeeInputText };
   }
 
   const { data, error } = await supabase
-    .from("stores")
+    .from("payees")
     .select("name")
-    .eq("id", Number(storeSelect))
+    .eq("id", Number(payeeSelect))
     .single();
   if (error || !data) {
-    throw new Error("店舗が見つかりません。");
+    throw new Error("支払い先が見つかりません。");
   }
-  return { storeId: Number(storeSelect), storeName: data.name };
+  return { payeeId: Number(payeeSelect), payeeName: data.name };
 }
 
 export function buildReceiptDetailRows(items: ReceiptItem[], receiptId: string) {

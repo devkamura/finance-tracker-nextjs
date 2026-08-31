@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   buildReceiptDetailRows,
   buildReceiptDetailSceneRows,
-  resolveStoreName,
+  resolvePayeeName,
 } from "@/lib/receipts/shared";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
@@ -73,18 +73,18 @@ export async function createReceipt(
     };
   }
 
-  let storeId: number | null;
-  let storeName: string;
+  let payeeId: number | null;
+  let payeeName: string;
   try {
-    ({ storeId, storeName } = await resolveStoreName(
+    ({ payeeId, payeeName } = await resolvePayeeName(
       supabase,
-      state.storeSelect,
-      state.storeInputText
+      state.payeeSelect,
+      state.payeeInputText
     ));
   } catch (e) {
     return {
       success: false,
-      errors: [e instanceof Error ? e.message : "店舗の解決に失敗しました。"],
+      errors: [e instanceof Error ? e.message : "支払い先の解決に失敗しました。"],
     };
   }
 
@@ -110,8 +110,8 @@ export async function createReceipt(
   const { error: receiptError } = await supabase.from("receipts").insert({
     id: receiptId,
     group_id: membership.groupId,
-    store_id: storeId,
-    store_name: storeName,
+    payee_id: payeeId,
+    payee_name: payeeName,
     transaction_type_id: Number(state.transactionTypeId),
     occurred_at: occurredAt,
     payer_user_id: user.id,

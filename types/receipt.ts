@@ -14,8 +14,8 @@ export type ReceiptItem = {
 };
 
 export type ReceiptFormState = {
-  storeSelect: string; // "" | SELECT_NONE_VALUE | 実際のStore ID(文字列)
-  storeInputText: string;
+  payeeSelect: string; // "" | SELECT_NONE_VALUE | 実際のPayee ID(文字列)
+  payeeInputText: string;
   datetime: string; // <input type="datetime-local"> の値
   transactionTypeId: string;
   amount: string;
@@ -29,7 +29,7 @@ export type GroupMemberOption = {
 };
 
 export type MasterData = {
-  stores: { id: number; name: string }[];
+  payees: { id: number; name: string }[];
   transactionTypes: { id: number; name: string }[];
   consumptionTaxes: { id: number; name: string }[];
   categories: { id: number; name: string }[];
@@ -45,7 +45,7 @@ export type OcrReceiptItem = {
 };
 
 export type OcrReceiptResult = {
-  storeName: string | null;
+  payeeName: string | null;
   datetime: string | null; // "YYYY-MM-DDTHH:mm" 形式（<input type="datetime-local"> 互換）
   totalPrice: number | null;
   items: OcrReceiptItem[];
@@ -69,7 +69,7 @@ export type ReceiptDetailItemView = {
 export type ReceiptDetailView = {
   id: string;
   occurredAt: string;
-  storeName: string;
+  payeeName: string;
   amount: number;
   transactionTypeName: string;
   payerUserId: string;
@@ -85,7 +85,7 @@ export type ReceiptDetailView = {
 export type ReceiptListItem = {
   id: string;
   occurredAt: string;
-  storeName: string;
+  payeeName: string;
   amount: number;
   transactionTypeName: string;
   payerUserId: string;

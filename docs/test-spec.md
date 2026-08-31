@@ -50,7 +50,7 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 
 ---
 
-## 追加機能：管理画面（グループ・管理者・ユーザー管理・店舗管理）
+## 追加機能：管理画面（グループ・管理者・ユーザー管理・支払い先管理）
 
 テストフレームワーク: Vitest（単体・結合）/ Playwright（E2E）。
 外部API（Gemini, Google Drive）を呼び出す既存機能には影響しないため、本機能のテストで新規に外部APIモックが必要な箇所はない。
@@ -77,9 +77,9 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 | U-14 | `lib/actions/update-member-display-name.ts` | 異常系：表示名が空 | `""` | 「表示名を入力してください。」 | `createClient` |
 | U-15 | `lib/actions/update-member-display-name.ts` | 異常系：対象が自グループ外（更新0件） | update結果が0件 | 「権限がありません。」 | `createClient` |
 | U-16 | `lib/actions/update-member-display-name.ts` | 正常系 | 自グループ内の有効なuserId・表示名 | `{success:true, displayName}` | `createClient` |
-| U-17 | `lib/actions/create-store.ts` | 異常系：店舗名重複（23505） | 既存店舗と同名 | 「同じ名前の店舗が既に存在します。」 | `createClient` |
-| U-18 | `lib/actions/create-store.ts` | 正常系 | 未使用の店舗名 | `{success:true, store}` | `createClient` |
-| U-19 | `lib/actions/update-store.ts` / `delete-store.ts` | 正常系 | 自グループの店舗ID | `{success:true}` | `createClient` |
+| U-17 | `lib/actions/create-payee.ts` | 異常系：支払い先名重複（23505） | 既存支払い先と同名 | 「同じ名前の支払い先が既に存在します。」 | `createClient` |
+| U-18 | `lib/actions/create-payee.ts` | 正常系 | 未使用の支払い先名 | `{success:true, payee}` | `createClient` |
+| U-19 | `lib/actions/update-payee.ts` / `delete-payee.ts` | 正常系 | 自グループの支払い先ID | `{success:true}` | `createClient` |
 | U-20 | `lib/actions/remove-group-member.ts` | 異常系：未ログイン | `user = null` | `{success:false}` かつ「ログインが必要です。」 | `createClient` |
 | U-21 | `lib/actions/remove-group-member.ts` | 異常系：RLS拒否（削除0件、他グループ or 管理者自身） | delete結果が0件 | 「権限がありません。」 | `createClient` |
 | U-22 | `lib/actions/remove-group-member.ts` | 正常系 | 削除可能なmemberId | `{success:true}` | `createClient` |
@@ -93,9 +93,9 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 | I-01 | `create_group_with_admin` RPC | 未所属ユーザーがグループ作成 | 新規ユーザーA | グループが作成され、Aが`role='admin'`で`group_members`に登録される | なし（実DB） |
 | I-02 | `create_group_with_admin` RPC | 既所属ユーザーは再作成不可 | 既にグループに所属するユーザー | 例外が発生し新規グループが作られない | なし（実DB） |
 | I-03 | `create_group_with_admin` RPC | 同時二重作成の競合防止 | 同一ユーザーで並行して2回呼び出し | 一方のみ成功し、`group_members`の管理者行が2件にならない | なし（実DB） |
-| I-04 | `stores` RLS | グループ間のSELECT分離 | グループBのセッションでグループAの店舗を取得 | 0件（他グループの行が返らない） | なし（実DB） |
-| I-05 | `stores` RLS | 非管理者のINSERT拒否 | 一般メンバーが店舗をINSERT | 権限エラーで失敗 | なし（実DB） |
-| I-06 | `stores` RLS | 管理者は自グループのみ書き込み可 | グループAの管理者がグループBの`group_id`を指定してINSERT | 失敗（他グループへの書き込み不可） | なし（実DB） |
+| I-04 | `payees` RLS | グループ間のSELECT分離 | グループBのセッションでグループAの支払い先を取得 | 0件（他グループの行が返らない） | なし（実DB） |
+| I-05 | `payees` RLS | 非管理者のINSERT拒否 | 一般メンバーが支払い先をINSERT | 権限エラーで失敗 | なし（実DB） |
+| I-06 | `payees` RLS | 管理者は自グループのみ書き込み可 | グループAの管理者がグループBの`group_id`を指定してINSERT | 失敗（他グループへの書き込み不可） | なし（実DB） |
 | I-07 | `group_members` 招待INSERT | 重複招待の拒否 | 空きのあるグループに同一メールを2回招待 | 2回目が失敗する（1グループ2人上限のもとでは、一意制約ではなく人数上限チェックが先に働くため、エラー要因までは固定しない） | なし（実DB） |
 | I-18 | `group_members` 人数上限トリガー | 管理者含め3人目は登録不可 | 既に2人（管理者+一般）のグループへ3人目を招待 | 例外（`group member limit`）で拒否される | なし（実DB） |
 | I-08 | `_link_group_membership` / `link_pending_group_memberships` | 事前登録ユーザーの初回ログイン時紐付け | 招待済みメールと同じユーザーが新規サインアップ | `group_members.user_id`が自動的にセットされる | なし（実DB） |
@@ -123,5 +123,5 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 | E-02 | グループ作成と管理者昇格 | 1. `/setup/group`でグループ名を入力し作成 | `/`へ遷移し、ヘッダーに「管理画面」リンクが表示される | Google OAuth |
 | E-03 | 招待〜自動参加フロー | 1. 管理者がグループAで対象メールを招待 2. 対象メールで新規ログイン | 対象ユーザーがグループAのメンバーとして`/`にアクセスできる（`/setup/group`に飛ばされない） | Google OAuth |
 | E-04 | 非管理者の管理画面アクセス拒否 | 1. 一般メンバーとしてログイン 2. `/admin`に直接アクセス | `/`へリダイレクトされる | Google OAuth |
-| E-05 | 店舗管理のグループ分離 | 1. グループAの管理者が店舗を登録 2. グループBの管理者としてログインし`/admin/stores`を確認 | グループAの店舗が表示されない | Google OAuth |
+| E-05 | 支払い先管理のグループ分離 | 1. グループAの管理者が支払い先を登録 2. グループBの管理者としてログインし`/admin/payees`を確認 | グループAの支払い先が表示されない | Google OAuth |
 | E-06 | ユーザー名管理 | 1. 管理者が`/admin/users`でメンバーの表示名を編集 | 保存され、対象ユーザーの`/`ヘッダー表示名が更新される | Google OAuth |

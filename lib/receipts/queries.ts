@@ -96,7 +96,7 @@ type RawReceiptDetail = {
   }[];
 };
 
-const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, store_name, amount, payer_user_id, receipt_image_path,
+const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_name, amount, payer_user_id, receipt_image_path,
    transaction_types(name),
    receipt_details(
      id, item_name, price, tax_type, owner_user_id,
@@ -161,7 +161,7 @@ export async function listReceipts(
     data.map(async (row) => ({
       id: row.id,
       occurredAt: row.occurred_at,
-      storeName: row.store_name,
+      payeeName: row.payee_name,
       amount: row.amount,
       transactionTypeName: unwrapToOne(row.transaction_types)?.name ?? "",
       payerUserId: row.payer_user_id,
@@ -217,7 +217,7 @@ export async function getReceiptDetail(
   return {
     id: receipt.id,
     occurredAt: receipt.occurred_at,
-    storeName: receipt.store_name,
+    payeeName: receipt.payee_name,
     amount: receipt.amount,
     transactionTypeName: unwrapToOne(receipt.transaction_types)?.name ?? "",
     payerUserId: receipt.payer_user_id,
@@ -268,7 +268,7 @@ export async function getReceiptForEdit(
   const { data: receipt, error } = await supabase
     .from("receipts")
     .select(
-      `id, occurred_at, store_id, store_name, transaction_type_id, amount, receipt_image_path,
+      `id, occurred_at, payee_id, payee_name, transaction_type_id, amount, receipt_image_path,
        receipt_details(
          id, item_name, price, tax_type, tax_rate_id, category_id, purpose_id, owner_user_id,
          receipt_detail_scenes(scene_id)
@@ -308,9 +308,9 @@ export async function getReceiptForEdit(
   }));
 
   const state: ReceiptFormState = {
-    storeSelect:
-      receipt.store_id !== null ? String(receipt.store_id) : SELECT_NONE_VALUE,
-    storeInputText: receipt.store_id === null ? receipt.store_name : "",
+    payeeSelect:
+      receipt.payee_id !== null ? String(receipt.payee_id) : SELECT_NONE_VALUE,
+    payeeInputText: receipt.payee_id === null ? receipt.payee_name : "",
     datetime: toDatetimeLocalValue(receipt.occurred_at),
     transactionTypeId: String(receipt.transaction_type_id),
     amount: String(receipt.amount),

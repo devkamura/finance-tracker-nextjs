@@ -47,11 +47,11 @@ function createEmptyItem(): ReceiptItem {
 
 // OCR読み取り結果を既存フォームの状態にマッピングする。
 // 税区分・税率・カテゴリー・目的・帰属先はマスタ選択式でOCRからは判定できないため
-// 既定値のままとし、店舗名は登録済みマスタと名称が一致すればプルダウン選択、
+// 既定値のままとし、支払い先名は登録済みマスタと名称が一致すればプルダウン選択、
 // 一致しなければ手入力欄に反映する。
 function buildOcrPatch(
   result: OcrReceiptResult,
-  stores: MasterData["stores"]
+  payees: MasterData["payees"]
 ): Partial<ReceiptFormState> {
   const patch: Partial<ReceiptFormState> = {};
 
@@ -61,14 +61,14 @@ function buildOcrPatch(
   if (result.totalPrice !== null) {
     patch.amount = String(result.totalPrice);
   }
-  if (result.storeName) {
-    const matched = stores.find((store) => store.name === result.storeName);
+  if (result.payeeName) {
+    const matched = payees.find((payee) => payee.name === result.payeeName);
     if (matched) {
-      patch.storeSelect = String(matched.id);
-      patch.storeInputText = "";
+      patch.payeeSelect = String(matched.id);
+      patch.payeeInputText = "";
     } else {
-      patch.storeSelect = SELECT_NONE_VALUE;
-      patch.storeInputText = result.storeName;
+      patch.payeeSelect = SELECT_NONE_VALUE;
+      patch.payeeInputText = result.payeeName;
     }
   }
   if (result.items.length > 0) {
@@ -90,8 +90,8 @@ function buildOcrPatch(
 
 function createInitialState(defaultTransactionTypeId: string): ReceiptFormState {
   return {
-    storeSelect: "",
-    storeInputText: "",
+    payeeSelect: "",
+    payeeInputText: "",
     datetime: "",
     transactionTypeId: defaultTransactionTypeId,
     amount: "",
@@ -197,7 +197,7 @@ export function ReceiptForm({
   };
 
   const handleOcrExtracted = (result: OcrReceiptResult) => {
-    updateState(buildOcrPatch(result, masterData.stores));
+    updateState(buildOcrPatch(result, masterData.payees));
     setToast({
       type: "success",
       message: "レシートを読み取りました。内容を確認してください。",

@@ -1,7 +1,7 @@
 -- 元となるDjango版の実データ（src/fixtures/initial_data.json）を移植。
 -- 「該当なし」はUI側の定数として扱うためここには含めない。
--- storesはグループ単位のデータになったため、ここでのシードは行わない。
--- 各グループの管理者が /admin/stores から必要な店舗を登録する。
+-- payeesはグループ単位のデータになったため、ここでのシードは行わない。
+-- 各グループの管理者が /admin/payees から必要な支払い先を登録する。
 
 insert into public.transaction_types (name) values
   ('支出'),

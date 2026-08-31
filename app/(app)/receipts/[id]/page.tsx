@@ -69,7 +69,7 @@ export default async function ReceiptDetailPage({
               )}
             </p>
             <h1 className="mt-1 text-xl font-bold text-slate-900">
-              {receipt.storeName || "（店舗未入力）"}
+              {receipt.payeeName || "（支払い先未入力）"}
             </h1>
           </div>
           <div className="text-right">

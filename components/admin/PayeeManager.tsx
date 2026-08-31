@@ -12,28 +12,28 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { createStore } from "@/lib/actions/create-store";
-import { deleteStore } from "@/lib/actions/delete-store";
-import { updateStore } from "@/lib/actions/update-store";
+import { createPayee } from "@/lib/actions/create-payee";
+import { deletePayee } from "@/lib/actions/delete-payee";
+import { updatePayee } from "@/lib/actions/update-payee";
 
-type Store = { id: number; name: string };
+type Payee = { id: number; name: string };
 
-export function StoreManager({ initialStores }: { initialStores: Store[] }) {
-  const [stores, setStores] = useState(initialStores);
+export function PayeeManager({ initialPayees }: { initialPayees: Payee[] }) {
+  const [payees, setPayees] = useState(initialPayees);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const sortByName = (list: Store[]) =>
+  const sortByName = (list: Payee[]) =>
     [...list].sort((a, b) => a.name.localeCompare(b.name, "ja"));
 
   const handleCreate = () => {
     startTransition(async () => {
-      const result = await createStore(newName);
+      const result = await createPayee(newName);
       if (result.success) {
-        setStores((prev) => sortByName([...prev, result.store]));
+        setPayees((prev) => sortByName([...prev, result.payee]));
         setNewName("");
         setError(null);
       } else {
@@ -42,9 +42,9 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
     });
   };
 
-  const startEdit = (store: Store) => {
-    setEditingId(store.id);
-    setDraft(store.name);
+  const startEdit = (payee: Payee) => {
+    setEditingId(payee.id);
+    setDraft(payee.name);
     setError(null);
   };
 
@@ -55,10 +55,10 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
 
   const handleUpdate = (id: number) => {
     startTransition(async () => {
-      const result = await updateStore(id, draft);
+      const result = await updatePayee(id, draft);
       if (result.success) {
-        setStores((prev) =>
-          sortByName(prev.map((s) => (s.id === id ? result.store : s)))
+        setPayees((prev) =>
+          sortByName(prev.map((p) => (p.id === id ? result.payee : p)))
         );
         setEditingId(null);
         setError(null);
@@ -70,9 +70,9 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
 
   const handleDelete = (id: number) => {
     startTransition(async () => {
-      const result = await deleteStore(id);
+      const result = await deletePayee(id);
       if (result.success) {
-        setStores((prev) => prev.filter((s) => s.id !== id));
+        setPayees((prev) => prev.filter((p) => p.id !== id));
         setError(null);
       } else {
         setError(result.error);
@@ -91,7 +91,7 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
       >
         <div className="flex-1">
           <Input
-            label="店舗名"
+            label="支払い先名"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             disabled={isPending}
@@ -102,16 +102,16 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
         </Button>
       </form>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {stores.length === 0 ? (
-        <p className="text-sm text-slate-500">店舗が登録されていません。</p>
+      {payees.length === 0 ? (
+        <p className="text-sm text-slate-500">支払い先が登録されていません。</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {stores.map((store) => (
+          {payees.map((payee) => (
             <li
-              key={store.id}
+              key={payee.id}
               className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
             >
-              {editingId === store.id ? (
+              {editingId === payee.id ? (
                 <div className="flex flex-1 items-center gap-2">
                   <input
                     type="text"
@@ -123,7 +123,7 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
                   />
                   <button
                     type="button"
-                    onClick={() => handleUpdate(store.id)}
+                    onClick={() => handleUpdate(payee.id)}
                     disabled={isPending}
                     aria-label="保存"
                     className="text-emerald-600 hover:text-emerald-800"
@@ -142,11 +142,11 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
                 </div>
               ) : (
                 <>
-                  <span className="text-sm text-slate-900">{store.name}</span>
+                  <span className="text-sm text-slate-900">{payee.name}</span>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => startEdit(store)}
+                      onClick={() => startEdit(payee)}
                       aria-label="編集"
                       className="text-slate-400 hover:text-slate-600"
                     >
@@ -154,7 +154,7 @@ export function StoreManager({ initialStores }: { initialStores: Store[] }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(store.id)}
+                      onClick={() => handleDelete(payee.id)}
                       aria-label="削除"
                       className="text-red-400 hover:text-red-600"
                     >

@@ -42,8 +42,8 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
 
 function buildState(overrides: Partial<ReceiptFormState> = {}): ReceiptFormState {
   return {
-    storeSelect: "1",
-    storeInputText: "",
+    payeeSelect: "1",
+    payeeInputText: "",
     datetime: "2026-08-10T12:00",
     transactionTypeId: "1",
     amount: "100",
@@ -66,7 +66,7 @@ function buildFormData(
 
 type FakeSupabaseOptions = {
   isSettlementConfirmed?: boolean;
-  storeName?: string;
+  payeeName?: string;
   receiptInsertError?: unknown;
   detailsInsertError?: unknown;
 };
@@ -74,7 +74,7 @@ type FakeSupabaseOptions = {
 function fakeSupabase(options: FakeSupabaseOptions = {}) {
   const {
     isSettlementConfirmed = false,
-    storeName = "セブンイレブン",
+    payeeName = "セブンイレブン",
     receiptInsertError = null,
     detailsInsertError = null,
   } = options;
@@ -82,12 +82,12 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
   const insertedDetailIds = [{ id: "detail-1" }];
 
   const from = vi.fn((table: string) => {
-    if (table === "stores") {
+    if (table === "payees") {
       return {
         select: () => ({
           eq: () => ({
             single: vi.fn().mockResolvedValue({
-              data: { name: storeName },
+              data: { name: payeeName },
               error: null,
             }),
           }),

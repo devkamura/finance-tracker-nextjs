@@ -25,8 +25,8 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
 
 function buildState(overrides: Partial<ReceiptFormState> = {}): ReceiptFormState {
   return {
-    storeSelect: "1",
-    storeInputText: "",
+    payeeSelect: "1",
+    payeeInputText: "",
     datetime: "2026-08-29T12:00",
     transactionTypeId: "1",
     amount: "100",

@@ -8,7 +8,7 @@ import type { MasterData, ReceiptFormState } from "@/types/receipt";
 type ReceiptUnitSectionProps = {
   state: ReceiptFormState;
   onChange: (patch: Partial<ReceiptFormState>) => void;
-  masterData: Pick<MasterData, "stores" | "transactionTypes">;
+  masterData: Pick<MasterData, "payees" | "transactionTypes">;
   fieldErrors?: Pick<ReceiptFormFieldErrors, "transactionTypeId" | "amount">;
 };
 
@@ -26,26 +26,26 @@ export function ReceiptUnitSection({
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select
-          label="店舗"
-          value={state.storeSelect}
-          onChange={(e) => onChange({ storeSelect: e.target.value })}
+          label="支払い先"
+          value={state.payeeSelect}
+          onChange={(e) => onChange({ payeeSelect: e.target.value })}
         >
           <option value="">選択してください</option>
           <option value={SELECT_NONE_VALUE}>該当なし</option>
-          {masterData.stores.map((store) => (
-            <option key={store.id} value={store.id}>
-              {store.name}
+          {masterData.payees.map((payee) => (
+            <option key={payee.id} value={payee.id}>
+              {payee.name}
             </option>
           ))}
         </Select>
 
-        {state.storeSelect === SELECT_NONE_VALUE && (
+        {state.payeeSelect === SELECT_NONE_VALUE && (
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">店舗名（手入力）</span>
+            <span className="font-medium text-slate-700">支払い先名（手入力）</span>
             <input
               type="text"
-              value={state.storeInputText}
-              onChange={(e) => onChange({ storeInputText: e.target.value })}
+              value={state.payeeInputText}
+              onChange={(e) => onChange({ payeeInputText: e.target.value })}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>

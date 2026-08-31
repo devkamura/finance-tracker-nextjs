@@ -11,7 +11,7 @@ export default async function Home() {
   const membership = await getCurrentMembership(supabase, user!.id);
 
   const [
-    { data: stores, error: storesError },
+    { data: payees, error: payeesError },
     { data: transactionTypes, error: transactionTypesError },
     { data: consumptionTaxes, error: consumptionTaxesError },
     { data: categories, error: categoriesError },
@@ -19,7 +19,7 @@ export default async function Home() {
     { data: scenes, error: scenesError },
     members,
   ] = await Promise.all([
-    supabase.from("stores").select("id, name").order("id"),
+    supabase.from("payees").select("id, name").order("id"),
     supabase.from("transaction_types").select("id, name").order("id"),
     supabase.from("consumption_taxes").select("id, name").order("id"),
     supabase.from("categories").select("id, name").order("id"),
@@ -29,7 +29,7 @@ export default async function Home() {
   ]);
 
   const error =
-    storesError ||
+    payeesError ||
     transactionTypesError ||
     consumptionTaxesError ||
     categoriesError ||
@@ -45,7 +45,7 @@ export default async function Home() {
   return (
     <ReceiptForm
       masterData={{
-        stores: stores!,
+        payees: payees!,
         transactionTypes: transactionTypes!,
         consumptionTaxes: consumptionTaxes!,
         categories: categories!,

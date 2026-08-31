@@ -129,6 +129,32 @@ export type Database = {
         }
         Relationships: []
       }
+      payees: {
+        Row: {
+          group_id: string
+          id: number
+          name: string
+        }
+        Insert: {
+          group_id: string
+          id?: never
+          name: string
+        }
+        Update: {
+          group_id?: string
+          id?: never
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payees_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           color: string | null
@@ -277,10 +303,10 @@ export type Database = {
           group_id: string
           id: string
           occurred_at: string
+          payee_id: number | null
+          payee_name: string
           payer_user_id: string
           receipt_image_path: string | null
-          store_id: number | null
-          store_name: string
           transaction_type_id: number
           updated_at: string
         }
@@ -291,10 +317,10 @@ export type Database = {
           group_id: string
           id?: string
           occurred_at: string
+          payee_id?: number | null
+          payee_name: string
           payer_user_id: string
           receipt_image_path?: string | null
-          store_id?: number | null
-          store_name: string
           transaction_type_id: number
           updated_at?: string
         }
@@ -305,10 +331,10 @@ export type Database = {
           group_id?: string
           id?: string
           occurred_at?: string
+          payee_id?: number | null
+          payee_name?: string
           payer_user_id?: string
           receipt_image_path?: string | null
-          store_id?: number | null
-          store_name?: string
           transaction_type_id?: number
           updated_at?: string
         }
@@ -321,10 +347,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "receipts_store_id_fkey"
-            columns: ["store_id"]
+            foreignKeyName: "receipts_payee_id_fkey"
+            columns: ["payee_id"]
             isOneToOne: false
-            referencedRelation: "stores"
+            referencedRelation: "payees"
             referencedColumns: ["id"]
           },
           {
@@ -412,32 +438,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "settlement_periods_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      stores: {
-        Row: {
-          group_id: string
-          id: number
-          name: string
-        }
-        Insert: {
-          group_id: string
-          id?: never
-          name: string
-        }
-        Update: {
-          group_id?: string
-          id?: never
-          name?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "stores_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"

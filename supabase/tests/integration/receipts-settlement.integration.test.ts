@@ -104,7 +104,7 @@ describe("レシート・精算のRLS/RPC", () => {
     const { error: receiptError } = await userA.client.from("receipts").insert({
       id: receiptId,
       group_id: groupId,
-      store_name: "テストスーパー",
+      payee_name: "テストスーパー",
       transaction_type_id: transactionTypeExpenseId,
       occurred_at: "2026-08-10T03:00:00Z",
       payer_user_id: userA.id,
@@ -142,7 +142,7 @@ describe("レシート・精算のRLS/RPC", () => {
     // 支払者はDBのcheck制約(receipts_payer_is_creator)により登録者本人に固定される。
     const { error: proxyPayerError } = await userA.client.from("receipts").insert({
       group_id: groupId,
-      store_name: "なりすまし",
+      payee_name: "なりすまし",
       transaction_type_id: transactionTypeExpenseId,
       occurred_at: "2026-08-11T03:00:00Z",
       payer_user_id: userB.id,
@@ -217,7 +217,7 @@ describe("レシート・精算のRLS/RPC", () => {
     // with checkによる42501エラーとして返る。
     const { error: blockedError } = await userA.client.from("receipts").insert({
       group_id: groupId,
-      store_name: "確定後の登録",
+      payee_name: "確定後の登録",
       transaction_type_id: transactionTypeExpenseId,
       occurred_at: "2026-08-20T00:00:00Z",
       payer_user_id: userA.id,
@@ -253,7 +253,7 @@ describe("レシート・精算のRLS/RPC", () => {
       .from("receipts")
       .insert({
         group_id: groupId,
-        store_name: "再オープン後の登録",
+        payee_name: "再オープン後の登録",
         transaction_type_id: transactionTypeExpenseId,
         occurred_at: "2026-08-21T00:00:00Z",
         payer_user_id: userA.id,
@@ -268,7 +268,7 @@ describe("レシート・精算のRLS/RPC", () => {
   it("返金レシートも支出と同じテーブルへ登録できる", async () => {
     const { error } = await userA.client.from("receipts").insert({
       group_id: groupId,
-      store_name: "返金テスト",
+      payee_name: "返金テスト",
       transaction_type_id: transactionTypeRefundId,
       occurred_at: "2026-08-22T00:00:00Z",
       payer_user_id: userA.id,
@@ -283,7 +283,7 @@ describe("レシート・精算のRLS/RPC", () => {
     await userA.client.from("receipts").insert({
       id: receiptId,
       group_id: groupId,
-      store_name: "税区分テスト",
+      payee_name: "税区分テスト",
       transaction_type_id: transactionTypeExpenseId,
       occurred_at: "2026-08-23T00:00:00Z",
       payer_user_id: userA.id,

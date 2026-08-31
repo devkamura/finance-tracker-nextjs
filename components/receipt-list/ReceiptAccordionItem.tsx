@@ -59,7 +59,7 @@ export function ReceiptAccordionItem({
             )}
           </span>
           <span className="truncate font-medium text-slate-900">
-            {receipt.storeName || "（店舗未入力）"}
+            {receipt.payeeName || "（支払い先未入力）"}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">

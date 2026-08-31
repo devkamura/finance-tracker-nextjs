@@ -2,11 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server";
 
-export type DeleteStoreResult =
+export type DeletePayeeResult =
   | { success: true }
   | { success: false; error: string };
 
-export async function deleteStore(id: number): Promise<DeleteStoreResult> {
+export async function deletePayee(id: number): Promise<DeletePayeeResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -16,15 +16,15 @@ export async function deleteStore(id: number): Promise<DeleteStoreResult> {
   }
 
   const { data, error } = await supabase
-    .from("stores")
+    .from("payees")
     .delete()
     .eq("id", id)
     .select("id")
     .maybeSingle();
 
   if (error) {
-    console.error("Failed to delete store", error);
-    return { success: false, error: "店舗の削除に失敗しました。" };
+    console.error("Failed to delete payee", error);
+    return { success: false, error: "支払い先の削除に失敗しました。" };
   }
 
   if (!data) {

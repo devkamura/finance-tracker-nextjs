@@ -75,10 +75,10 @@ Gemini OCR（`lib/gemini/extract-receipt.ts`）自体は変更しない。OCRは
 ```text
 groups ──< group_members >── auth.users(profiles)
   │
-  ├──< stores（既存）
+  ├──< payees（既存）
   │
   └──< receipts
-         ├─ store_id ─────────────→ stores
+         ├─ payee_id ─────────────→ payees
          ├─ transaction_type_id ──→ transaction_types（既存）
          ├─ payer_user_id ────────→ auth.users
          └──< receipt_details
@@ -97,8 +97,8 @@ groups ──< group_members >── auth.users(profiles)
 |---|---|---|---|
 | id | uuid | PK, default gen_random_uuid() | |
 | group_id | uuid | not null, FK groups(id) on delete cascade | |
-| store_id | bigint | FK stores(id), nullable | マスタ選択時のみ設定 |
-| store_name | text | not null | 表示用スナップショット。マスタ選択時は解決した店名、自由入力時はその文字列をそのまま保存（後でマスタの店名が変更されても過去レシートの表示が変わらないようにする） |
+| payee_id | bigint | FK payees(id), nullable | マスタ選択時のみ設定 |
+| payee_name | text | not null | 表示用スナップショット。マスタ選択時は解決した支払い先名、自由入力時はその文字列をそのまま保存（後でマスタの支払い先名が変更されても過去レシートの表示が変わらないようにする） |
 | transaction_type_id | bigint | not null, FK transaction_types(id) | 支出/返金 |
 | occurred_at | timestamptz | not null | 購入日時 |
 | payer_user_id | uuid | not null, FK auth.users(id) | 支払者。**常に登録者本人（=created_by）と同じ値を自動設定し、選択UIは設けない**。列として分離しておくのは14章の概念整理に合わせるためで、将来「代理登録」を許容する場合の拡張余地を残す。 |
@@ -157,13 +157,13 @@ PK: (receipt_detail_id, scene_id)
 
 ### 2.3 owner_user_id / payer_user_id の妥当性検証について
 
-`payer_user_id`・`owner_user_id`は「そのグループに所属する2人のうちのどちらか」に限定される必要があるが、既存の`store_id`のグループ整合性同様、**DB制約ではなくアプリケーション層（Server Action）でグループメンバーかどうかを検証する**方針とする（既存の`validateReceiptForm`と同じ思想）。DBレベルでの相関チェック（他テーブルを参照するcheck制約）はPostgresでは直接書けないため、素直にアプリ層検証とする。
+`payer_user_id`・`owner_user_id`は「そのグループに所属する2人のうちのどちらか」に限定される必要があるが、既存の`payee_id`のグループ整合性同様、**DB制約ではなくアプリケーション層（Server Action）でグループメンバーかどうかを検証する**方針とする（既存の`validateReceiptForm`と同じ思想）。DBレベルでの相関チェック（他テーブルを参照するcheck制約）はPostgresでは直接書けないため、素直にアプリ層検証とする。
 
 ---
 
 ## 3. RLS設計
 
-既存の`stores`・`groups`と同じ「`my_group_ids()`による所属グループ判定」パターンを踏襲する。
+既存の`payees`・`groups`と同じ「`my_group_ids()`による所属グループ判定」パターンを踏襲する。
 
 ```sql
 -- 指定グループ・指定日時の月がすでに精算確定済みかどうかを判定する。
@@ -182,7 +182,7 @@ as $$
   );
 $$;
 
--- receipts: 所属グループのメンバーなら誰でも読み書き可能（店舗管理と異なり管理者限定にしない。
+-- receipts: 所属グループのメンバーなら誰でも読み書き可能（支払い先管理と異なり管理者限定にしない。
 -- 2人とも自分の支出を登録する必要があるため）。ただし確定済み月は書き込み不可。
 create policy "member can read own group receipts"
   on public.receipts for select
@@ -227,7 +227,7 @@ create policy "member can read own group settlement_periods"
 
 - バケット名：`receipt-images`（非公開バケット）
 - パス構成：`{group_id}/{receipt_id}/{uuid}.{ext}`
-- アクセス制御：`storage.objects`に対し、パス先頭の`group_id`セグメントが`my_group_ids()`に含まれる場合のみ read/write を許可するポリシーを追加する（`stores`等と同じ関数を再利用）。
+- アクセス制御：`storage.objects`に対し、パス先頭の`group_id`セグメントが`my_group_ids()`に含まれる場合のみ read/write を許可するポリシーを追加する（`payees`等と同じ関数を再利用）。
 - アップロードのタイミング：レシート登録の確定操作時に、DBのINSERTとあわせて行う。Storageアップロード→受け取ったpathをreceiptsに保存、の順で実装し、DB INSERT失敗時はStorage側のオブジェクトを削除するロールバック処理を入れる。
 - 画像の差し替え・削除：`updateReceipt`で画像を差し替えた場合や`deleteReceipt`実行時は、Supabase Storage上の旧オブジェクトを同期的に削除する。
 
@@ -320,7 +320,7 @@ signedAmount(receipt)   = receipt.amount    × (receiptが返金 ? -1 : 1)
 
 ### 6.2 レシート一覧・詳細画面（新規・簡易版）
 
-34章の一覧項目（日付・店舗・支払額・カテゴリ・目的・帰属先・支払者）と12章の詳細画面を実装する。自由記述フィルタ（32〜33章）は次フェーズ送りとし、まずは「当月」等の期間指定のみ対応する簡易版とする。
+34章の一覧項目（日付・支払い先・支払額・カテゴリ・目的・帰属先・支払者）と12章の詳細画面を実装する。自由記述フィルタ（32〜33章）は次フェーズ送りとし、まずは「当月」等の期間指定のみ対応する簡易版とする。
 
 ```text
 [一覧画面]

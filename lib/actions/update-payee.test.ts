@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { updateStore } from "@/lib/actions/update-store";
+import { updatePayee } from "@/lib/actions/update-payee";
 import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -25,22 +25,22 @@ function fakeSupabase(updateResult: { data: unknown; error: unknown }) {
   } as any;
 }
 
-describe("updateStore", () => {
+describe("updatePayee", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns an error when the name is blank", async () => {
-    const result = await updateStore(1, "  ");
-    expect(result).toEqual({ success: false, error: "店舗名を入力してください。" });
+    const result = await updatePayee(1, "  ");
+    expect(result).toEqual({ success: false, error: "支払い先名を入力してください。" });
   });
 
-  it("returns an error when the store belongs to another group (no rows updated)", async () => {
+  it("returns an error when the payee belongs to another group (no rows updated)", async () => {
     mockedCreateClient.mockResolvedValue(
       fakeSupabase({ data: null, error: null })
     );
 
-    const result = await updateStore(999, "セブンイレブン");
+    const result = await updatePayee(999, "セブンイレブン");
     expect(result).toEqual({ success: false, error: "権限がありません。" });
   });
 
@@ -49,22 +49,22 @@ describe("updateStore", () => {
       fakeSupabase({ data: null, error: { code: "23505" } })
     );
 
-    const result = await updateStore(1, "セブンイレブン");
+    const result = await updatePayee(1, "セブンイレブン");
     expect(result).toEqual({
       success: false,
-      error: "同じ名前の店舗が既に存在します。",
+      error: "同じ名前の支払い先が既に存在します。",
     });
   });
 
-  it("succeeds for a valid store", async () => {
+  it("succeeds for a valid payee", async () => {
     mockedCreateClient.mockResolvedValue(
       fakeSupabase({ data: { id: 1, name: "セブンイレブン" }, error: null })
     );
 
-    const result = await updateStore(1, "セブンイレブン");
+    const result = await updatePayee(1, "セブンイレブン");
     expect(result).toEqual({
       success: true,
-      store: { id: 1, name: "セブンイレブン" },
+      payee: { id: 1, name: "セブンイレブン" },
     });
   });
 });
