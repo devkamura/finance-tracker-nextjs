@@ -7,11 +7,24 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { inviteGroupMember } from "@/lib/actions/invite-group-member";
 
-export function InviteMemberForm() {
+type InviteMemberFormProps = {
+  memberCount: number;
+};
+
+export function InviteMemberForm({ memberCount }: InviteMemberFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // 要件定義書2.1/2.3章：1グループにつき管理者含め最大2人。
+  if (memberCount >= 2) {
+    return (
+      <p className="rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-600">
+        グループの登録人数上限（管理者含め2人）に達しているため、これ以上ユーザーを追加できません。
+      </p>
+    );
+  }
 
   const submit = () => {
     startTransition(async () => {

@@ -67,36 +67,6 @@ export type Database = {
         }
         Relationships: []
       }
-      google_tokens: {
-        Row: {
-          access_token: string
-          expires_at: string
-          refresh_token: string
-          scope: string | null
-          token_type: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          access_token: string
-          expires_at: string
-          refresh_token: string
-          scope?: string | null
-          token_type?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          access_token?: string
-          expires_at?: string
-          refresh_token?: string
-          scope?: string | null
-          token_type?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       group_members: {
         Row: {
           created_at: string
@@ -161,18 +131,21 @@ export type Database = {
       }
       profiles: {
         Row: {
+          color: string | null
           display_name: string
           email: string | null
           id: string
           updated_at: string
         }
         Insert: {
+          color?: string | null
           display_name: string
           email?: string | null
           id: string
           updated_at?: string
         }
         Update: {
+          color?: string | null
           display_name?: string
           email?: string | null
           id?: string
@@ -195,6 +168,174 @@ export type Database = {
         }
         Relationships: []
       }
+      receipt_detail_scenes: {
+        Row: {
+          receipt_detail_id: string
+          scene_id: number
+        }
+        Insert: {
+          receipt_detail_id: string
+          scene_id: number
+        }
+        Update: {
+          receipt_detail_id?: string
+          scene_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipt_detail_scenes_receipt_detail_id_fkey"
+            columns: ["receipt_detail_id"]
+            isOneToOne: false
+            referencedRelation: "receipt_details"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipt_detail_scenes_scene_id_fkey"
+            columns: ["scene_id"]
+            isOneToOne: false
+            referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      receipt_details: {
+        Row: {
+          category_id: number
+          created_at: string
+          id: string
+          item_name: string
+          owner_user_id: string | null
+          price: number
+          purpose_id: number
+          receipt_id: string
+          tax_rate_id: number | null
+          tax_type: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: number
+          created_at?: string
+          id?: string
+          item_name: string
+          owner_user_id?: string | null
+          price: number
+          purpose_id: number
+          receipt_id: string
+          tax_rate_id?: number | null
+          tax_type: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: number
+          created_at?: string
+          id?: string
+          item_name?: string
+          owner_user_id?: string | null
+          price?: number
+          purpose_id?: number
+          receipt_id?: string
+          tax_rate_id?: number | null
+          tax_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipt_details_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipt_details_purpose_id_fkey"
+            columns: ["purpose_id"]
+            isOneToOne: false
+            referencedRelation: "purposes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipt_details_receipt_id_fkey"
+            columns: ["receipt_id"]
+            isOneToOne: false
+            referencedRelation: "receipts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipt_details_tax_rate_id_fkey"
+            columns: ["tax_rate_id"]
+            isOneToOne: false
+            referencedRelation: "consumption_taxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      receipts: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          group_id: string
+          id: string
+          occurred_at: string
+          payer_user_id: string
+          receipt_image_path: string | null
+          store_id: number | null
+          store_name: string
+          transaction_type_id: number
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          group_id: string
+          id?: string
+          occurred_at: string
+          payer_user_id: string
+          receipt_image_path?: string | null
+          store_id?: number | null
+          store_name: string
+          transaction_type_id: number
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          group_id?: string
+          id?: string
+          occurred_at?: string
+          payer_user_id?: string
+          receipt_image_path?: string | null
+          store_id?: number | null
+          store_name?: string
+          transaction_type_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_transaction_type_id_fkey"
+            columns: ["transaction_type_id"]
+            isOneToOne: false
+            referencedRelation: "transaction_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scenes: {
         Row: {
           id: number
@@ -209,6 +350,74 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      settlement_periods: {
+        Row: {
+          confirmed_at: string
+          confirmed_by: string
+          group_id: string
+          id: string
+          period_month: string
+          reopened_at: string | null
+          reopened_by: string | null
+          settlement_amount: number
+          settlement_from_user_id: string
+          settlement_to_user_id: string
+          status: string
+          user_a_burden: number
+          user_a_id: string
+          user_a_paid: number
+          user_b_burden: number
+          user_b_id: string
+          user_b_paid: number
+        }
+        Insert: {
+          confirmed_at?: string
+          confirmed_by: string
+          group_id: string
+          id?: string
+          period_month: string
+          reopened_at?: string | null
+          reopened_by?: string | null
+          settlement_amount: number
+          settlement_from_user_id: string
+          settlement_to_user_id: string
+          status?: string
+          user_a_burden: number
+          user_a_id: string
+          user_a_paid: number
+          user_b_burden: number
+          user_b_id: string
+          user_b_paid: number
+        }
+        Update: {
+          confirmed_at?: string
+          confirmed_by?: string
+          group_id?: string
+          id?: string
+          period_month?: string
+          reopened_at?: string | null
+          reopened_by?: string | null
+          settlement_amount?: number
+          settlement_from_user_id?: string
+          settlement_to_user_id?: string
+          status?: string
+          user_a_burden?: number
+          user_a_id?: string
+          user_a_paid?: number
+          user_b_burden?: number
+          user_b_id?: string
+          user_b_paid?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlement_periods_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       stores: {
         Row: {
@@ -261,6 +470,46 @@ export type Database = {
         Returns: undefined
       }
       admin_manages_user: { Args: { p_user_id: string }; Returns: boolean }
+      confirm_settlement: {
+        Args: {
+          p_group_id: string
+          p_period_month: string
+          p_settlement_amount: number
+          p_settlement_from_user_id: string
+          p_settlement_to_user_id: string
+          p_user_a_burden: number
+          p_user_a_id: string
+          p_user_a_paid: number
+          p_user_b_burden: number
+          p_user_b_id: string
+          p_user_b_paid: number
+        }
+        Returns: {
+          confirmed_at: string
+          confirmed_by: string
+          group_id: string
+          id: string
+          period_month: string
+          reopened_at: string | null
+          reopened_by: string | null
+          settlement_amount: number
+          settlement_from_user_id: string
+          settlement_to_user_id: string
+          status: string
+          user_a_burden: number
+          user_a_id: string
+          user_a_paid: number
+          user_b_burden: number
+          user_b_id: string
+          user_b_paid: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "settlement_periods"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_group_with_admin: {
         Args: { p_name: string }
         Returns: {
@@ -277,8 +526,41 @@ export type Database = {
         }
       }
       is_group_admin: { Args: { p_group_id: string }; Returns: boolean }
+      is_settlement_confirmed: {
+        Args: { p_group_id: string; p_occurred_at: string }
+        Returns: boolean
+      }
       link_pending_group_memberships: { Args: never; Returns: undefined }
       my_group_ids: { Args: never; Returns: string[] }
+      reopen_settlement: {
+        Args: { p_group_id: string; p_period_month: string }
+        Returns: {
+          confirmed_at: string
+          confirmed_by: string
+          group_id: string
+          id: string
+          period_month: string
+          reopened_at: string | null
+          reopened_by: string | null
+          settlement_amount: number
+          settlement_from_user_id: string
+          settlement_to_user_id: string
+          status: string
+          user_a_burden: number
+          user_a_id: string
+          user_a_paid: number
+          user_b_burden: number
+          user_b_id: string
+          user_b_paid: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "settlement_periods"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      shares_group_with: { Args: { p_user_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

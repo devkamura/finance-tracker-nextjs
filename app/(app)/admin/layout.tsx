@@ -23,5 +23,6 @@ export default async function AdminLayout({
     redirect("/");
   }
 
-  return <main className="mx-auto max-w-2xl px-4 py-8">{children}</main>;
+  // 幅制限は親の(app)/layout.tsxが担う。
+  return <>{children}</>;
 }

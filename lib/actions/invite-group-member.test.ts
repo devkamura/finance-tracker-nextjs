@@ -14,13 +14,20 @@ vi.mock("@/lib/supabase/group", () => ({
 const mockedCreateClient = vi.mocked(createClient);
 const mockedGetCurrentMembership = vi.mocked(getCurrentMembership);
 
-function fakeSupabase(insertResult: { error: unknown }) {
-  const insert = vi.fn().mockResolvedValue(insertResult);
+function fakeSupabase(options: {
+  memberCount?: number;
+  insertError?: unknown;
+}) {
+  const { memberCount = 1, insertError = null } = options;
+  const insert = vi.fn().mockResolvedValue({ error: insertError });
+  const select = vi.fn().mockReturnValue({
+    eq: vi.fn().mockResolvedValue({ count: memberCount }),
+  });
   return {
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: "admin-1" } } }),
     },
-    from: vi.fn().mockReturnValue({ insert }),
+    from: vi.fn().mockReturnValue({ select, insert }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
@@ -50,7 +57,7 @@ describe("inviteGroupMember", () => {
   });
 
   it("returns an error when the caller is not an admin", async () => {
-    mockedCreateClient.mockResolvedValue(fakeSupabase({ error: null }));
+    mockedCreateClient.mockResolvedValue(fakeSupabase({}));
     mockedGetCurrentMembership.mockResolvedValue({
       groupId: "group-1",
       role: "member",
@@ -60,9 +67,23 @@ describe("inviteGroupMember", () => {
     expect(result).toEqual({ success: false, error: "権限がありません。" });
   });
 
+  it("returns an error when the group already has 2 members", async () => {
+    mockedCreateClient.mockResolvedValue(fakeSupabase({ memberCount: 2 }));
+    mockedGetCurrentMembership.mockResolvedValue({
+      groupId: "group-1",
+      role: "admin",
+    });
+
+    const result = await inviteGroupMember("user@example.com");
+    expect(result).toEqual({
+      success: false,
+      error: "グループの登録人数上限（管理者含め2人）に達しています。",
+    });
+  });
+
   it("returns a friendly error for a duplicate invite", async () => {
     mockedCreateClient.mockResolvedValue(
-      fakeSupabase({ error: { code: "23505" } })
+      fakeSupabase({ insertError: { code: "23505" } })
     );
     mockedGetCurrentMembership.mockResolvedValue({
       groupId: "group-1",
@@ -76,8 +97,26 @@ describe("inviteGroupMember", () => {
     });
   });
 
+  it("returns a friendly error when the DB trigger rejects a concurrent 3rd member", async () => {
+    mockedCreateClient.mockResolvedValue(
+      fakeSupabase({
+        insertError: { message: "group member limit (2) reached" },
+      })
+    );
+    mockedGetCurrentMembership.mockResolvedValue({
+      groupId: "group-1",
+      role: "admin",
+    });
+
+    const result = await inviteGroupMember("user@example.com");
+    expect(result).toEqual({
+      success: false,
+      error: "グループの登録人数上限（管理者含め2人）に達しています。",
+    });
+  });
+
   it("succeeds for a valid invite", async () => {
-    mockedCreateClient.mockResolvedValue(fakeSupabase({ error: null }));
+    mockedCreateClient.mockResolvedValue(fakeSupabase({ memberCount: 1 }));
     mockedGetCurrentMembership.mockResolvedValue({
       groupId: "group-1",
       role: "admin",

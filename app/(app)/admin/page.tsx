@@ -23,6 +23,15 @@ export default function AdminPage() {
             グループで使用する店舗の登録・編集
           </p>
         </Link>
+        <Link
+          href="/settlement"
+          className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-indigo-300"
+        >
+          <h2 className="font-semibold text-slate-900">精算</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            月次精算の確認・確定・再オープン
+          </p>
+        </Link>
       </div>
     </div>
   );

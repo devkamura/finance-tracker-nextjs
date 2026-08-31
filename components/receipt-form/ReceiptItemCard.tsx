@@ -6,9 +6,12 @@ import {
   faEquals,
   faChevronDown,
   faChevronUp,
+  faCircleExclamation,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { Select } from "@/components/ui/Select";
+import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import type { ReceiptItemFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptItem } from "@/types/receipt";
 
 // アコーディオンのヘッダーに表示する商品名は長くなりすぎないよう切り詰める。
@@ -24,9 +27,10 @@ type ReceiptItemCardProps = {
   amount: string;
   onChange: (patch: Partial<ReceiptItem>) => void;
   onRemove: () => void;
+  fieldErrors?: ReceiptItemFieldErrors;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "purposes" | "scenes"
+    "consumptionTaxes" | "categories" | "purposes" | "scenes" | "members"
   >;
 };
 
@@ -40,6 +44,7 @@ export function ReceiptItemCard({
   amount,
   onChange,
   onRemove,
+  fieldErrors,
   masterData,
 }: ReceiptItemCardProps) {
   const toggleScene = (sceneId: string) => {
@@ -53,18 +58,29 @@ export function ReceiptItemCard({
   const heading = truncatedName
     ? `項目${index + 1}_${truncatedName}`
     : `項目${index + 1}`;
+  const hasError = Boolean(
+    fieldErrors &&
+      Object.values(fieldErrors).some((invalid) => invalid === true)
+  );
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div
+      className={`rounded-xl border bg-white p-4 ${hasError ? "border-red-300" : "border-slate-200"}`}
+    >
       <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={onToggleOpen}
           aria-expanded={isOpen}
-          className="flex flex-1 items-center gap-2 text-left text-sm font-semibold text-slate-500 hover:text-slate-700"
+          className={`flex flex-1 items-center gap-2 text-left text-sm font-semibold ${
+            hasError ? "text-red-600" : "text-slate-500 hover:text-slate-700"
+          }`}
         >
           <FontAwesomeIcon icon={isOpen ? faChevronUp : faChevronDown} />
           {heading}
+          {hasError && !isOpen && (
+            <FontAwesomeIcon icon={faCircleExclamation} className="text-red-500" />
+          )}
         </button>
         {showRemoveButton && (
           <button
@@ -98,7 +114,9 @@ export function ReceiptItemCard({
                 inputMode="numeric"
                 value={item.price}
                 onChange={(e) => onChange({ price: e.target.value })}
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                  fieldErrors?.price ? "border-red-400" : "border-slate-300"
+                }`}
               />
               {showSameAsAmountButton && (
                 <button
@@ -113,23 +131,53 @@ export function ReceiptItemCard({
             </div>
           </div>
 
-          <Select
-            label="税率"
-            value={item.taxRateId}
-            onChange={(e) => onChange({ taxRateId: e.target.value })}
-          >
-            <option value="">選択してください</option>
-            {masterData.consumptionTaxes.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-700">税区分</span>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  name={`tax-type-${item.clientId}`}
+                  checked={item.taxType === "inclusive"}
+                  onChange={() =>
+                    onChange({ taxType: "inclusive", taxRateId: "" })
+                  }
+                />
+                税込
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  name={`tax-type-${item.clientId}`}
+                  checked={item.taxType === "exclusive"}
+                  onChange={() => onChange({ taxType: "exclusive" })}
+                />
+                税別
+              </label>
+            </div>
+          </div>
+
+          {item.taxType === "exclusive" && (
+            <Select
+              label="税率"
+              value={item.taxRateId}
+              onChange={(e) => onChange({ taxRateId: e.target.value })}
+              error={fieldErrors?.taxRateId}
+            >
+              <option value="">選択してください</option>
+              {masterData.consumptionTaxes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          )}
 
           <Select
             label="カテゴリー"
             value={item.categoryId}
             onChange={(e) => onChange({ categoryId: e.target.value })}
+            error={fieldErrors?.categoryId}
           >
             <option value="">選択してください</option>
             {masterData.categories.map((c) => (
@@ -143,11 +191,27 @@ export function ReceiptItemCard({
             label="目的"
             value={item.purposeId}
             onChange={(e) => onChange({ purposeId: e.target.value })}
+            error={fieldErrors?.purposeId}
           >
             <option value="">選択してください</option>
             {masterData.purposes.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
+              </option>
+            ))}
+          </Select>
+
+          <Select
+            label="帰属先"
+            value={item.ownerUserId}
+            onChange={(e) => onChange({ ownerUserId: e.target.value })}
+            error={fieldErrors?.ownerUserId}
+          >
+            <option value="">選択してください</option>
+            <option value={OWNER_JOINT_VALUE}>共同</option>
+            {masterData.members.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.displayName}
               </option>
             ))}
           </Select>

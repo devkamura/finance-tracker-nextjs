@@ -2,18 +2,21 @@
 
 import { Select } from "@/components/ui/Select";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
+import type { ReceiptFormFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptFormState } from "@/types/receipt";
 
 type ReceiptUnitSectionProps = {
   state: ReceiptFormState;
   onChange: (patch: Partial<ReceiptFormState>) => void;
   masterData: Pick<MasterData, "stores" | "transactionTypes">;
+  fieldErrors?: Pick<ReceiptFormFieldErrors, "transactionTypeId" | "amount">;
 };
 
 export function ReceiptUnitSection({
   state,
   onChange,
   masterData,
+  fieldErrors,
 }: ReceiptUnitSectionProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -62,6 +65,7 @@ export function ReceiptUnitSection({
           label="支出 / 返金"
           value={state.transactionTypeId}
           onChange={(e) => onChange({ transactionTypeId: e.target.value })}
+          error={fieldErrors?.transactionTypeId}
         >
           {masterData.transactionTypes.map((t) => (
             <option key={t.id} value={t.id}>
@@ -77,7 +81,9 @@ export function ReceiptUnitSection({
             inputMode="numeric"
             value={state.amount}
             onChange={(e) => onChange({ amount: e.target.value })}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className={`rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+              fieldErrors?.amount ? "border-red-400" : "border-slate-300"
+            }`}
           />
         </label>
       </div>
