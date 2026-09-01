@@ -268,7 +268,7 @@ export async function getReceiptForEdit(
   const { data: receipt, error } = await supabase
     .from("receipts")
     .select(
-      `id, occurred_at, payee_id, payee_name, transaction_type_id, amount, receipt_image_path,
+      `id, occurred_at, payee_id, payee_name, transaction_type_id, amount, receipt_image_path, payer_user_id,
        receipt_details(
          id, item_name, price, tax_type, tax_rate_id, category_id, purpose_id, owner_user_id,
          receipt_detail_scenes(scene_id)
@@ -314,6 +314,7 @@ export async function getReceiptForEdit(
     datetime: toDatetimeLocalValue(receipt.occurred_at),
     transactionTypeId: String(receipt.transaction_type_id),
     amount: String(receipt.amount),
+    payerUserId: receipt.payer_user_id,
     items,
   };
 

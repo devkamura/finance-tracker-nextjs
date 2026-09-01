@@ -47,6 +47,7 @@ function buildState(overrides: Partial<ReceiptFormState> = {}): ReceiptFormState
     datetime: "2026-08-10T12:00",
     transactionTypeId: "1",
     amount: "100",
+    payerUserId: "",
     items: [buildItem()],
     ...overrides,
   };

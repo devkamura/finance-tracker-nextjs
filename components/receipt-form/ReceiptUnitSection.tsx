@@ -8,8 +8,10 @@ import type { MasterData, ReceiptFormState } from "@/types/receipt";
 type ReceiptUnitSectionProps = {
   state: ReceiptFormState;
   onChange: (patch: Partial<ReceiptFormState>) => void;
-  masterData: Pick<MasterData, "payees" | "transactionTypes">;
+  masterData: Pick<MasterData, "payees" | "transactionTypes" | "members">;
   fieldErrors?: Pick<ReceiptFormFieldErrors, "transactionTypeId" | "amount">;
+  // 支払者選択は編集画面でのみ表示する（新規登録は常に登録者本人に自動設定されるため）。
+  showPayerSelect?: boolean;
 };
 
 export function ReceiptUnitSection({
@@ -17,6 +19,7 @@ export function ReceiptUnitSection({
   onChange,
   masterData,
   fieldErrors,
+  showPayerSelect = false,
 }: ReceiptUnitSectionProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -73,6 +76,21 @@ export function ReceiptUnitSection({
             </option>
           ))}
         </Select>
+
+        {showPayerSelect && (
+          <Select
+            label="支払者"
+            value={state.payerUserId}
+            onChange={(e) => onChange({ payerUserId: e.target.value })}
+          >
+            <option value="">選択してください</option>
+            {masterData.members.map((member) => (
+              <option key={member.userId} value={member.userId}>
+                {member.displayName}
+              </option>
+            ))}
+          </Select>
+        )}
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">合計金額</span>
