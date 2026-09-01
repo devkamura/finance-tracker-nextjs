@@ -118,6 +118,8 @@ supabase config push
 | `GEMINI_API_KEY` | レシートOCR（Gemini API）用。[Google AI Studio](https://aistudio.google.com/)等で発行 |
 | `SUPABASE_SERVICE_ROLE_KEY`（任意） | 現状のランタイムコードからは未使用。将来の管理者専用機能のために設定しておいてもよい |
 
+サーバーのタイムゾーン（JST固定）は環境変数では設定しない。`TZ`はVercelの予約環境変数名でダッシュボードから設定できないため、`instrumentation.ts`でサーバー起動時に`process.env.TZ = "Asia/Tokyo"`をコードで設定している。本アプリはJST運用のみを前提としており、レシートの日時（`<input type="datetime-local">`の解釈・DB保存・表示）はサーバーのローカルタイムゾーンに依存しているため、この設定が欠けると登録・編集画面の日時とDB保存値が実際より9時間ズレる。
+
 `GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`GDRIVE_FOLDER_ID`はVercel側では**不要**（Google Drive連携機能を廃止したため）。
 
 環境変数を変更した場合、**自動では反映されない**。「Deployments」タブ→最新デプロイの「...」→「Redeploy」で再デプロイする。
