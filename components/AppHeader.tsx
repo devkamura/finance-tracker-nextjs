@@ -1,14 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faGear,
-  faListUl,
-  faRightFromBracket,
-  faScaleBalanced,
-} from "@fortawesome/free-solid-svg-icons";
-
+import { HeaderNav } from "@/components/HeaderNav";
 import { getCurrentMembership, getGroupName } from "@/lib/supabase/group";
 import { getDisplayName } from "@/lib/supabase/profile";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +21,13 @@ export async function AppHeader() {
     ? await getGroupName(supabase, membership.groupId)
     : null;
 
+  async function logout() {
+    "use server";
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+    redirect("/login");
+  }
+
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
@@ -40,48 +40,11 @@ export async function AppHeader() {
           )}
         </Link>
         {user && displayName && (
-          <div className="flex items-center gap-3 text-sm text-slate-600">
-            <span>{displayName}</span>
-            <Link
-              href="/receipts"
-              className="flex items-center gap-1 hover:text-slate-900"
-            >
-              <FontAwesomeIcon icon={faListUl} />
-              一覧
-            </Link>
-            <Link
-              href="/settlement"
-              className="flex items-center gap-1 hover:text-slate-900"
-            >
-              <FontAwesomeIcon icon={faScaleBalanced} />
-              精算
-            </Link>
-            {membership?.role === "admin" && (
-              <Link
-                href="/admin"
-                className="flex items-center gap-1 hover:text-slate-900"
-              >
-                <FontAwesomeIcon icon={faGear} />
-                管理画面
-              </Link>
-            )}
-            <form
-              action={async () => {
-                "use server";
-                const supabase = await createClient();
-                await supabase.auth.signOut();
-                redirect("/login");
-              }}
-            >
-              <button
-                type="submit"
-                className="flex items-center gap-1 text-slate-500 hover:text-slate-800"
-              >
-                <FontAwesomeIcon icon={faRightFromBracket} />
-                ログアウト
-              </button>
-            </form>
-          </div>
+          <HeaderNav
+            displayName={displayName}
+            isAdmin={membership?.role === "admin"}
+            onLogout={logout}
+          />
         )}
       </div>
     </header>
