@@ -5,19 +5,25 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
+import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import type { MasterData } from "@/types/receipt";
 
 type BulkValues = {
+  taxType?: "inclusive" | "exclusive";
   taxRateId?: string;
   categoryId?: string;
   purposeId?: string;
+  ownerUserId?: string;
 };
 
 type BulkInputModalProps = {
   open: boolean;
   onClose: () => void;
   onApply: (values: BulkValues) => void;
-  masterData: Pick<MasterData, "consumptionTaxes" | "categories" | "purposes">;
+  masterData: Pick<
+    MasterData,
+    "consumptionTaxes" | "categories" | "purposes" | "members"
+  >;
 };
 
 const NOT_CHANGED = "";
@@ -28,19 +34,29 @@ export function BulkInputModal({
   onApply,
   masterData,
 }: BulkInputModalProps) {
+  const [taxType, setTaxType] = useState(NOT_CHANGED);
   const [taxRateId, setTaxRateId] = useState(NOT_CHANGED);
   const [categoryId, setCategoryId] = useState(NOT_CHANGED);
   const [purposeId, setPurposeId] = useState(NOT_CHANGED);
+  const [ownerUserId, setOwnerUserId] = useState(NOT_CHANGED);
 
-  const handleApply = () => {
-    onApply({
-      taxRateId: taxRateId || undefined,
-      categoryId: categoryId || undefined,
-      purposeId: purposeId || undefined,
-    });
+  const reset = () => {
+    setTaxType(NOT_CHANGED);
     setTaxRateId(NOT_CHANGED);
     setCategoryId(NOT_CHANGED);
     setPurposeId(NOT_CHANGED);
+    setOwnerUserId(NOT_CHANGED);
+  };
+
+  const handleApply = () => {
+    onApply({
+      taxType: (taxType || undefined) as "inclusive" | "exclusive" | undefined,
+      taxRateId: taxRateId || undefined,
+      categoryId: categoryId || undefined,
+      purposeId: purposeId || undefined,
+      ownerUserId: ownerUserId || undefined,
+    });
+    reset();
     onClose();
   };
 
@@ -62,17 +78,33 @@ export function BulkInputModal({
     >
       <div className="flex flex-col gap-3">
         <Select
-          label="税率"
-          value={taxRateId}
-          onChange={(e) => setTaxRateId(e.target.value)}
+          label="税区分"
+          value={taxType}
+          onChange={(e) => {
+            setTaxType(e.target.value);
+            if (e.target.value !== "exclusive") {
+              setTaxRateId(NOT_CHANGED);
+            }
+          }}
         >
           <option value={NOT_CHANGED}>変更しない</option>
-          {masterData.consumptionTaxes.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
+          <option value="inclusive">税込</option>
+          <option value="exclusive">税別</option>
         </Select>
+        {taxType === "exclusive" && (
+          <Select
+            label="税率"
+            value={taxRateId}
+            onChange={(e) => setTaxRateId(e.target.value)}
+          >
+            <option value={NOT_CHANGED}>変更しない</option>
+            {masterData.consumptionTaxes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        )}
         <Select
           label="カテゴリー"
           value={categoryId}
@@ -94,6 +126,19 @@ export function BulkInputModal({
           {masterData.purposes.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
+            </option>
+          ))}
+        </Select>
+        <Select
+          label="帰属先"
+          value={ownerUserId}
+          onChange={(e) => setOwnerUserId(e.target.value)}
+        >
+          <option value={NOT_CHANGED}>変更しない</option>
+          <option value={OWNER_JOINT_VALUE}>共同</option>
+          {masterData.members.map((m) => (
+            <option key={m.userId} value={m.userId}>
+              {m.displayName}
             </option>
           ))}
         </Select>

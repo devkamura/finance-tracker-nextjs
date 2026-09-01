@@ -9,10 +9,10 @@ const MODEL_ID = "gemini-2.5-flash";
 const RECEIPT_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    storeName: {
+    payeeName: {
       type: Type.STRING,
       nullable: true,
-      description: "レシートに記載されている店舗名。読み取れない場合はnull。",
+      description: "レシートに記載されている支払い先名。読み取れない場合はnull。",
     },
     datetime: {
       type: Type.STRING,
@@ -47,7 +47,7 @@ const RECEIPT_SCHEMA = {
 const PROMPT = `あなたはレシート画像から家計簿アプリ用の情報を抽出するアシスタントです。
 添付されたレシート画像を読み取り、指定されたJSONスキーマに従って出力してください。
 
-- storeName: レシートに記載されている店舗名。読み取れない場合はnull。
+- payeeName: レシートに記載されている支払い先名。読み取れない場合はnull。
 - datetime: レシートに記載されている購入日時。「YYYY-MM-DDTHH:mm」形式で出力する。時刻が読み取れない場合は00:00を補う。日付自体が読み取れない場合はnull。
 - items: 購入した商品ごとに name（商品名）と price（税込の実支払金額。値引きがある場合は該当商品の価格から差し引いた金額）を整数で出力する。小計行・合計行・お預かり/お釣りの行は items に含めない。
 - totalPrice: レシートに記載されている合計金額（税込・整数）。読み取れない場合はnull。
@@ -68,7 +68,7 @@ function getClient(): GoogleGenAI {
 }
 
 type RawOcrResponse = {
-  storeName?: string | null;
+  payeeName?: string | null;
   datetime?: string | null;
   totalPrice?: number | null;
   items?: { name?: string; price?: number }[];
@@ -102,7 +102,7 @@ export async function extractReceiptFromImage(
   const parsed = JSON.parse(text) as RawOcrResponse;
 
   return {
-    storeName: parsed.storeName ?? null,
+    payeeName: parsed.payeeName ?? null,
     datetime: parsed.datetime ?? null,
     totalPrice:
       typeof parsed.totalPrice === "number" ? Math.round(parsed.totalPrice) : null,

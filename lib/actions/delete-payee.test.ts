@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { deleteStore } from "@/lib/actions/delete-store";
+import { deletePayee } from "@/lib/actions/delete-payee";
 import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -25,7 +25,7 @@ function fakeSupabase(deleteResult: { data: unknown; error: unknown }) {
   } as any;
 }
 
-describe("deleteStore", () => {
+describe("deletePayee", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -36,25 +36,25 @@ describe("deleteStore", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    const result = await deleteStore(1);
+    const result = await deletePayee(1);
     expect(result).toEqual({ success: false, error: "ログインが必要です。" });
   });
 
-  it("returns an error when the store belongs to another group (no rows deleted)", async () => {
+  it("returns an error when the payee belongs to another group (no rows deleted)", async () => {
     mockedCreateClient.mockResolvedValue(
       fakeSupabase({ data: null, error: null })
     );
 
-    const result = await deleteStore(999);
+    const result = await deletePayee(999);
     expect(result).toEqual({ success: false, error: "権限がありません。" });
   });
 
-  it("succeeds for a store in the caller's group", async () => {
+  it("succeeds for a payee in the caller's group", async () => {
     mockedCreateClient.mockResolvedValue(
       fakeSupabase({ data: { id: 1 }, error: null })
     );
 
-    const result = await deleteStore(1);
+    const result = await deletePayee(1);
     expect(result).toEqual({ success: true });
   });
 });

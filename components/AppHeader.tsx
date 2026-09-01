@@ -2,9 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faGear, faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
+import {
+  faGear,
+  faListUl,
+  faRightFromBracket,
+  faScaleBalanced,
+} from "@fortawesome/free-solid-svg-icons";
 
-import { getCurrentMembership } from "@/lib/supabase/group";
+import { getCurrentMembership, getGroupName } from "@/lib/supabase/group";
 import { getDisplayName } from "@/lib/supabase/profile";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,16 +24,38 @@ export async function AppHeader() {
   const membership = user
     ? await getCurrentMembership(supabase, user.id)
     : null;
+  const groupName = membership
+    ? await getGroupName(supabase, membership.groupId)
+    : null;
 
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
-        <Link href="/" className="text-lg font-bold text-slate-900">
-          家計簿
+        <Link href="/" className="flex items-baseline gap-2">
+          <span className="text-lg font-bold text-slate-900">家計簿</span>
+          {groupName && (
+            <span className="truncate text-xs text-slate-400">
+              {groupName}
+            </span>
+          )}
         </Link>
         {user && displayName && (
           <div className="flex items-center gap-3 text-sm text-slate-600">
             <span>{displayName}</span>
+            <Link
+              href="/receipts"
+              className="flex items-center gap-1 hover:text-slate-900"
+            >
+              <FontAwesomeIcon icon={faListUl} />
+              一覧
+            </Link>
+            <Link
+              href="/settlement"
+              className="flex items-center gap-1 hover:text-slate-900"
+            >
+              <FontAwesomeIcon icon={faScaleBalanced} />
+              精算
+            </Link>
             {membership?.role === "admin" && (
               <Link
                 href="/admin"

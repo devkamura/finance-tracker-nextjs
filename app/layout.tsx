@@ -9,7 +9,7 @@ const notoSansJp = Noto_Sans_JP({
 
 export const metadata: Metadata = {
   title: "家計簿",
-  description: "レシートを記録してGoogle Driveへ保存する家計簿アプリ",
+  description: "2人の家計簿を記録・共有するアプリ",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

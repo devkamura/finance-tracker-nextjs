@@ -29,9 +29,16 @@ export default async function AdminUsersPage() {
     userIds.length > 0
       ? await supabase
           .from("profiles")
-          .select("id, display_name, email")
+          .select("id, display_name, email, color")
           .in("id", userIds)
-      : { data: [] as { id: string; display_name: string; email: string | null }[] };
+      : {
+          data: [] as {
+            id: string;
+            display_name: string;
+            email: string | null;
+            color: string | null;
+          }[],
+        };
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
@@ -47,6 +54,7 @@ export default async function AdminUsersPage() {
       displayName: profile
         ? (profile.display_name ?? null)
         : m.invited_display_name,
+      color: profile?.color ?? null,
       joined: m.user_id !== null,
     };
   });
@@ -54,7 +62,7 @@ export default async function AdminUsersPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-bold text-slate-900">ユーザー管理</h1>
-      <InviteMemberForm />
+      <InviteMemberForm memberCount={members.length} />
       <MemberList members={memberViews} />
     </div>
   );

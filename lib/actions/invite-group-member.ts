@@ -29,6 +29,19 @@ export async function inviteGroupMember(
     return { success: false, error: "権限がありません。" };
   }
 
+  // 要件定義書2.1/2.3章：1グループにつき管理者含め最大2人。
+  // 同時実行時の最終防波堤はDBトリガー(group_members_limit_check)が担う。
+  const { count } = await supabase
+    .from("group_members")
+    .select("id", { count: "exact", head: true })
+    .eq("group_id", membership.groupId);
+  if ((count ?? 0) >= 2) {
+    return {
+      success: false,
+      error: "グループの登録人数上限（管理者含め2人）に達しています。",
+    };
+  }
+
   const { error } = await supabase.from("group_members").insert({
     group_id: membership.groupId,
     invited_email: normalizeEmail(email),
@@ -38,6 +51,12 @@ export async function inviteGroupMember(
   if (error) {
     if (error.code === "23505") {
       return { success: false, error: "既に追加済みのメールアドレスです。" };
+    }
+    if (error.message?.includes("group member limit")) {
+      return {
+        success: false,
+        error: "グループの登録人数上限（管理者含め2人）に達しています。",
+      };
     }
     console.error("Failed to invite group member", error);
     return { success: false, error: "ユーザーの追加に失敗しました。" };

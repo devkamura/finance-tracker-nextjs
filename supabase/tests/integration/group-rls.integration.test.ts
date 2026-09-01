@@ -108,57 +108,75 @@ describe("グループベース管理画面機能のRLS/RPC", () => {
     }
   });
 
-  it("I-04: グループBのセッションからグループAの店舗は見えない", async () => {
-    const { data: storeA, error: insertError } = await adminA.client
-      .from("stores")
-      .insert({ group_id: groupAId, name: "グループA専用店舗" })
+  it("I-04: グループBのセッションからグループAの支払い先は見えない", async () => {
+    const { data: payeeA, error: insertError } = await adminA.client
+      .from("payees")
+      .insert({ group_id: groupAId, name: "グループA専用支払い先" })
       .select("id")
       .single();
     expect(insertError).toBeNull();
 
     const { data: visibleFromB } = await adminB.client
-      .from("stores")
+      .from("payees")
       .select("id")
-      .eq("id", storeA!.id);
+      .eq("id", payeeA!.id);
     expect(visibleFromB).toEqual([]);
   });
 
-  it("I-05: 一般メンバーは店舗をINSERTできない", async () => {
-    const { error } = await memberA1.client.from("stores").insert({
+  it("I-05: 一般メンバーは支払い先をINSERTできない", async () => {
+    const { error } = await memberA1.client.from("payees").insert({
       group_id: groupAId,
-      name: "一般メンバーが登録しようとした店舗",
+      name: "一般メンバーが登録しようとした支払い先",
     });
     expect(error).not.toBeNull();
   });
 
-  it("I-06: 管理者は他グループのgroup_idを指定して店舗を書き込めない", async () => {
+  it("I-06: 管理者は他グループのgroup_idを指定して支払い先を書き込めない", async () => {
     const { data } = await adminA.client
-      .from("stores")
-      .insert({ group_id: groupBId, name: "越境登録の店舗" })
+      .from("payees")
+      .insert({ group_id: groupBId, name: "越境登録の支払い先" })
       .select("id");
     expect(data === null || data.length === 0).toBe(true);
   });
 
   it("I-07: 同一グループへの重複招待は拒否される", async () => {
-    const duplicateEmail = "duplicate-invite@example.com";
-    const { error: firstError } = await adminA.client
-      .from("group_members")
-      .insert({
-        group_id: groupAId,
-        invited_email: duplicateEmail,
-        role: "member",
-      });
-    expect(firstError).toBeNull();
+    // groupAは既にadminA+memberA1の2人で上限に達しているため、
+    // このテスト専用の空きのあるグループを別途用意する。
+    // 1グループ最大2人（20260831000009_group_member_limit.sql）のもとでは、
+    // 1回目の招待で残り枠が0になるため、2回目の招待は「同じメール」でも
+    // 「別のメール」でも人数上限エラー(P0001)で拒否される。メール単位の
+    // 一意制約(group_members_group_email_uniq)は、この人数上限チェックより
+    // 手前で評価される保証がないため、ここでは「2回目が拒否されること」
+    // 自体を検証し、エラーの発生要因（上限 or 一意制約）までは固定しない。
+    const throwawayAdmin = await createSignedInTestUser(admin, "throwaway-i07");
+    try {
+      const { data: group, error: groupError } = await throwawayAdmin.client.rpc(
+        "create_group_with_admin",
+        { p_name: "I-07用グループ" }
+      );
+      if (groupError) throw groupError;
 
-    const { error: secondError } = await adminA.client
-      .from("group_members")
-      .insert({
-        group_id: groupAId,
-        invited_email: duplicateEmail,
-        role: "member",
-      });
-    expect(secondError).not.toBeNull();
-    expect(secondError?.code).toBe("23505");
+      const duplicateEmail = "duplicate-invite@example.com";
+      const { error: firstError } = await throwawayAdmin.client
+        .from("group_members")
+        .insert({
+          group_id: group.id,
+          invited_email: duplicateEmail,
+          role: "member",
+        });
+      expect(firstError).toBeNull();
+
+      const { error: secondError } = await throwawayAdmin.client
+        .from("group_members")
+        .insert({
+          group_id: group.id,
+          invited_email: duplicateEmail,
+          role: "member",
+        });
+      expect(secondError).not.toBeNull();
+    } finally {
+      await deleteTestUser(admin, throwawayAdmin.id);
+    }
   });
 
   it("I-08/I-09: 招待済みメールが初回ログイン相当の処理で紐付く", async () => {
@@ -201,28 +219,41 @@ describe("グループベース管理画面機能のRLS/RPC", () => {
   });
 
   it("I-13: 管理者は招待中(未参加)のメンバーをグループから削除できる", async () => {
-    const { data: invited, error: inviteError } = await adminA.client
-      .from("group_members")
-      .insert({
-        group_id: groupAId,
-        invited_email: "to-be-removed@example.com",
-        role: "member",
-      })
-      .select("id")
-      .single();
-    expect(inviteError).toBeNull();
+    // groupAは既に2人で上限に達しているため、このテスト専用の空きのある
+    // グループを別途用意する。
+    const throwawayAdmin = await createSignedInTestUser(admin, "throwaway-i13");
+    try {
+      const { data: group, error: groupError } = await throwawayAdmin.client.rpc(
+        "create_group_with_admin",
+        { p_name: "I-13用グループ" }
+      );
+      if (groupError) throw groupError;
 
-    const { error: deleteError } = await adminA.client
-      .from("group_members")
-      .delete()
-      .eq("id", invited!.id);
-    expect(deleteError).toBeNull();
+      const { data: invited, error: inviteError } = await throwawayAdmin.client
+        .from("group_members")
+        .insert({
+          group_id: group.id,
+          invited_email: "to-be-removed@example.com",
+          role: "member",
+        })
+        .select("id")
+        .single();
+      expect(inviteError).toBeNull();
 
-    const { data: afterDelete } = await admin
-      .from("group_members")
-      .select("id")
-      .eq("id", invited!.id);
-    expect(afterDelete).toEqual([]);
+      const { error: deleteError } = await throwawayAdmin.client
+        .from("group_members")
+        .delete()
+        .eq("id", invited!.id);
+      expect(deleteError).toBeNull();
+
+      const { data: afterDelete } = await admin
+        .from("group_members")
+        .select("id")
+        .eq("id", invited!.id);
+      expect(afterDelete).toEqual([]);
+    } finally {
+      await deleteTestUser(admin, throwawayAdmin.id);
+    }
   });
 
   it("I-14: 管理者は自分自身(admin行)をグループから削除できない", async () => {
@@ -252,7 +283,7 @@ describe("グループベース管理画面機能のRLS/RPC", () => {
       .from("group_members")
       .select("id")
       .eq("group_id", groupAId)
-      .eq("invited_email", "duplicate-invite@example.com")
+      .eq("user_id", adminA.id)
       .single();
 
     const { data: deleted } = await memberA1.client
@@ -277,6 +308,17 @@ describe("グループベース管理画面機能のRLS/RPC", () => {
       .eq("id", memberA1Row!.id)
       .select("id");
     expect(deleted).toEqual([]);
+  });
+
+  it("I-18: 1グループにつき管理者含め最大2人までしか登録できない", async () => {
+    // groupAは既にadminA(管理者)+memberA1(一般)で2人に達している前提。
+    const { error } = await adminA.client.from("group_members").insert({
+      group_id: groupAId,
+      invited_email: "third-member@example.com",
+      role: "member",
+    });
+    expect(error).not.toBeNull();
+    expect(error?.message).toContain("group member limit");
   });
 
   it("I-17: 管理者は自グループの参加済み一般メンバーを削除できる", async () => {

@@ -5,8 +5,8 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
 // service_role権限を持つ管理用クライアント。
-// google_tokensテーブルなど、RLSでPostgREST公開APIから遮断しているテーブルへの
-// アクセス専用。サーバー側コード以外からは絶対にimportしないこと
+// RLSでPostgREST公開APIから遮断しているテーブルなど、通常のクライアントでは
+// アクセスできない操作専用。サーバー側コード以外からは絶対にimportしないこと
 // （"server-only"がクライアントバンドルへの混入をビルド時に検出する）。
 export function createAdminClient() {
   return createSupabaseClient<Database>(

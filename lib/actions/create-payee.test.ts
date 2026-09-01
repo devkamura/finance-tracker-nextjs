@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createStore } from "@/lib/actions/create-store";
+import { createPayee } from "@/lib/actions/create-payee";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -29,14 +29,14 @@ function fakeSupabase(insertResult: { data: unknown; error: unknown }) {
   } as any;
 }
 
-describe("createStore", () => {
+describe("createPayee", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns an error when the name is blank", async () => {
-    const result = await createStore("   ");
-    expect(result).toEqual({ success: false, error: "店舗名を入力してください。" });
+    const result = await createPayee("   ");
+    expect(result).toEqual({ success: false, error: "支払い先名を入力してください。" });
   });
 
   it("returns an error when the caller is not an admin", async () => {
@@ -46,11 +46,11 @@ describe("createStore", () => {
       role: "member",
     });
 
-    const result = await createStore("セブンイレブン");
+    const result = await createPayee("セブンイレブン");
     expect(result).toEqual({ success: false, error: "権限がありません。" });
   });
 
-  it("returns a friendly error for a duplicate store name", async () => {
+  it("returns a friendly error for a duplicate payee name", async () => {
     mockedCreateClient.mockResolvedValue(
       fakeSupabase({ data: null, error: { code: "23505" } })
     );
@@ -59,14 +59,14 @@ describe("createStore", () => {
       role: "admin",
     });
 
-    const result = await createStore("セブンイレブン");
+    const result = await createPayee("セブンイレブン");
     expect(result).toEqual({
       success: false,
-      error: "同じ名前の店舗が既に存在します。",
+      error: "同じ名前の支払い先が既に存在します。",
     });
   });
 
-  it("succeeds for a new store name", async () => {
+  it("succeeds for a new payee name", async () => {
     mockedCreateClient.mockResolvedValue(
       fakeSupabase({ data: { id: 1, name: "セブンイレブン" }, error: null })
     );
@@ -75,10 +75,10 @@ describe("createStore", () => {
       role: "admin",
     });
 
-    const result = await createStore("セブンイレブン");
+    const result = await createPayee("セブンイレブン");
     expect(result).toEqual({
       success: true,
-      store: { id: 1, name: "セブンイレブン" },
+      payee: { id: 1, name: "セブンイレブン" },
     });
   });
 });

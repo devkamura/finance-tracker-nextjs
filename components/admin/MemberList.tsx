@@ -1,3 +1,4 @@
+import { MemberColorPicker } from "@/components/admin/MemberColorPicker";
 import { MemberDisplayNameEditor } from "@/components/admin/MemberDisplayNameEditor";
 import { RemoveMemberButton } from "@/components/admin/RemoveMemberButton";
 import { updateInvitedMemberDisplayName } from "@/lib/actions/update-invited-member-display-name";
@@ -9,6 +10,7 @@ export type MemberView = {
   role: "admin" | "member";
   email: string | null;
   displayName: string | null;
+  color: string | null;
   joined: boolean;
 };
 
@@ -50,13 +52,21 @@ export function MemberList({ members }: { members: MemberView[] }) {
             {/* どのユーザーか判別できるよう、メールアドレスは参加状況に関わらず常に表示する。 */}
             <span className="text-xs text-slate-500">{member.email}</span>
           </div>
-          {member.role === "admin" ? (
-            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
-              管理者
-            </span>
-          ) : (
-            <RemoveMemberButton memberId={member.id} />
-          )}
+          <div className="flex items-center gap-2">
+            {member.joined && member.userId && (
+              <MemberColorPicker
+                userId={member.userId}
+                initialColor={member.color}
+              />
+            )}
+            {member.role === "admin" ? (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
+                管理者
+              </span>
+            ) : (
+              <RemoveMemberButton memberId={member.id} />
+            )}
+          </div>
         </li>
       ))}
     </ul>

@@ -31,7 +31,7 @@ export function ConfirmSubmitModal({
       }
     >
       <p className="text-sm text-slate-600">
-        入力内容でGoogle Driveへアップロードします。よろしいですか？
+        この内容でレシートを登録します。よろしいですか？
       </p>
     </Modal>
   );

@@ -18,18 +18,14 @@ Google OAuth 同意画面
   │  ④ 許可後、Supabase Authのコールバックへ戻る
   ▼
 Supabase Auth → Next.jsの /auth/callback へリダイレクト
-  │  ⑤ セッション確立。Google側のaccess_token/refresh_tokenを
-  │    google_tokensテーブルに保存（Google Drive API呼び出し用）
+  │  ⑤ セッション確立してログイン完了
   ▼
-以降、レシート送信時は googleapis (Node.js) が直接Google Drive APIを呼ぶ
+以降のレシートデータはすべてSupabase(Postgres/Storage)に保存される
 ```
 
-ポイントは、**Googleとの認証フローに2つの経路がある**こと。
+Googleとの通信はこの**ログインフロー1つだけ**。この設定は`supabase/config.toml`経由でSupabaseプロジェクトに登録する（Vercelの環境変数とは別物）。
 
-- **ログインそのもの**: Supabase Auth(サーバー)が主体になってGoogleと通信する。この設定は`supabase/config.toml`経由でSupabaseプロジェクトに登録する（Vercelの環境変数とは別物）。
-- **Google Drive APIの呼び出し**: Next.jsアプリ(Vercel上で動くサーバーコード)が`googleapis`ライブラリで直接Googleと通信する。この設定はVercelの環境変数で渡す。
-
-**同じGoogle Client ID/Secretの値を、この2箇所（Supabase側とVercel側）両方に登録する必要がある。** どちらか片方だけでは動かない。
+以前のバージョンではレシートをGoogle Driveへアップロードする機能があり、Next.jsアプリ(Vercel上のサーバーコード)が`googleapis`ライブラリで直接Google Drive APIを呼び出す経路も存在したが、レシートのDB保存化に伴いこの経路は廃止した。そのため、**Google Drive関連の設定（`drive.file`スコープ・Drive APIの有効化・`GDRIVE_FOLDER_ID`・Vercel側の`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`）は不要**になっている。
 
 ---
 
@@ -48,28 +44,14 @@ Supabase Auth → Next.jsの /auth/callback へリダイレクト
 3. 承認済みのリダイレクトURIに、対応するSupabaseプロジェクトのコールバックURLを登録
    - ローカル開発: `http://127.0.0.1:55321/auth/v1/callback` (`supabase status`のPort、環境により変わる)
    - 本番: `https://<本番プロジェクトref>.supabase.co/auth/v1/callback`
-4. 発行された **クライアントID** と **クライアントシークレット** を控える
-   - → 開発用は`.env`の`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
-   - → 本番用はVercelの環境変数、および後述の`supabase config push`用
+4. 発行された **クライアントID** と **クライアントシークレット** を控える（`supabase config push`用。後述の通りVercel側には設定不要）
 
 ### 1-2. OAuth同意画面（プロジェクト共通、1回だけ設定）
 
 Google Cloud Consoleの左メニュー「APIとサービス」→「Google Auth platform」配下（UIが変わることがあるので「Audience」「Data Access」等のタブを探す）。
 
-- **Data Access**タブでスコープに `https://www.googleapis.com/auth/drive.file` を追加
 - 公開ステータスが「テスト」の場合、**Audience**タブの「Test users」に、実際にログインするGoogleアカウントを追加（未追加のアカウントはログイン時に拒否される）
-
-### 1-3. Google Drive APIの有効化
-
-「APIとサービス」→「ライブラリ」→「Google Drive API」を検索して有効化。
-
-### 1-4. アップロード先フォルダ（`GDRIVE_FOLDER_ID`）
-
-Google Driveでレシート保存用フォルダを作成し、フォルダを開いたときのURL末尾の文字列を控える。
-
-```
-https://drive.google.com/drive/folders/【この部分がGDRIVE_FOLDER_ID】
-```
+- スコープは`openid`/`email`/`profile`のみで足りる（追加設定は不要）
 
 ---
 
@@ -77,7 +59,7 @@ https://drive.google.com/drive/folders/【この部分がGDRIVE_FOLDER_ID】
 
 ### 2-1. ローカル開発 vs 本番プロジェクトの違い
 
-- **ローカル**: `supabase start`でDocker上にPostgres/Auth等一式を起動する。設定は`supabase/config.toml`から読み込まれる。
+- **ローカル**: `supabase start`でDocker上にPostgres/Auth/Storage等一式を起動する。設定は`supabase/config.toml`から読み込まれる。
 - **本番**: [supabase.com](https://supabase.com/dashboard)で作成したクラウドプロジェクト。設定はCLIから`supabase db push`/`supabase config push`で反映する。
 
 ### 2-2. 各キー・IDの用途と取得場所
@@ -87,7 +69,7 @@ https://drive.google.com/drive/folders/【この部分がGDRIVE_FOLDER_ID】
 | **Project URL** | アプリがSupabaseに接続する先のURL(`NEXT_PUBLIC_SUPABASE_URL`) | ブラウザでダッシュボードを開いている時のURL `https://supabase.com/dashboard/project/【ref】` の`【ref】`部分から `https://【ref】.supabase.co` |
 | **Project ref** | `supabase link`でCLIとプロジェクトを紐付ける時に使うID | 上記URLの`【ref】`部分、または「Project Settings」の「Reference ID」 |
 | **Publishable key**(旧: anon key) | ブラウザ・サーバーの両方からアプリが使う公開鍵。`NEXT_PUBLIC_SUPABASE_ANON_KEY` | 「Project Settings」→「API Keys」タブ |
-| **Secret key**(旧: service_role key) | サーバー専用の管理者権限キー。RLSを無視して`google_tokens`テーブルを読み書きするために使用。`SUPABASE_SERVICE_ROLE_KEY` | 「Project Settings」→「API Keys」タブ。**絶対にブラウザに露出させない** |
+| **Secret key**(旧: service_role key) | サーバー専用の管理者権限キー。`SUPABASE_SERVICE_ROLE_KEY`。**現時点ではアプリのランタイムコードから直接は使用していない**（`lib/supabase/admin.ts`に将来の管理者専用処理向けに用意してあるのみ）。設定しておいても害はないが必須ではない | 「Project Settings」→「API Keys」タブ。**絶対にブラウザに露出させない** |
 | **Personal Access Token**(`sbp_...`) | Supabase CLI(`supabase link`/`db push`/`config push`)がアカウントを操作するための認証トークン。アプリの実行時には使わない | [アカウント設定 → Access Tokens](https://supabase.com/dashboard/account/tokens) |
 
 ### 2-3. マイグレーション・マスタデータの反映
@@ -98,9 +80,11 @@ supabase link --project-ref <本番プロジェクトref>
 supabase db push --include-seed          # supabase/migrations/ と supabase/seed.sql を反映
 ```
 
+`--include-seed`を付けることで、カテゴリ・目的・税率などのマスタデータ（`supabase/seed.sql`）も反映される。seed.sqlは`on conflict`で冪等に書かれているため、複数回実行しても安全。
+
 ### 2-4. Google認証設定の反映（Vercelの環境変数だけでは不十分）
 
-`supabase/config.toml`の`[auth.external.google]`は、`supabase start`（ローカル）や`supabase config push`（本番）を実行した**その時点のシェル環境変数**から`env(GOOGLE_CLIENT_ID)`/`env(GOOGLE_CLIENT_SECRET)`を読み込む。Vercelに設定した値は自動的にはここへ届かない。
+`supabase/config.toml`の`[auth.external.google]`は、`supabase start`（ローカル）や`supabase config push`（本番）を実行した**その時点のシェル環境変数**から`env(GOOGLE_CLIENT_ID)`/`env(GOOGLE_CLIENT_SECRET)`を読み込む。Vercelに設定した値は自動的にはここへ届かない（そもそもVercel側にこの値を設定する必要はない。1-1で控えたクライアントID/シークレットは、このコマンド実行時のシェル環境変数としてのみ使う）。
 
 ```bash
 export SUPABASE_ACCESS_TOKEN="sbp_..."
@@ -130,10 +114,11 @@ supabase config push
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | 上記 Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 上記 Publishable key |
-| `SUPABASE_SERVICE_ROLE_KEY` | 上記 Secret key |
 | `NEXT_PUBLIC_SITE_URL` | Vercelのデプロイ先URL(初回デプロイ後に「Settings」→「Domains」で確認できる) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | 本番用OAuthクライアント(1-1) |
-| `GDRIVE_FOLDER_ID` | アップロード先フォルダID(1-4) |
+| `GEMINI_API_KEY` | レシートOCR（Gemini API）用。[Google AI Studio](https://aistudio.google.com/)等で発行 |
+| `SUPABASE_SERVICE_ROLE_KEY`（任意） | 現状のランタイムコードからは未使用。将来の管理者専用機能のために設定しておいてもよい |
+
+`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`GDRIVE_FOLDER_ID`はVercel側では**不要**（Google Drive連携機能を廃止したため）。
 
 環境変数を変更した場合、**自動では反映されない**。「Deployments」タブ→最新デプロイの「...」→「Redeploy」で再デプロイする。
 

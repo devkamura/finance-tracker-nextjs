@@ -5,6 +5,19 @@ export type Membership = {
   role: "admin" | "member";
 };
 
+// グループ名を取得する。ヘッダー表示用。
+export async function getGroupName(
+  supabase: SupabaseClient,
+  groupId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("groups")
+    .select("name")
+    .eq("id", groupId)
+    .maybeSingle();
+  return data?.name ?? null;
+}
+
 // ログインユーザーの所属グループを取得する。
 // 現在は「1ユーザー=1グループ」運用のため先頭の1件を採用するが、
 // 将来1アカウントが複数グループに所属できるようにする場合は
@@ -27,21 +40,49 @@ export async function getCurrentMembership(
   return { groupId: data.group_id, role: data.role as "admin" | "member" };
 }
 
-// 指定グループの管理者のuser_idを取得する。
-// レシートのGoogle Driveアップロード先を「投稿者本人」ではなく
-// 「グループ管理者」のDriveに一本化するために使う（各メンバーは
-// 管理者のDriveへのアクセス権を持たないため、投稿者自身のトークンでは
-// アップロードできない）。
-export async function getGroupAdminUserId(
+export type GroupMember = {
+  userId: string;
+  role: "admin" | "member";
+  displayName: string;
+  color: string | null;
+};
+
+// グループに所属する（招待中=user_idが未確定のものを除く）メンバー一覧を取得する。
+// レシートの支払者表示・帰属先選択（共同/A/B）や精算計算の対象ユーザー特定に使う。
+//
+// group_membersとprofilesは共にauth.usersを参照しているだけで互いに直接のFKを
+// 持たないため、PostgRESTのネスト選択(embedding)では結合できない。
+// 2クエリに分けてアプリ側でuser_idをキーに突き合わせる。
+export async function getGroupMembers(
   supabase: SupabaseClient,
   groupId: string
-): Promise<string | null> {
-  const { data } = await supabase
+): Promise<GroupMember[]> {
+  const { data: memberRows } = await supabase
     .from("group_members")
-    .select("user_id")
+    .select("user_id, role")
     .eq("group_id", groupId)
-    .eq("role", "admin")
-    .maybeSingle();
+    .not("user_id", "is", null)
+    .order("role", { ascending: true });
 
-  return data?.user_id ?? null;
+  const userIds = (memberRows ?? []).map((row) => row.user_id as string);
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  const { data: profileRows } = await supabase
+    .from("profiles")
+    .select("id, display_name, color")
+    .in("id", userIds);
+
+  const profileById = new Map((profileRows ?? []).map((p) => [p.id, p]));
+
+  return (memberRows ?? []).map((row) => {
+    const profile = profileById.get(row.user_id as string);
+    return {
+      userId: row.user_id as string,
+      role: row.role as "admin" | "member",
+      displayName: profile?.display_name ?? "unknown",
+      color: profile?.color ?? null,
+    };
+  });
 }

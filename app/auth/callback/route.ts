@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { upsertGoogleTokens } from "@/lib/google/tokens";
 import { createClient } from "@/lib/supabase/server";
 
-// Supabase AuthのGoogle OAuthコールバック。
-// 認可コードをセッションに交換し、Google Driveアップロードに必要な
-// access_token/refresh_tokenをgoogle_tokensテーブルへ保存する。
+// Supabase AuthのGoogle OAuthコールバック。認可コードをセッションに交換する。
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -34,8 +31,6 @@ export async function GET(request: Request) {
     }
 
     if (!error && data?.session?.user) {
-      const { session } = data;
-
       // 管理者が事前にGmailアドレスだけで招待登録していた場合、
       // ここで本人のuser_idと突き合わせてグループメンバーとして紐付ける。
       // 失敗してもログイン自体は継続させる（招待紐付けの失敗は致命的ではない）。
@@ -46,21 +41,6 @@ export async function GET(request: Request) {
         console.error("Failed to link pending group memberships", linkError);
       }
 
-      if (session.provider_token) {
-        try {
-          await upsertGoogleTokens(session.user.id, {
-            accessToken: session.provider_token,
-            refreshToken: session.provider_refresh_token,
-            // Supabaseのセッションには正確な有効期限が含まれないため、
-            // Googleのaccess_token標準的な有効期間(1時間)を暫定値として保存し、
-            // 実際の利用時は余裕を持って早めにリフレッシュする。
-            expiresAt: new Date(Date.now() + 3600 * 1000),
-          });
-        } catch (e) {
-          console.error("Failed to save Google tokens", e);
-          return NextResponse.redirect(`${origin}/login?error=google_token`);
-        }
-      }
       console.log("[auth/callback] redirecting to origin root", origin);
       return NextResponse.redirect(`${origin}/`);
     }

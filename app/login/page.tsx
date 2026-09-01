@@ -16,7 +16,7 @@ export default async function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">家計簿</h1>
         <p className="mt-2 text-sm text-slate-500">
-          レシートを記録してGoogle Driveへ保存します。
+          2人の家計簿を記録・共有します。
         </p>
 
         <form
@@ -28,12 +28,7 @@ export default async function LoginPage() {
               provider: "google",
               options: {
                 redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-                scopes:
-                  "openid email profile https://www.googleapis.com/auth/drive.file",
-                queryParams: {
-                  access_type: "offline",
-                  prompt: "consent",
-                },
+                scopes: "openid email profile",
               },
             });
             if (error || !data.url) {

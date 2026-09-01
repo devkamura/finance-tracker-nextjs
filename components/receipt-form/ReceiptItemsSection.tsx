@@ -7,6 +7,7 @@ import { faPlus, faLayerGroup } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "@/components/ui/Button";
 import { ReceiptItemCard } from "@/components/receipt-form/ReceiptItemCard";
 import { BulkInputModal } from "@/components/receipt-form/BulkInputModal";
+import type { ReceiptFormFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptItem } from "@/types/receipt";
 
 type ReceiptItemsSectionProps = {
@@ -16,13 +17,20 @@ type ReceiptItemsSectionProps = {
   onRemoveItem: (clientId: string) => void;
   onUpdateItem: (clientId: string, patch: Partial<ReceiptItem>) => void;
   onBulkApply: (values: {
+    taxType?: "inclusive" | "exclusive";
     taxRateId?: string;
     categoryId?: string;
     purposeId?: string;
+    ownerUserId?: string;
   }) => void;
+  fieldErrors: ReceiptFormFieldErrors["items"];
+  // 一度に開けるのは1項目のみ（アコーディオン）。バリデーション失敗時に
+  // エラーのある項目を自動的に開けるよう、親（ReceiptForm）に持たせて制御する。
+  openItemId: string | null;
+  onOpenItemChange: (clientId: string | null) => void;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "purposes" | "scenes"
+    "consumptionTaxes" | "categories" | "purposes" | "scenes" | "members"
   >;
 };
 
@@ -33,11 +41,12 @@ export function ReceiptItemsSection({
   onRemoveItem,
   onUpdateItem,
   onBulkApply,
+  fieldErrors,
+  openItemId,
+  onOpenItemChange,
   masterData,
 }: ReceiptItemsSectionProps) {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
-  // 一度に開けるのは1項目のみ（アコーディオン）。既定はすべて折りたたみ。
-  const [openItemId, setOpenItemId] = useState<string | null>(null);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -65,15 +74,14 @@ export function ReceiptItemsSection({
             item={item}
             isOpen={openItemId === item.clientId}
             onToggleOpen={() =>
-              setOpenItemId((prev) =>
-                prev === item.clientId ? null : item.clientId
-              )
+              onOpenItemChange(openItemId === item.clientId ? null : item.clientId)
             }
             amount={amount}
             showSameAsAmountButton={items.length === 1}
             showRemoveButton={items.length > 1}
             onChange={(patch) => onUpdateItem(item.clientId, patch)}
             onRemove={() => onRemoveItem(item.clientId)}
+            fieldErrors={fieldErrors[item.clientId]}
             masterData={masterData}
           />
         ))}
