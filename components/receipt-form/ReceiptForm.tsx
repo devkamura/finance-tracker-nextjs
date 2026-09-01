@@ -95,6 +95,8 @@ function createInitialState(defaultTransactionTypeId: string): ReceiptFormState 
     datetime: "",
     transactionTypeId: defaultTransactionTypeId,
     amount: "",
+    // 新規登録時は常に登録者本人がサーバー側で自動設定されるため未使用。
+    payerUserId: "",
     items: [createEmptyItem()],
   };
 }
@@ -292,6 +294,7 @@ export function ReceiptForm({
         onChange={updateState}
         masterData={masterData}
         fieldErrors={fieldErrors}
+        showPayerSelect={mode === "edit"}
       />
 
       <ReceiptItemsSection

@@ -19,6 +19,9 @@ export type ReceiptFormState = {
   datetime: string; // <input type="datetime-local"> の値
   transactionTypeId: string;
   amount: string;
+  // 支払者。新規登録時は常に登録者本人に自動設定されるため未使用（""のまま）。
+  // 編集時のみ選択可能で、グループメンバーのuser idを保持する。
+  payerUserId: string;
   items: ReceiptItem[];
 };
 

@@ -45,6 +45,7 @@ function buildState(overrides: Partial<ReceiptFormState> = {}): ReceiptFormState
     datetime: "2026-08-10T12:00",
     transactionTypeId: "1",
     amount: "100",
+    payerUserId: USER_A,
     items: [buildItem()],
     ...overrides,
   };
@@ -185,6 +186,37 @@ describe("updateReceipt", () => {
     });
 
     const result = await updateReceipt("receipt-1", buildFormData(buildState()));
+    expect(result).toEqual({ success: true });
+  });
+
+  it("rejects a payerUserId that is not a group member", async () => {
+    mockedCreateClient.mockResolvedValue(fakeSupabase());
+    mockedGetCurrentMembership.mockResolvedValue({
+      groupId: "group-1",
+      role: "member",
+    });
+
+    const result = await updateReceipt(
+      "receipt-1",
+      buildFormData(buildState({ payerUserId: "someone-else" }))
+    );
+    expect(result).toEqual({
+      success: false,
+      errors: ["支払者が不正です。"],
+    });
+  });
+
+  it("allows changing the payer to another group member, regardless of who edits", async () => {
+    mockedCreateClient.mockResolvedValue(fakeSupabase());
+    mockedGetCurrentMembership.mockResolvedValue({
+      groupId: "group-1",
+      role: "member",
+    });
+
+    const result = await updateReceipt(
+      "receipt-1",
+      buildFormData(buildState({ payerUserId: USER_B }))
+    );
     expect(result).toEqual({ success: true });
   });
 });

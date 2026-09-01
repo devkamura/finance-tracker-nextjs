@@ -99,7 +99,7 @@ describe("レシート・精算のRLS/RPC", () => {
     expect(data).not.toBeNull();
   });
 
-  it("メンバーはレシートと明細を登録でき、支払者は登録者本人に固定される", async () => {
+  it("メンバーはレシートと明細を登録できる", async () => {
     const receiptId = crypto.randomUUID();
     const { error: receiptError } = await userA.client.from("receipts").insert({
       id: receiptId,
@@ -138,18 +138,6 @@ describe("レシート・精算のRLS/RPC", () => {
       .select("id");
     expect(detailsError).toBeNull();
     expect(details).toHaveLength(2);
-
-    // 支払者はDBのcheck制約(receipts_payer_is_creator)により登録者本人に固定される。
-    const { error: proxyPayerError } = await userA.client.from("receipts").insert({
-      group_id: groupId,
-      payee_name: "なりすまし",
-      transaction_type_id: transactionTypeExpenseId,
-      occurred_at: "2026-08-11T03:00:00Z",
-      payer_user_id: userB.id,
-      created_by: userA.id,
-      amount: 100,
-    });
-    expect(proxyPayerError).not.toBeNull();
   });
 
   it("他グループのユーザーはレシートを参照できない", async () => {
@@ -314,5 +302,34 @@ describe("レシート・精算のRLS/RPC", () => {
       purpose_id: purposeId,
     });
     expect(okError).toBeNull();
+  });
+
+  it("支払者は登録者以外にも自由に変更できる（全メンバー可）", async () => {
+    const receiptId = crypto.randomUUID();
+    await userA.client.from("receipts").insert({
+      id: receiptId,
+      group_id: groupId,
+      payee_name: "支払者変更テスト",
+      transaction_type_id: transactionTypeExpenseId,
+      occurred_at: "2026-08-24T00:00:00Z",
+      payer_user_id: userA.id,
+      created_by: userA.id,
+      amount: 100,
+    });
+
+    // 支払者は登録者本人（userA）以外にも自由に変更できる（従来の
+    // receipts_payer_is_creator制約は撤廃済み）。一般メンバーのuserBが変更する。
+    const { error: updateError } = await userB.client
+      .from("receipts")
+      .update({ payer_user_id: userB.id })
+      .eq("id", receiptId);
+    expect(updateError).toBeNull();
+
+    const { data: updated } = await userA.client
+      .from("receipts")
+      .select("payer_user_id")
+      .eq("id", receiptId)
+      .single();
+    expect(updated?.payer_user_id).toBe(userB.id);
   });
 });

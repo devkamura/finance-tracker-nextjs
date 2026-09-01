@@ -62,10 +62,11 @@ export async function updateReceipt(
   }
 
   const members = await getGroupMembers(supabase, membership.groupId);
-  const { errors } = validateReceiptForm(
-    state,
-    members.map((m) => m.userId)
-  );
+  const memberUserIds = members.map((m) => m.userId);
+  const { errors } = validateReceiptForm(state, memberUserIds);
+  if (!memberUserIds.includes(state.payerUserId)) {
+    errors.push("支払者が不正です。");
+  }
   if (errors.length > 0) {
     return { success: false, errors };
   }
@@ -134,6 +135,7 @@ export async function updateReceipt(
       occurred_at: occurredAt,
       amount: Number(state.amount),
       receipt_image_path: receiptImagePath,
+      payer_user_id: state.payerUserId,
     })
     .eq("id", receiptId);
 

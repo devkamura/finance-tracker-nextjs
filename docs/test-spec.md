@@ -28,6 +28,8 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 | U-39 | `lib/actions/confirm-settlement.ts` | 正常系：確定RPC呼び出し | 未確定の精算サマリー | `confirm_settlement`RPCが計算値付きで呼ばれる | `createClient`, `getSettlementSummary` |
 | U-40 | `lib/actions/reopen-settlement.ts` | 異常系：管理者以外 | `role:"member"` | 「管理者のみ再オープンできます。」 | `createClient` |
 | U-41 | `lib/actions/reopen-settlement.ts` | 正常系：管理者による再オープン | `role:"admin"` | `reopen_settlement`RPCが呼ばれ`{success:true}` | `createClient` |
+| U-42 | `lib/actions/update-receipt.ts` | 異常系：支払者がグループメンバー外 | `payerUserId`がグループメンバー以外 | 「支払者が不正です。」 | `createClient` |
+| U-43 | `lib/actions/update-receipt.ts` | 正常系：支払者を他メンバーに変更できる（全メンバー可） | `payerUserId`が既存の支払者と異なる | `{success:true}` | `createClient` |
 
 ### 結合テスト
 
@@ -38,7 +40,7 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 | I-18 | マスタデータ | カテゴリ・目的・税率が要件定義書どおりに整理されている | シード後の`categories`/`purposes`/`consumption_taxes` | 「交際費」がカテゴリ側のみに存在、「友人」が目的に存在、税率が8%/10%のみ | なし（実DB） |
 | I-19 | `profiles` RLS | 一般メンバーによる相方の表示名参照 | 一般メンバーのセッションで管理者のprofilesをSELECT | 参照できる（従来は管理者のみ参照可だった制限を緩和） | なし（実DB） |
 | I-20 | `receipts`/`receipt_details` RLS | メンバーによるレシート・明細の登録 | 一般メンバーが共同・個人混在の明細を登録 | 成功する | なし（実DB） |
-| I-21 | `receipts` check制約 | 支払者は登録者本人に固定 | `payer_user_id`に登録者以外を指定してINSERT | `receipts_payer_is_creator`制約違反で失敗 | なし（実DB） |
+| I-21 | `receipts` RLS | 支払者は登録者以外にも自由に変更できる（全メンバー可） | 一般メンバーが`payer_user_id`をUPDATE | 成功する（`receipts_payer_is_creator`制約は撤廃済み） | なし（実DB） |
 | I-22 | `receipts` RLS | 他グループからの参照拒否 | 別グループのセッションでSELECT | 0件 | なし（実DB） |
 | I-23 | `confirm_settlement` / `is_settlement_confirmed` RPC | 精算確定後は当該月への書き込みが拒否される | 確定後に同月へレシートをINSERT | `42501`（RLS違反）で失敗する | なし（実DB） |
 | I-24 | `reopen_settlement` RPC | 管理者以外は再オープン不可、管理者は可能 | 一般メンバー→エラー、管理者→成功 | 管理者のみ成功し、以後同月への書き込みが再び可能になる | なし（実DB） |
