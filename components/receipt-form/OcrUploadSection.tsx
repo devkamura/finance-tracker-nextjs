@@ -7,6 +7,7 @@ import { faCamera } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { extractReceiptOcr } from "@/lib/actions/extract-receipt-ocr";
+import { resizeImageForOcr } from "@/lib/receipts/resize-image";
 import type { OcrReceiptResult } from "@/types/receipt";
 
 type OcrUploadSectionProps = {
@@ -28,6 +29,9 @@ export function OcrUploadSection({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+  // 縮小処理は非同期のため、短時間に連続してファイルを選び直された場合に
+  // 古い選択の縮小結果が後から反映されてしまわないよう、世代番号で防ぐ。
+  const selectionRef = useRef(0);
 
   // <input type="file">はDOM側に選択済みファイル名を保持し続けるため、
   // 送信成功時にReceiptForm側でfileをnullへ戻しても表示上は選択済みのまま
@@ -79,7 +83,20 @@ export function OcrUploadSection({
           ref={inputRef}
           type="file"
           accept="image/png,image/jpeg,image/heic,image/heif"
-          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+          onChange={async (e) => {
+            const selected = e.target.files?.[0] ?? null;
+            const selection = ++selectionRef.current;
+            if (!selected) {
+              onFileChange(null);
+              return;
+            }
+            // 保存容量削減のため、OCRに十分な解像度まで縮小してから保持する
+            // （このFileがOCR送信・レシート画像保存の両方に使われる）。
+            const resized = await resizeImageForOcr(selected);
+            if (selection === selectionRef.current) {
+              onFileChange(resized);
+            }
+          }}
           className="min-w-0 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-slate-700 hover:file:bg-slate-50 sm:flex-1"
         />
         <Button
