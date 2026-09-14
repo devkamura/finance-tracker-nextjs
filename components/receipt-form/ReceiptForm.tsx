@@ -339,9 +339,6 @@ export function ReceiptForm({
         fieldErrors={fieldErrors.items}
         openItemId={openItemId}
         onOpenItemChange={setOpenItemId}
-        onEstimateTaxRateError={(message) =>
-          setToast({ type: "error", message })
-        }
         masterData={masterData}
       />
 
