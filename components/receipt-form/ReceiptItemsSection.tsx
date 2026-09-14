@@ -7,6 +7,7 @@ import { faPlus, faLayerGroup } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "@/components/ui/Button";
 import { ReceiptItemCard } from "@/components/receipt-form/ReceiptItemCard";
 import { BulkInputModal } from "@/components/receipt-form/BulkInputModal";
+import { EstimateTaxRateButton } from "@/components/receipt-form/EstimateTaxRateButton";
 import type { ReceiptFormFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptItem } from "@/types/receipt";
 
@@ -28,6 +29,7 @@ type ReceiptItemsSectionProps = {
   // エラーのある項目を自動的に開けるよう、親（ReceiptForm）に持たせて制御する。
   openItemId: string | null;
   onOpenItemChange: (clientId: string | null) => void;
+  onEstimateTaxRateError: (message: string) => void;
   masterData: Pick<
     MasterData,
     "consumptionTaxes" | "categories" | "purposes" | "scenes" | "members"
@@ -44,26 +46,35 @@ export function ReceiptItemsSection({
   fieldErrors,
   openItemId,
   onOpenItemChange,
+  onEstimateTaxRateError,
   masterData,
 }: ReceiptItemsSectionProps) {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-slate-900">
           レシート項目
         </h2>
-        {items.length > 1 && (
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setBulkModalOpen(true)}
-          >
-            <FontAwesomeIcon icon={faLayerGroup} />
-            一括入力
-          </Button>
-        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          <EstimateTaxRateButton
+            items={items}
+            onUpdateItem={onUpdateItem}
+            onError={onEstimateTaxRateError}
+            consumptionTaxes={masterData.consumptionTaxes}
+          />
+          {items.length > 1 && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setBulkModalOpen(true)}
+            >
+              <FontAwesomeIcon icon={faLayerGroup} />
+              一括入力
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-4">

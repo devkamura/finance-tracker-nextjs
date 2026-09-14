@@ -52,6 +52,34 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 
 ---
 
+## 追加機能：税率自動推定・金額整合性チェック
+
+対象：`docs/家計簿アプリ 要件定義書.md` 20章（追記）・21〜22章（追記）。テストフレームワーク: Vitest（単体）。
+Gemini APIを呼び出す箇所（`extractReceiptFromImage`, `estimateTaxRatesForItemNames`）は必ずモックする。
+
+### 単体テスト
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| U-44 | `lib/receipts/amount-check.ts` | 正常系：税込明細のみの合計 | 税込1,000円＋税込500円 | 合計1,500円 | なし（純粋関数） |
+| U-45 | `lib/receipts/amount-check.ts` | 正常系：税別明細は税率を乗じて切り捨てた額で合計する | 税別1,000円×8% | 1,080円として合計される | なし |
+| U-46 | `lib/receipts/amount-check.ts` | 正常系：税込・税別混在時の合計 | 税込1,000円＋税別1,000円×10% | 2,100円 | なし |
+| U-47 | `lib/receipts/amount-check.ts` | 正常系：合計金額と明細合計の一致判定 | 一致するケース／しないケース | 一致時true、不一致時false | なし |
+| U-48 | `lib/gemini/estimate-tax-rate.ts` | 正常系：indexに基づき順序を問わず正しくマッピングする | Geminiが順序を入れ替えて返す | 入力順に対応した推定結果配列が返る | `getGeminiClient`（`generateContent`応答をスタブ） |
+| U-49 | `lib/gemini/estimate-tax-rate.ts` | 異常系：8/10以外の値やresultsに含まれないindex | `taxRatePercent:5`等 | nullとして扱われる | `getGeminiClient` |
+| U-50 | `lib/actions/estimate-tax-rates.ts` | 異常系：未ログイン | `user = null` | `{success:false}` かつ「ログインが必要です。」 | `createClient` |
+| U-51 | `lib/actions/estimate-tax-rates.ts` | 正常系：Gemini呼び出し失敗時のフォールバック | `estimateTaxRatesForItemNames`が例外を投げる | 「税率の推定に失敗しました。」 | `createClient`, `estimateTaxRatesForItemNames` |
+
+### 結合テスト
+
+今回はDB・RLSに変更がないため対象なし。
+
+### E2Eテスト
+
+**今回のスコープでは未実装。**（他機能と同様、Playwright未導入のためVitestの単体テストまでとする。）
+
+---
+
 ## 追加機能：管理画面（グループ・管理者・ユーザー管理・支払い先管理）
 
 テストフレームワーク: Vitest（単体・結合）/ Playwright（E2E）。
