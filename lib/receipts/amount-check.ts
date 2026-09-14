@@ -10,36 +10,46 @@ import type { ReceiptItem } from "@/types/receipt";
 
 type TaxRateMaster = { id: number; multiplier: number };
 
-// 明細1件の税込換算額を計算する（精算計算 lib/settlement/calculate.ts の
-// taxInclusiveAmountと同じ考え方：税別明細は乗率を掛けて切り捨てる）。
-function itemTaxInclusiveAmount(
-  item: ReceiptItem,
-  taxRates: TaxRateMaster[]
-): number {
-  const price = Number(item.price);
-  if (!Number.isFinite(price)) {
-    return 0;
-  }
-  if (item.taxType === "inclusive") {
-    return price;
-  }
-  const taxRate = taxRates.find((t) => String(t.id) === item.taxRateId);
-  if (!taxRate) {
-    // 税率未選択（バリデーションエラーで別途弾かれる想定）の場合は
-    // 入力された価格をそのまま税込扱いとして扱う。
-    return price;
-  }
-  return Math.floor(price * taxRate.multiplier);
-}
-
+// 税別明細は、インボイス制度（適格請求書等保存方式）の端数処理ルールに合わせ、
+// 明細1件ごとではなく同一税率の小計に対して1回だけ端数処理する（積み上げ計算だと
+// 実際のレシートの合計額と数円ズレることがあるため）。
 export function calculateItemsTaxInclusiveTotal(
   items: ReceiptItem[],
   taxRates: TaxRateMaster[]
 ): number {
-  return items.reduce(
-    (sum, item) => sum + itemTaxInclusiveAmount(item, taxRates),
-    0
-  );
+  let total = 0;
+  const exclusiveSubtotalsByRateId = new Map<string, number>();
+
+  for (const item of items) {
+    const price = Number(item.price);
+    if (!Number.isFinite(price)) {
+      continue;
+    }
+    if (item.taxType === "inclusive") {
+      total += price;
+      continue;
+    }
+    const taxRate = taxRates.find((t) => String(t.id) === item.taxRateId);
+    if (!taxRate) {
+      // 税率未選択（バリデーションエラーで別途弾かれる想定）の場合は
+      // 入力された価格をそのまま税込扱いとして扱う。
+      total += price;
+      continue;
+    }
+    const key = String(taxRate.id);
+    exclusiveSubtotalsByRateId.set(
+      key,
+      (exclusiveSubtotalsByRateId.get(key) ?? 0) + price
+    );
+  }
+
+  for (const [rateId, subtotal] of exclusiveSubtotalsByRateId) {
+    const taxRate = taxRates.find((t) => String(t.id) === rateId);
+    if (!taxRate) continue;
+    total += Math.floor(subtotal * taxRate.multiplier);
+  }
+
+  return total;
 }
 
 // 合計金額（支払額）と明細合計が一致しているかを判定する。
