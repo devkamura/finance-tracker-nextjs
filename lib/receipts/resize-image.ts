@@ -1,18 +1,13 @@
 // レシート画像は最近のスマートフォンカメラだと数MB〜十数MBになることがあり、
-// そのままSupabase Storageへ保存すると容量を圧迫する。OCR（文字認識）に
-// 必要な解像度はそこまで高くないため、長辺が一定値を超える場合のみ縮小して
-// から保存・OCR送信する（OCR実行前後どちらでも同じファイルを使い回すため、
-// アップロード容量とGemini APIへの送信サイズの両方を削減できる）。
-
-// レシートの文字（特に小さな価格・日時）を判読できる下限を確保しつつ、
-// 一般的なスマートフォン写真（4000px超）を大幅に縮小できる値。
-const MAX_DIMENSION = 1600;
+// そのままSupabase Storageへ保存すると容量を圧迫する。一方でレシートは縦に
+// 長く幅が狭い形状のことが多く、長辺基準で縮小すると金額欄がある幅方向が
+// 大きく縮み、OCRで金額を誤読しやすくなる。そのため保存用（容量優先）と
+// OCR送信用（判読精度優先）で異なる上限を使い分ける。
+const STORAGE_MAX_DIMENSION = 1600;
+const OCR_MAX_DIMENSION = 2600;
 const JPEG_QUALITY = 0.85;
 
-// 画像ファイルをOCRに十分な解像度まで縮小する。
-// 既に十分小さい場合や、ブラウザがデコードできない形式（例：一部環境のHEIC）
-// の場合は、元のファイルをそのまま返す。
-export async function resizeImageForOcr(file: File): Promise<File> {
+async function resizeImage(file: File, maxDimension: number): Promise<File> {
   if (!file.type.startsWith("image/")) {
     return file;
   }
@@ -20,7 +15,7 @@ export async function resizeImageForOcr(file: File): Promise<File> {
   try {
     const bitmap = await createImageBitmap(file);
     try {
-      const scale = MAX_DIMENSION / Math.max(bitmap.width, bitmap.height);
+      const scale = maxDimension / Math.max(bitmap.width, bitmap.height);
       if (scale >= 1) {
         return file;
       }
@@ -52,4 +47,15 @@ export async function resizeImageForOcr(file: File): Promise<File> {
     // HEIC等、ブラウザが直接デコードできない形式では縮小をスキップする。
     return file;
   }
+}
+
+// レシート画像をStorage保存に十分な解像度まで縮小する。
+export async function resizeImageForStorage(file: File): Promise<File> {
+  return resizeImage(file, STORAGE_MAX_DIMENSION);
+}
+
+// レシート画像をGemini OCR送信に十分な解像度まで縮小する。
+// 保存用より上限を高くし、金額欄など小さな文字の判読精度を優先する。
+export async function resizeImageForOcr(file: File): Promise<File> {
+  return resizeImage(file, OCR_MAX_DIMENSION);
 }

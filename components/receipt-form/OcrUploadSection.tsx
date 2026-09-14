@@ -7,7 +7,7 @@ import { faCamera } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { extractReceiptOcr } from "@/lib/actions/extract-receipt-ocr";
-import { resizeImageForOcr } from "@/lib/receipts/resize-image";
+import { resizeImageForOcr, resizeImageForStorage } from "@/lib/receipts/resize-image";
 import type { OcrReceiptResult } from "@/types/receipt";
 
 type OcrUploadSectionProps = {
@@ -32,6 +32,9 @@ export function OcrUploadSection({
   // 縮小処理は非同期のため、短時間に連続してファイルを選び直された場合に
   // 古い選択の縮小結果が後から反映されてしまわないよう、世代番号で防ぐ。
   const selectionRef = useRef(0);
+  // OCR送信時は保存用より高い解像度が必要なため、縮小前の元ファイルを
+  // 保持しておき、「読み取る」実行時にOCR用の縮小を別途行う。
+  const originalFileRef = useRef<File | null>(null);
 
   // <input type="file">はDOM側に選択済みファイル名を保持し続けるため、
   // 送信成功時にReceiptForm側でfileをnullへ戻しても表示上は選択済みのまま
@@ -54,11 +57,15 @@ export function OcrUploadSection({
   const handleConfirmExtract = () => {
     setConfirmOpen(false);
     if (!file) return;
-
-    const formData = new FormData();
-    formData.append("image", file);
+    const original = originalFileRef.current ?? file;
 
     startTransition(async () => {
+      // 保存用（file）は容量優先で縮小済みのため、OCR送信には元ファイルから
+      // 判読精度優先で別途縮小した画像を使う。
+      const ocrImage = await resizeImageForOcr(original);
+      const formData = new FormData();
+      formData.append("image", ocrImage);
+
       const result = await extractReceiptOcr(formData);
       if (result.success) {
         onExtracted(result.data);
@@ -86,13 +93,15 @@ export function OcrUploadSection({
           onChange={async (e) => {
             const selected = e.target.files?.[0] ?? null;
             const selection = ++selectionRef.current;
+            originalFileRef.current = selected;
             if (!selected) {
               onFileChange(null);
               return;
             }
-            // 保存容量削減のため、OCRに十分な解像度まで縮小してから保持する
-            // （このFileがOCR送信・レシート画像保存の両方に使われる）。
-            const resized = await resizeImageForOcr(selected);
+            // 保存容量削減のため、Storageに十分な解像度まで縮小してから保持する
+            // （このFileがレシート画像保存に使われる。OCR送信時は元ファイルから
+            // 別途より高い解像度で縮小し直す）。
+            const resized = await resizeImageForStorage(selected);
             if (selection === selectionRef.current) {
               onFileChange(resized);
             }
