@@ -34,7 +34,7 @@ export type GroupMemberOption = {
 export type MasterData = {
   payees: { id: number; name: string }[];
   transactionTypes: { id: number; name: string }[];
-  consumptionTaxes: { id: number; name: string }[];
+  consumptionTaxes: { id: number; name: string; multiplier: number }[];
   categories: { id: number; name: string }[];
   purposes: { id: number; name: string }[];
   scenes: { id: number; name: string }[];
@@ -45,6 +45,8 @@ export type MasterData = {
 export type OcrReceiptItem = {
   name: string;
   price: number;
+  // 商品名から推定した消費税率。8/10のいずれか、判断できない場合はnull。
+  taxRatePercent: 8 | 10 | null;
 };
 
 export type OcrReceiptResult = {

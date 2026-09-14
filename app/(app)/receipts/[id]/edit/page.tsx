@@ -33,7 +33,7 @@ export default async function ReceiptEditPage({
     Promise.all([
       supabase.from("payees").select("id, name").order("id"),
       supabase.from("transaction_types").select("id, name").order("id"),
-      supabase.from("consumption_taxes").select("id, name").order("id"),
+      supabase.from("consumption_taxes").select("id, name, multiplier").order("id"),
       supabase.from("categories").select("id, name").order("id"),
       supabase.from("purposes").select("id, name").order("id"),
       supabase.from("scenes").select("id, name").order("id"),

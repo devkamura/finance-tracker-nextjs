@@ -13,6 +13,7 @@ import { Toast, type ToastState } from "@/components/receipt-form/Toast";
 import { createReceipt } from "@/lib/actions/create-receipt";
 import { updateReceipt } from "@/lib/actions/update-receipt";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
+import { isAmountConsistent } from "@/lib/receipts/amount-check";
 import {
   validateReceiptForm,
   type ReceiptFormFieldErrors,
@@ -45,13 +46,48 @@ function createEmptyItem(): ReceiptItem {
   };
 }
 
+// 推定税率(8/10)を、consumption_taxesマスタの該当するtaxRateIdへ変換する。
+// 一致するマスタが無い場合は未選択のまま返す。
+function resolveTaxRateId(
+  taxRatePercent: number | null,
+  consumptionTaxes: MasterData["consumptionTaxes"]
+): string {
+  if (taxRatePercent === null) return "";
+  const matched = consumptionTaxes.find((t) => t.name === `${taxRatePercent}%`);
+  return matched ? String(matched.id) : "";
+}
+
+// OCRで抽出した1商品をフォームのReceiptItemへ変換する。
+// 税率(8%/10%)と税区分(税込/税別)は独立した判定であり、Geminiは商品名から
+// 税率のみを推定する（税区分はOCRの仕組み上常に「税込」で抽出されるため
+// 判定不要。手動入力側も同様に商品名だけでは税込/税別を判定できないため
+// 判定させない）。税区分が不明（＝常に不明）な場合、税区分・価格は一切
+// 変更せず、税率が判定できた場合のみ税率欄を更新する。
+function buildOcrItem(
+  item: OcrReceiptResult["items"][number],
+  consumptionTaxes: MasterData["consumptionTaxes"]
+): ReceiptItem {
+  return {
+    clientId: generateClientId(),
+    name: item.name,
+    price: String(item.price),
+    taxType: "inclusive",
+    taxRateId: resolveTaxRateId(item.taxRatePercent, consumptionTaxes),
+    categoryId: "",
+    purposeId: "",
+    sceneIds: [],
+    ownerUserId: "",
+  };
+}
+
 // OCR読み取り結果を既存フォームの状態にマッピングする。
-// 税区分・税率・カテゴリー・目的・帰属先はマスタ選択式でOCRからは判定できないため
-// 既定値のままとし、支払い先名は登録済みマスタと名称が一致すればプルダウン選択、
-// 一致しなければ手入力欄に反映する。
+// カテゴリー・目的・帰属先はマスタ選択式でOCRからは判定できないため既定値のままとし、
+// 支払い先名は登録済みマスタと名称が一致すればプルダウン選択、一致しなければ
+// 手入力欄に反映する。
 function buildOcrPatch(
   result: OcrReceiptResult,
-  payees: MasterData["payees"]
+  payees: MasterData["payees"],
+  consumptionTaxes: MasterData["consumptionTaxes"]
 ): Partial<ReceiptFormState> {
   const patch: Partial<ReceiptFormState> = {};
 
@@ -72,17 +108,9 @@ function buildOcrPatch(
     }
   }
   if (result.items.length > 0) {
-    patch.items = result.items.map((item) => ({
-      clientId: generateClientId(),
-      name: item.name,
-      price: String(item.price),
-      taxType: "inclusive",
-      taxRateId: "",
-      categoryId: "",
-      purposeId: "",
-      sceneIds: [],
-      ownerUserId: "",
-    }));
+    patch.items = result.items.map((item) =>
+      buildOcrItem(item, consumptionTaxes)
+    );
   }
 
   return patch;
@@ -134,6 +162,7 @@ export function ReceiptForm({
   });
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [amountMismatch, setAmountMismatch] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -195,11 +224,14 @@ export function ReceiptForm({
     }
     setClientErrors([]);
     setFieldErrors({ items: {} });
+    setAmountMismatch(
+      !isAmountConsistent(state.amount, state.items, masterData.consumptionTaxes)
+    );
     setConfirmOpen(true);
   };
 
   const handleOcrExtracted = (result: OcrReceiptResult) => {
-    updateState(buildOcrPatch(result, masterData.payees));
+    updateState(buildOcrPatch(result, masterData.payees, masterData.consumptionTaxes));
     setToast({
       type: "success",
       message: "レシートを読み取りました。内容を確認してください。",
@@ -307,6 +339,9 @@ export function ReceiptForm({
         fieldErrors={fieldErrors.items}
         openItemId={openItemId}
         onOpenItemChange={setOpenItemId}
+        onEstimateTaxRateError={(message) =>
+          setToast({ type: "error", message })
+        }
         masterData={masterData}
       />
 
@@ -323,6 +358,7 @@ export function ReceiptForm({
         open={confirmOpen}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}
+        amountMismatch={amountMismatch}
       />
     </div>
   );

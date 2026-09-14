@@ -1,7 +1,8 @@
 import "server-only";
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 
+import { getGeminiClient } from "@/lib/gemini/client";
 import type { OcrReceiptResult } from "@/types/receipt";
 
 const MODEL_ID = "gemini-2.5-flash";
@@ -42,6 +43,12 @@ const RECEIPT_SCHEMA = {
             description:
               "その商品に適用された値引き額（整数）。値引きがない場合はnull。",
           },
+          taxRatePercent: {
+            type: Type.INTEGER,
+            nullable: true,
+            description:
+              "商品名から推定した消費税率。軽減税率(8)または標準税率(10)のいずれか。判断できない場合はnull。",
+          },
         },
         required: ["name", "price"],
       },
@@ -55,36 +62,34 @@ const PROMPT = `あなたはレシート画像から家計簿アプリ用の情�
 
 - payeeName: レシートに記載されている支払い先名。読み取れない場合はnull。
 - datetime: レシートに記載されている購入日時。「YYYY-MM-DDTHH:mm」形式で出力する。時刻が読み取れない場合は00:00を補う。日付自体が読み取れない場合はnull。
-- items: 購入した商品ごとに name（商品名）、price（税込・値引き前の金額）、discount（その商品に適用された値引き額。値引きがなければnull）を整数で出力する。price は値引きを差し引かず、値引き額は discount に分けて出力すること。小計行・合計行・お預かり/お釣りの行は items に含めない。
+- items: 購入した商品ごとに name（商品名）、price（税込・値引き前の金額）、discount（その商品に適用された値引き額。値引きがなければnull）、taxRatePercent（商品名から推定した消費税率。軽減税率対象なら8、標準税率なら10、判断できなければnull）を整数で出力する。price は値引きを差し引かず、値引き額は discount に分けて出力すること。小計行・合計行・お預かり/お釣りの行は items に含めない。
 - totalPrice: レシートに記載されている合計金額（税込・整数）。読み取れない場合はnull。
 
 画像がレシートでない、または情報を読み取れない場合は、items を空配列にしてください。`;
-
-let cachedClient: GoogleGenAI | null = null;
-
-function getClient(): GoogleGenAI {
-  if (!cachedClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEYが設定されていません。");
-    }
-    cachedClient = new GoogleGenAI({ apiKey });
-  }
-  return cachedClient;
-}
 
 type RawOcrResponse = {
   payeeName?: string | null;
   datetime?: string | null;
   totalPrice?: number | null;
-  items?: { name?: string; price?: number; discount?: number | null }[];
+  items?: {
+    name?: string;
+    price?: number;
+    discount?: number | null;
+    taxRatePercent?: number | null;
+  }[];
 };
+
+// 8/10以外の値が返った場合は信頼せずnull扱いにする（要件定義書20章：
+// 税率の最終確定はユーザーが行う。ここでの推定は初期値の提案に過ぎない）。
+function normalizeTaxRatePercent(value: number | null | undefined): 8 | 10 | null {
+  return value === 8 || value === 10 ? value : null;
+}
 
 export async function extractReceiptFromImage(
   base64Image: string,
   mimeType: string
 ): Promise<OcrReceiptResult> {
-  const ai = getClient();
+  const ai = getGeminiClient();
 
   const response = await ai.models.generateContent({
     model: MODEL_ID,
@@ -123,6 +128,7 @@ export async function extractReceiptFromImage(
         return {
           name: item.name ?? "",
           price: discount > 0 ? price - discount : price,
+          taxRatePercent: normalizeTaxRatePercent(item.taxRatePercent),
         };
       }),
   };
