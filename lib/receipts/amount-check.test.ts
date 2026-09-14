@@ -62,6 +62,27 @@ describe("calculateItemsTaxInclusiveTotal", () => {
     ];
     expect(calculateItemsTaxInclusiveTotal(items, TAX_RATES)).toBe(1078);
   });
+
+  it("同一税率の税別明細は小計に対して1回だけ端数処理する（インボイス制度準拠）", () => {
+    const items = [
+      buildItem({ price: "98", taxType: "exclusive", taxRateId: "1" }),
+      buildItem({ clientId: "2", price: "98", taxType: "exclusive", taxRateId: "1" }),
+      buildItem({ clientId: "3", price: "98", taxType: "exclusive", taxRateId: "1" }),
+    ];
+    // 明細ごとに切り捨てると floor(98*1.08)=105 の3件合計で315円になるが、
+    // 小計(294円)に対して1回切り捨てるのが正しい計算方法（294*1.08=317.52 -> 317）。
+    expect(calculateItemsTaxInclusiveTotal(items, TAX_RATES)).toBe(317);
+  });
+
+  it("税率が異なる税別明細はそれぞれの小計ごとに端数処理する", () => {
+    const items = [
+      buildItem({ price: "98", taxType: "exclusive", taxRateId: "1" }),
+      buildItem({ clientId: "2", price: "98", taxType: "exclusive", taxRateId: "1" }),
+      buildItem({ clientId: "3", price: "1000", taxType: "exclusive", taxRateId: "2" }),
+    ];
+    // 8%グループ: floor(196*1.08)=211.68 -> 211、10%グループ: floor(1000*1.10)=1100
+    expect(calculateItemsTaxInclusiveTotal(items, TAX_RATES)).toBe(1311);
+  });
 });
 
 describe("isAmountConsistent", () => {
