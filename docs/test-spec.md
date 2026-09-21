@@ -52,19 +52,24 @@ Gemini APIを呼び出す既存OCR機能（`extractReceiptOcr`）は変更して
 
 ---
 
-## 追加機能：税率自動推定・金額整合性チェック
+## 追加機能：税率自動推定・OCR明細確認UI
 
-対象：`docs/家計簿アプリ 要件定義書.md` 20章（追記）・21〜22章（追記）。テストフレームワーク: Vitest（単体）。
+対象：`docs/家計簿アプリ 要件定義書.md` 20章（追記）。テストフレームワーク: Vitest（単体）。
 Gemini APIを呼び出す箇所（`extractReceiptFromImage`）は必ずモックする。
+
+金額整合性チェック（明細合計と支払額の一致確認モーダル）は廃止した。店舗によって
+値引きが小計計算前に適用される等、計算順序が店ごとに異なり明細から支払額を正確に
+再現できないため、確認はユーザーの目視に委ねる方針とした
+（`lib/receipts/amount-check.ts`および関連テストは削除）。
+代わりに、各明細のアコーディオンを開かなくても価格・税区分・税率を確認できるよう
+折りたたみ時のヘッダーにサマリー表示を追加した。
 
 ### 単体テスト
 
 | No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
 |---|---|---|---|---|---|
-| U-44 | `lib/receipts/amount-check.ts` | 正常系：税込明細のみの合計 | 税込1,000円＋税込500円 | 合計1,500円 | なし（純粋関数） |
-| U-45 | `lib/receipts/amount-check.ts` | 正常系：税別明細は税率を乗じて切り捨てた額で合計する | 税別1,000円×8% | 1,080円として合計される | なし |
-| U-46 | `lib/receipts/amount-check.ts` | 正常系：税込・税別混在時の合計 | 税込1,000円＋税別1,000円×10% | 2,100円 | なし |
-| U-47 | `lib/receipts/amount-check.ts` | 正常系：合計金額と明細合計の一致判定 | 一致するケース／しないケース | 一致時true、不一致時false | なし |
+| U-48 | `components/receipt-form/ReceiptForm.ts`（`buildOcrItem`） | 正常系：OCR取り込み時の税区分デフォルトは税別、価格は再計算しない | OCR結果 `price:1000, taxRatePercent:8` | `taxType:"exclusive"`、`price:"1000"`（税込換算しない）、`taxRateId`は8%のマスタIDが選択済み | なし（純粋関数） |
+| U-49 | `components/receipt-form/ReceiptForm.ts`（`buildOcrItem`） | 異常系：税率が推定できない場合は税率未選択のまま返す | OCR結果 `taxRatePercent:null` | `taxType:"exclusive"`、`taxRateId:""`（送信時バリデーションで税率必須エラーとなる） | なし |
 
 ### 結合テスト
 
@@ -73,6 +78,9 @@ Gemini APIを呼び出す箇所（`extractReceiptFromImage`）は必ずモック
 ### E2Eテスト
 
 **今回のスコープでは未実装。**（他機能と同様、Playwright未導入のためVitestの単体テストまでとする。）
+折りたたみ時のサマリー表示（価格・税区分・税率）は、コンポーネントテスト基盤
+（Testing Library等）が未導入のため自動テスト対象外とし、実装後にブラウザでの
+目視確認で担保する。
 
 ---
 

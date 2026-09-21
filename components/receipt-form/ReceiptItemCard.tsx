@@ -63,6 +63,22 @@ export function ReceiptItemCard({
       Object.values(fieldErrors).some((invalid) => invalid === true)
   );
 
+  // アコーディオンを開かなくても内容を確認できるよう、折りたたみ時のヘッダーに
+  // 価格・税区分・税率のサマリーを表示する。
+  const priceValue = Number(item.price);
+  const priceSummary = item.price && Number.isFinite(priceValue)
+    ? `¥${priceValue.toLocaleString()}`
+    : "価格未入力";
+  const taxRateName = masterData.consumptionTaxes.find(
+    (t) => String(t.id) === item.taxRateId
+  )?.name;
+  const taxSummary =
+    item.taxType === "inclusive"
+      ? "税込"
+      : taxRateName
+        ? `税別 ${taxRateName}`
+        : "税別（税率未選択）";
+
   return (
     <div
       className={`rounded-xl border bg-white p-4 ${hasError ? "border-red-300" : "border-slate-200"}`}
@@ -93,6 +109,12 @@ export function ReceiptItemCard({
           </button>
         )}
       </div>
+
+      {!isOpen && (
+        <p className="mt-1 pl-6 text-xs text-slate-500">
+          {priceSummary}・{taxSummary}
+        </p>
+      )}
 
       {isOpen && (
         <div className="mt-3 flex flex-col gap-3">

@@ -13,7 +13,6 @@ import { Toast, type ToastState } from "@/components/receipt-form/Toast";
 import { createReceipt } from "@/lib/actions/create-receipt";
 import { updateReceipt } from "@/lib/actions/update-receipt";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
-import { isAmountConsistent } from "@/lib/receipts/amount-check";
 import {
   validateReceiptForm,
   type ReceiptFormFieldErrors,
@@ -59,11 +58,13 @@ function resolveTaxRateId(
 
 // OCRで抽出した1商品をフォームのReceiptItemへ変換する。
 // 税率(8%/10%)と税区分(税込/税別)は独立した判定であり、Geminiは商品名から
-// 税率のみを推定する（税区分はOCRの仕組み上常に「税込」で抽出されるため
-// 判定不要。手動入力側も同様に商品名だけでは税込/税別を判定できないため
-// 判定させない）。税区分が不明（＝常に不明）な場合、税区分・価格は一切
-// 変更せず、税率が判定できた場合のみ税率欄を更新する。
-function buildOcrItem(
+// 税率のみを推定する（税区分はOCRの仕組み上判定できないため判定させない。
+// 手動入力側も同様に商品名だけでは税込/税別を判定できないため判定させない）。
+// 価格はOCRが読み取った数値をそのまま使用し、税込換算等の計算は一切行わない。
+// 税区分は既定で「税別」とし、税率が推定できた場合はその税率をあらかじめ
+// 選択状態にしておく（推定できなかった場合は未選択のままとし、送信時の
+// バリデーションでユーザーに手動選択を促す）。
+export function buildOcrItem(
   item: OcrReceiptResult["items"][number],
   consumptionTaxes: MasterData["consumptionTaxes"]
 ): ReceiptItem {
@@ -71,7 +72,7 @@ function buildOcrItem(
     clientId: generateClientId(),
     name: item.name,
     price: String(item.price),
-    taxType: "inclusive",
+    taxType: "exclusive",
     taxRateId: resolveTaxRateId(item.taxRatePercent, consumptionTaxes),
     categoryId: "",
     purposeId: "",
@@ -162,7 +163,6 @@ export function ReceiptForm({
   });
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [amountMismatch, setAmountMismatch] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -224,9 +224,6 @@ export function ReceiptForm({
     }
     setClientErrors([]);
     setFieldErrors({ items: {} });
-    setAmountMismatch(
-      !isAmountConsistent(state.amount, state.items, masterData.consumptionTaxes)
-    );
     setConfirmOpen(true);
   };
 
@@ -355,7 +352,6 @@ export function ReceiptForm({
         open={confirmOpen}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}
-        amountMismatch={amountMismatch}
       />
     </div>
   );
