@@ -24,6 +24,16 @@ import type {
   ReceiptItem,
 } from "@/types/receipt";
 
+// レシートの支払い月（"YYYY-MM"）を求める。datetime未入力時はlib/actions/create-receipt.ts
+// のフォールバック（登録時刻）に合わせ、現在時刻の月を使う。
+export function resolveOccurredMonth(datetime: string): string {
+  if (/^\d{4}-\d{2}/.test(datetime)) {
+    return datetime.slice(0, 7);
+  }
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function generateClientId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -163,6 +173,9 @@ export function ReceiptForm({
   });
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // 登録成功後、支払い月の一覧画面に移動して確認するか、続けて登録できるよう
+  // 登録画面に留まるかの切り替え。連続登録を考慮し、送信のたびにはリセットしない。
+  const [navigateAfterSubmit, setNavigateAfterSubmit] = useState(true);
   const [toast, setToast] = useState<ToastState>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -248,16 +261,25 @@ export function ReceiptForm({
         formData.set("image", imageFile);
       }
 
-      const result =
-        mode === "edit" && receiptId
-          ? await updateReceipt(receiptId, formData)
-          : await createReceipt(formData);
-
-      if (result.success) {
-        if (mode === "edit" && receiptId) {
+      if (mode === "edit" && receiptId) {
+        const result = await updateReceipt(receiptId, formData);
+        if (result.success) {
           setToast({ type: "success", message: "レシートを更新しました。" });
           router.push(redirectHref ?? `/receipts/${receiptId}`);
           router.refresh();
+          return;
+        }
+        setClientErrors(result.errors);
+        setFieldErrors({ items: {} });
+        setToast({ type: "error", message: "レシートの更新に失敗しました。" });
+        return;
+      }
+
+      const result = await createReceipt(formData);
+      if (result.success) {
+        if (navigateAfterSubmit) {
+          const month = resolveOccurredMonth(state.datetime);
+          router.push(`/receipts?month=${month}&open=${result.receiptId}`);
         } else {
           setToast({ type: "success", message: "レシートを登録しました。" });
           setState(createInitialState(defaultTransactionTypeId));
@@ -268,13 +290,7 @@ export function ReceiptForm({
         setClientErrors(result.errors);
         // サーバー側のエラーは項目単位に紐付かないため、赤枠表示はクリアする。
         setFieldErrors({ items: {} });
-        setToast({
-          type: "error",
-          message:
-            mode === "edit"
-              ? "レシートの更新に失敗しました。"
-              : "レシートの登録に失敗しました。",
-        });
+        setToast({ type: "error", message: "レシートの登録に失敗しました。" });
       }
     });
   };
@@ -338,6 +354,18 @@ export function ReceiptForm({
         onOpenItemChange={setOpenItemId}
         masterData={masterData}
       />
+
+      {mode === "create" && (
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={navigateAfterSubmit}
+            onChange={(e) => setNavigateAfterSubmit(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          登録後、支払い月の一覧画面に移動して確認する（オフの場合は続けて登録できます）
+        </label>
+      )}
 
       <Button
         type="button"

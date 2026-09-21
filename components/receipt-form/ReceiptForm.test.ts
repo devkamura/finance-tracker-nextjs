@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildOcrItem } from "@/components/receipt-form/ReceiptForm";
+import { buildOcrItem, resolveOccurredMonth } from "@/components/receipt-form/ReceiptForm";
 import type { MasterData, OcrReceiptItem } from "@/types/receipt";
 
 const CONSUMPTION_TAXES: MasterData["consumptionTaxes"] = [
@@ -48,5 +48,24 @@ describe("buildOcrItem", () => {
 
     expect(item.taxType).toBe("exclusive");
     expect(item.taxRateId).toBe("");
+  });
+});
+
+describe("resolveOccurredMonth", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 15)); // 2026-10-15（ローカル時刻）
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("datetimeが入力されていればその年月を返す", () => {
+    expect(resolveOccurredMonth("2026-09-05T12:00")).toBe("2026-09");
+  });
+
+  it("datetimeが未入力の場合は現在時刻の年月を返す", () => {
+    expect(resolveOccurredMonth("")).toBe("2026-10");
   });
 });
