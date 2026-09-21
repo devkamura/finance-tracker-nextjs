@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCircleCheck,
+  faPlus,
   faSortAmountDown,
   faSortAmountUp,
 } from "@fortawesome/free-solid-svg-icons";
@@ -108,6 +109,17 @@ export default async function ReceiptsPage({
           ))}
         </ul>
       )}
+
+      {/* 一覧が長くなりページ上部までスクロールしなくても登録できるよう、
+          常に画面に表示される位置に固定する。 */}
+      <Link
+        href="/"
+        aria-label="新しいレシートを登録"
+        className="fixed bottom-6 right-6 z-20 flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700"
+      >
+        <FontAwesomeIcon icon={faPlus} />
+        レシートを登録
+      </Link>
     </div>
   );
 }
