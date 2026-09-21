@@ -84,6 +84,42 @@ Gemini APIを呼び出す箇所（`extractReceiptFromImage`）は必ずモック
 
 ---
 
+## 追加機能：登録後の一覧画面遷移
+
+対象：レシート登録画面（`components/receipt-form/ReceiptForm.tsx`）。テストフレームワーク: Vitest（単体）。
+
+レシート登録後に、正常に登録できたことを確認できるよう、登録したレシートの
+支払い月（`datetime`の年月。未入力時は登録時刻の年月）の一覧画面
+（`/receipts?month=YYYY-MM&open=<receiptId>`）へ遷移できるようにした。
+`open`パラメータは一覧画面（`app/(app)/receipts/page.tsx`）に既存の仕組みで、
+該当レシートのアコーディオンを自動的に開いた上でその位置まで自動スクロールする
+（`components/receipt-list/ReceiptAccordionItem.tsx`の`initiallyOpen`）。
+
+連続してレシートを登録したいケースを考慮し、登録画面に「登録後、支払い月の
+一覧画面に移動して確認する」チェックボックスを追加し、オフにすると従来通り
+フォームをリセットして登録画面に留まる。この設定は連続登録中にリセットされない
+（初期値はON）。
+
+### 単体テスト
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| U-50 | `components/receipt-form/ReceiptForm.ts`（`resolveOccurredMonth`） | 正常系：datetime入力ありの場合はその年月を返す | `"2026-09-05T12:00"` | `"2026-09"` | なし（純粋関数、`vi.useFakeTimers`で現在時刻固定） |
+| U-51 | `components/receipt-form/ReceiptForm.ts`（`resolveOccurredMonth`） | 異常系：datetime未入力の場合は現在時刻の年月を返す | `""`（現在時刻を2026-10-15に固定） | `"2026-10"` | なし |
+
+### 結合テスト
+
+今回はDB・RLSに変更がないため対象なし。
+
+### E2Eテスト
+
+**今回のスコープでは未実装。**（Playwright未導入のためVitestの単体テストまでとする。）
+チェックボックスON/OFFによる遷移有無の切り替え、一覧画面での自動オープン・
+自動スクロールは、コンポーネント/E2Eテスト基盤が未導入のため自動テスト対象外とし、
+実装後にブラウザでの目視確認で担保する。
+
+---
+
 ## 追加機能：管理画面（グループ・管理者・ユーザー管理・支払い先管理）
 
 テストフレームワーク: Vitest（単体・結合）/ Playwright（E2E）。
