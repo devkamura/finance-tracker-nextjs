@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import {
+  DuplicatedBadge,
+  DuplicatedNotice,
+} from "@/components/receipt-detail/DuplicatedBadge";
 import { DeleteReceiptButton } from "@/components/receipt-detail/DeleteReceiptButton";
 import { ReceiptImagePreview } from "@/components/receipt-detail/ReceiptImagePreview";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
@@ -67,6 +71,9 @@ export default async function ReceiptDetailPage({
                   返金
                 </span>
               )}
+              {receipt.isDuplicated && (
+                <DuplicatedBadge createdByDisplayName={receipt.createdByDisplayName} />
+              )}
             </p>
             <h1 className="mt-1 text-xl font-bold text-slate-900">
               {receipt.payeeName || "（支払い先未入力）"}
@@ -82,6 +89,12 @@ export default async function ReceiptDetailPage({
             </p>
           </div>
         </div>
+
+        {receipt.isDuplicated && (
+          <div className="mt-4">
+            <DuplicatedNotice createdByDisplayName={receipt.createdByDisplayName} />
+          </div>
+        )}
 
         <h2 className="mt-6 text-sm font-semibold text-slate-700">明細</h2>
         <ul className="mt-2 divide-y divide-slate-100">

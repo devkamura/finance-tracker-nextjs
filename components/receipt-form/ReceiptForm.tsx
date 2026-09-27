@@ -13,6 +13,7 @@ import { Toast, type ToastState } from "@/components/receipt-form/Toast";
 import { createReceipt } from "@/lib/actions/create-receipt";
 import { updateReceipt } from "@/lib/actions/update-receipt";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
+import { findPartner } from "@/lib/receipts/duplicate";
 import {
   validateReceiptForm,
   type ReceiptFormFieldErrors,
@@ -148,6 +149,8 @@ type ReceiptFormProps = {
   receiptId?: string;
   initialState?: ReceiptFormState;
   initialImageUrl?: string | null;
+  // ログインユーザーのid。相方分の複製登録で「相方」を特定するために使う（新規登録モードのみ）。
+  currentUserId?: string;
   // 編集成功後の遷移先（一覧から開いていた月・並び順付きの詳細URLなど）。
   // 省略時は/receipts/{receiptId}へ遷移する。
   redirectHref?: string;
@@ -161,6 +164,7 @@ export function ReceiptForm({
   initialState,
   initialImageUrl = null,
   redirectHref,
+  currentUserId,
 }: ReceiptFormProps) {
   const router = useRouter();
   const [state, setState] = useState<ReceiptFormState>(
@@ -176,10 +180,18 @@ export function ReceiptForm({
   // 登録成功後、支払い月の一覧画面に移動して確認するか、続けて登録できるよう
   // 登録画面に留まるかの切り替え。連続登録を考慮し、送信のたびにはリセットしない。
   const [navigateAfterSubmit, setNavigateAfterSubmit] = useState(true);
+  // 相方分も同じ内容で同時に登録するか（複製登録）。誤って二重登録しないよう、
+  // 初期値はオフとし、登録のたびにオフへ戻す。
+  const [duplicateForPartner, setDuplicateForPartner] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [isPending, startTransition] = useTransition();
 
   const memberUserIds = masterData.members.map((m) => m.userId);
+  // 相方（自分以外のグループメンバー）。いない場合は複製登録のチェックボックスを出さない。
+  const partner =
+    mode === "create" && currentUserId
+      ? findPartner(masterData.members, currentUserId)
+      : null;
 
   const updateState = (patch: Partial<ReceiptFormState>) =>
     setState((prev) => ({ ...prev, ...patch }));
@@ -260,6 +272,9 @@ export function ReceiptForm({
       if (imageFile) {
         formData.set("image", imageFile);
       }
+      if (mode === "create" && partner && duplicateForPartner) {
+        formData.set("duplicateForPartner", "true");
+      }
 
       if (mode === "edit" && receiptId) {
         const result = await updateReceipt(receiptId, formData);
@@ -277,11 +292,17 @@ export function ReceiptForm({
 
       const result = await createReceipt(formData);
       if (result.success) {
+        setDuplicateForPartner(false);
         if (navigateAfterSubmit) {
           const month = resolveOccurredMonth(state.datetime);
           router.push(`/receipts?month=${month}&open=${result.receiptId}`);
         } else {
-          setToast({ type: "success", message: "レシートを登録しました。" });
+          setToast({
+            type: "success",
+            message: formData.has("duplicateForPartner")
+              ? `レシートを登録しました（${partner?.displayName}さんの分も登録済み）。`
+              : "レシートを登録しました。",
+          });
           setState(createInitialState(defaultTransactionTypeId));
           setImageFile(null);
           router.refresh();
@@ -355,6 +376,30 @@ export function ReceiptForm({
         masterData={masterData}
       />
 
+      {partner && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-orange-800">
+            <input
+              type="checkbox"
+              checked={duplicateForPartner}
+              onChange={(e) => setDuplicateForPartner(e.target.checked)}
+              className="h-4 w-4 rounded border-orange-300"
+            />
+            相方（{partner.displayName}さん）の分も同じ内容で登録する
+          </label>
+          {/* 複製レシートでは明細の帰属先が変わるため、登録前に変換ルールを明示する
+              （lib/receipts/duplicate.tsのbuildPartnerItemsと同じルール）。 */}
+          <div className="mt-2 pl-6 text-xs text-orange-700">
+            <p>複製すると、相方分のレシートでは明細の帰属先が次のように変更されます。</p>
+            <ul className="mt-1 list-inside list-disc">
+              <li>私 → {partner.displayName}さん</li>
+              <li>{partner.displayName}さん → {partner.displayName}さん（変化なし）</li>
+              <li>共同 → 共同（変化なし）</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
       {mode === "create" && (
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input
@@ -380,6 +425,9 @@ export function ReceiptForm({
         open={confirmOpen}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}
+        partnerDisplayName={
+          partner && duplicateForPartner ? partner.displayName : null
+        }
       />
     </div>
   );

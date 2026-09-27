@@ -1,5 +1,7 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -7,9 +9,10 @@ import {
   buildReceiptDetailSceneRows,
   resolvePayeeName,
 } from "@/lib/receipts/shared";
+import { buildPartnerItems, findPartner } from "@/lib/receipts/duplicate";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
-import type { ReceiptFormState } from "@/types/receipt";
+import type { ReceiptFormState, ReceiptItem } from "@/types/receipt";
 
 export type CreateReceiptResult =
   | { success: true; receiptId: string }
@@ -17,6 +20,8 @@ export type CreateReceiptResult =
 
 // 画像ファイルを含むため、既存のextractReceiptOcrと同じくFormData経由で受け取る
 // （state はJSON文字列化してformDataの"state"フィールドに積む）。
+// formDataの"duplicateForPartner"が"true"の場合は、相方を支払者とした同じ内容の
+// レシートも同時に登録する（複製登録。docs/requirements.md参照）。
 export async function createReceipt(
   formData: FormData
 ): Promise<CreateReceiptResult> {
@@ -88,36 +93,119 @@ export async function createReceipt(
     };
   }
 
+  // 相方分の複製登録の指定（登録画面のチェックボックス）。
+  const duplicateForPartner = formData.get("duplicateForPartner") === "true";
+  const partner = duplicateForPartner ? findPartner(members, user.id) : null;
+  if (duplicateForPartner && !partner) {
+    return {
+      success: false,
+      errors: ["相方がグループにいないため、複製登録できません。"],
+    };
+  }
+
+  const baseInput = {
+    groupId: membership.groupId,
+    payeeId,
+    payeeName,
+    transactionTypeId: Number(state.transactionTypeId),
+    occurredAt,
+    amount: Number(state.amount),
+    createdBy: user.id,
+    imageFile,
+  };
+
+  // 自分（登録者本人が支払者）のレシート
+  const ownResult = await insertReceiptWithDetails(supabase, {
+    ...baseInput,
+    items: state.items,
+    payerUserId: user.id,
+    isDuplicated: false,
+  });
+  if (!ownResult.success) {
+    return { success: false, errors: [ownResult.error] };
+  }
+
+  if (partner) {
+    // 相方分のレシート。支払者＝相方、帰属先は私→相方のみ置き換え、
+    // 画像は別ファイルとしてアップロードする（片方の削除・差し替えが他方に影響しないように）。
+    const partnerResult = await insertReceiptWithDetails(supabase, {
+      ...baseInput,
+      items: buildPartnerItems(state.items, user.id, partner.userId),
+      payerUserId: partner.userId,
+      isDuplicated: true,
+    });
+    if (!partnerResult.success) {
+      // 2件とも登録するか両方登録しないかのどちらかにするため、自分のレシートも取り消す
+      // （明細・シーンはon delete cascadeで消える）。ベストエフォートの補償処理。
+      await supabase.from("receipts").delete().eq("id", ownResult.receiptId);
+      if (ownResult.receiptImagePath) {
+        await deleteReceiptImage(supabase, ownResult.receiptImagePath);
+      }
+      return {
+        success: false,
+        errors: ["相方分のレシートの登録に失敗しました。"],
+      };
+    }
+  }
+
+  return { success: true, receiptId: ownResult.receiptId };
+}
+
+type InsertReceiptInput = {
+  groupId: string;
+  payeeId: number | null;
+  payeeName: string;
+  transactionTypeId: number;
+  occurredAt: string;
+  amount: number;
+  createdBy: string;
+  imageFile: File | null;
+  items: ReceiptItem[];
+  payerUserId: string;
+  isDuplicated: boolean;
+};
+
+type InsertReceiptResult =
+  | { success: true; receiptId: string; receiptImagePath: string | null }
+  | { success: false; error: string };
+
+// レシート1件分（画像・本体・明細・シーン）を登録する。
+// 途中で失敗した場合は、その1件分で作成済みのデータを補償的に削除してからエラーを返す。
+async function insertReceiptWithDetails(
+  supabase: SupabaseClient,
+  input: InsertReceiptInput
+): Promise<InsertReceiptResult> {
   const receiptId = crypto.randomUUID();
   let receiptImagePath: string | null = null;
-  if (imageFile && imageFile.size > 0) {
+  if (input.imageFile) {
     try {
       receiptImagePath = await uploadReceiptImage(
         supabase,
-        membership.groupId,
+        input.groupId,
         receiptId,
-        imageFile
+        input.imageFile
       );
     } catch (e) {
       console.error("Failed to upload receipt image", e);
       return {
         success: false,
-        errors: ["レシート画像のアップロードに失敗しました。"],
+        error: "レシート画像のアップロードに失敗しました。",
       };
     }
   }
 
   const { error: receiptError } = await supabase.from("receipts").insert({
     id: receiptId,
-    group_id: membership.groupId,
-    payee_id: payeeId,
-    payee_name: payeeName,
-    transaction_type_id: Number(state.transactionTypeId),
-    occurred_at: occurredAt,
-    payer_user_id: user.id,
-    created_by: user.id,
-    amount: Number(state.amount),
+    group_id: input.groupId,
+    payee_id: input.payeeId,
+    payee_name: input.payeeName,
+    transaction_type_id: input.transactionTypeId,
+    occurred_at: input.occurredAt,
+    payer_user_id: input.payerUserId,
+    created_by: input.createdBy,
+    amount: input.amount,
     receipt_image_path: receiptImagePath,
+    is_duplicated: input.isDuplicated,
   });
 
   if (receiptError) {
@@ -125,12 +213,12 @@ export async function createReceipt(
     if (receiptImagePath) {
       await deleteReceiptImage(supabase, receiptImagePath);
     }
-    return { success: false, errors: ["レシートの登録に失敗しました。"] };
+    return { success: false, error: "レシートの登録に失敗しました。" };
   }
 
   const { data: insertedDetails, error: detailsError } = await supabase
     .from("receipt_details")
-    .insert(buildReceiptDetailRows(state.items, receiptId))
+    .insert(buildReceiptDetailRows(input.items, receiptId))
     .select("id");
 
   if (detailsError || !insertedDetails) {
@@ -142,10 +230,10 @@ export async function createReceipt(
     if (receiptImagePath) {
       await deleteReceiptImage(supabase, receiptImagePath);
     }
-    return { success: false, errors: ["レシート明細の登録に失敗しました。"] };
+    return { success: false, error: "レシート明細の登録に失敗しました。" };
   }
 
-  const sceneRows = buildReceiptDetailSceneRows(state.items, insertedDetails);
+  const sceneRows = buildReceiptDetailSceneRows(input.items, insertedDetails);
   if (sceneRows.length > 0) {
     const { error: sceneError } = await supabase
       .from("receipt_detail_scenes")
@@ -156,5 +244,5 @@ export async function createReceipt(
     }
   }
 
-  return { success: true, receiptId };
+  return { success: true, receiptId, receiptImagePath };
 }

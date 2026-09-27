@@ -332,4 +332,55 @@ describe("レシート・精算のRLS/RPC", () => {
       .single();
     expect(updated?.payer_user_id).toBe(userB.id);
   });
+
+  it("I-26: is_duplicatedを指定せずに登録した場合はfalseになる", async () => {
+    const receiptId = crypto.randomUUID();
+    const { error } = await userA.client.from("receipts").insert({
+      id: receiptId,
+      group_id: groupId,
+      payee_name: "複製フラグ既定値テスト",
+      transaction_type_id: transactionTypeExpenseId,
+      occurred_at: "2026-09-15T00:00:00Z",
+      payer_user_id: userA.id,
+      created_by: userA.id,
+      amount: 100,
+    });
+    expect(error).toBeNull();
+
+    const { data } = await userA.client
+      .from("receipts")
+      .select("is_duplicated")
+      .eq("id", receiptId)
+      .single();
+    expect(data?.is_duplicated).toBe(false);
+  });
+
+  it("I-27: 一般メンバーは相方を支払者とした複製レシートを登録でき、相方からも複製として見える", async () => {
+    const receiptId = crypto.randomUUID();
+    // 一般メンバーのuserBが、相方（userA）分の複製レシートを登録する
+    const { error } = await userB.client.from("receipts").insert({
+      id: receiptId,
+      group_id: groupId,
+      payee_name: "複製登録テスト",
+      transaction_type_id: transactionTypeExpenseId,
+      occurred_at: "2026-09-15T00:00:00Z",
+      payer_user_id: userA.id,
+      created_by: userB.id,
+      amount: 500,
+      is_duplicated: true,
+    });
+    expect(error).toBeNull();
+
+    const { data } = await userA.client
+      .from("receipts")
+      .select("payer_user_id, created_by, is_duplicated")
+      .eq("id", receiptId)
+      .single();
+    expect(data).toEqual({
+      payer_user_id: userA.id,
+      created_by: userB.id,
+      is_duplicated: true,
+    });
+  });
 });
+

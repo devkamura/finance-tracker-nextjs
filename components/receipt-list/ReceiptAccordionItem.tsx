@@ -5,6 +5,10 @@ import Link from "next/link";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faChevronDown, faChevronUp } from "@fortawesome/free-solid-svg-icons";
 
+import {
+  DuplicatedBadge,
+  DuplicatedNotice,
+} from "@/components/receipt-detail/DuplicatedBadge";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
 import { UserBadge } from "@/components/ui/UserBadge";
 import type { ReceiptListItem } from "@/types/receipt";
@@ -57,6 +61,9 @@ export function ReceiptAccordionItem({
                 返金
               </span>
             )}
+            {receipt.isDuplicated && (
+              <DuplicatedBadge createdByDisplayName={receipt.createdByDisplayName} />
+            )}
           </span>
           <span className="truncate font-medium text-slate-900">
             {receipt.payeeName || "（支払い先未入力）"}
@@ -81,6 +88,11 @@ export function ReceiptAccordionItem({
 
       {open && (
         <div className="border-t border-slate-100 px-4 py-3">
+          {receipt.isDuplicated && (
+            <div className="mb-2">
+              <DuplicatedNotice createdByDisplayName={receipt.createdByDisplayName} />
+            </div>
+          )}
           <ul className="divide-y divide-slate-100">
             {receipt.items.map((item) => (
               <li key={item.id} className="flex items-start justify-between gap-3 py-2">

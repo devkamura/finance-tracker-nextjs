@@ -54,6 +54,7 @@ export default async function Home() {
         members,
       }}
       defaultTransactionTypeId={String(defaultTransactionType?.id ?? "")}
+      currentUserId={user!.id}
     />
   );
 }

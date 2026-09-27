@@ -120,6 +120,47 @@ Gemini APIを呼び出す箇所（`extractReceiptFromImage`）は必ずモック
 
 ---
 
+## 追加機能：相方分レシートの同時登録（複製登録）
+
+対象：`docs/requirements.md`「追加機能：相方分レシートの同時登録（複製登録）」。テストフレームワーク: Vitest（単体・結合）。
+外部API（Gemini）への通信は発生しない。Supabaseクライアント・Storageは単体テストではモックする。
+
+### 単体テスト
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| U-52 | `lib/receipts/duplicate.ts`（`buildPartnerItems`） | 正常系：帰属先の私→相方置き換え | 帰属先が私／相方／共同の明細3件 | 私→相方、相方は相方のまま、共同は共同のまま。商品名・価格・税区分・税率・カテゴリー・目的・シーンは元と同じ | なし（純粋関数） |
+| U-53 | `lib/receipts/duplicate.ts`（`findPartner`） | 正常系/異常系：相方の特定 | メンバー2人／自分のみ | 2人なら自分以外のメンバー、1人ならnull | なし（純粋関数） |
+| U-54 | `lib/actions/create-receipt.ts` | 正常系：チェックOFFでは従来どおり1件のみ登録 | `duplicateForPartner`未指定 | `receipts`へのINSERTは1回、`is_duplicated:false`・支払者＝登録者 | `createClient` |
+| U-55 | `lib/actions/create-receipt.ts` | 正常系：チェックONで相方分を複製登録 | `duplicateForPartner:"true"`、メンバー2人 | `receipts`へのINSERTが2回。2件目は支払者＝相方・登録者＝本人・`is_duplicated:true`、明細の帰属先の「私」が「相方」に置き換わっている（相方・共同はそのまま）。戻り値の`receiptId`は自分のレシート | `createClient` |
+| U-56 | `lib/actions/create-receipt.ts` | 正常系：画像付きで複製登録すると別ファイルとしてコピーされる | `duplicateForPartner:"true"`＋画像 | `uploadReceiptImage`が異なるreceiptIdで2回呼ばれる | `createClient`, `uploadReceiptImage` |
+| U-57 | `lib/actions/create-receipt.ts` | 異常系：複製側の登録失敗時は元レシートも取り消す | 2件目の`receipts`INSERTがエラー | 元レシート行が削除され、画像も削除され、「相方分のレシートの登録に失敗しました。」を返す | `createClient`, `uploadReceiptImage`, `deleteReceiptImage` |
+| U-58 | `lib/actions/create-receipt.ts` | 異常系：相方がいないのに複製指定 | `duplicateForPartner:"true"`、メンバー1人 | 何も登録せず「相方がグループにいないため、複製登録できません。」を返す | `createClient` |
+| U-59 | `lib/receipts/queries.ts`（`listReceipts`） | 正常系：複製フラグと登録者名のマッピング | `is_duplicated:true`、`created_by`＝ユーザーA | `isDuplicated:true`、`createdByDisplayName`＝Aの表示名 | `createClient`相当のスタブ, `getGroupMembers` |
+
+### 結合テスト
+
+ローカルSupabaseスタック（`supabase start`）に対する実接続で実施。`supabase/tests/integration/receipts-settlement.integration.test.ts`。
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| I-26 | `receipts.is_duplicated` 列 | 既定値はfalse | `is_duplicated`を指定せずINSERT | `is_duplicated = false` で保存される | なし（実DB） |
+| I-27 | `receipts` RLS | 相方を支払者とした複製レシートの登録 | 一般メンバーが`payer_user_id`＝相方、`created_by`＝本人、`is_duplicated:true`でINSERT | 成功し、相方のセッションからも`is_duplicated = true`として参照できる | なし（実DB） |
+
+### E2Eテスト
+
+**今回のスコープでは未実装。**（他機能と同様、Playwright未導入のためVitestの単体・結合テストまでとする。）
+以下は実装後にブラウザでの目視確認で担保する。
+
+| No | シナリオ | 操作手順 | 期待結果 | モック対象 |
+|---|---|---|---|---|
+| E-07 | 相方分の複製登録 | 1. 登録画面で内容を入力 2. 「相方の分も同じ内容で登録する」にチェック 3. 確認モーダルで送信 | モーダルに「2件登録します」と表示され、一覧に自分と相方のレシートが並び、相方のレシートにだけオレンジの「複製」アイコンが表示される | Gemini API（OCR利用時） |
+| E-08 | 詳細画面での複製アイコン | 1. 一覧から複製レシートの詳細を開く | 「複製」アイコンと「◯◯さんが複製登録したレシートです」の説明が表示される | なし |
+| E-09 | 相方不在時の非表示 | 1. メンバー1人のグループで登録画面を開く | 複製チェックボックスが表示されない | なし |
+| E-10 | 帰属先の変更ルールの表示 | 1. 登録画面で複製チェックボックスの下を確認 | 「私 → 相方」「相方 → 相方（変化なし）」「共同 → 共同（変化なし）」が相方の表示名付きで表示される | なし |
+
+---
+
 ## 追加機能：管理画面（グループ・管理者・ユーザー管理・支払い先管理）
 
 テストフレームワーク: Vitest（単体・結合）/ Playwright（E2E）。
