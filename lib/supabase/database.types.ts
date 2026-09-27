@@ -302,6 +302,7 @@ export type Database = {
           created_by: string
           group_id: string
           id: string
+          is_duplicated: boolean
           occurred_at: string
           payee_id: number | null
           payee_name: string
@@ -316,6 +317,7 @@ export type Database = {
           created_by: string
           group_id: string
           id?: string
+          is_duplicated?: boolean
           occurred_at: string
           payee_id?: number | null
           payee_name: string
@@ -330,6 +332,7 @@ export type Database = {
           created_by?: string
           group_id?: string
           id?: string
+          is_duplicated?: boolean
           occurred_at?: string
           payee_id?: number | null
           payee_name?: string

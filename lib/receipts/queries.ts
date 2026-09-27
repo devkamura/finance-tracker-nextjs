@@ -97,6 +97,7 @@ type RawReceiptDetail = {
 };
 
 const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_name, amount, payer_user_id, receipt_image_path,
+   is_duplicated, created_by,
    transaction_types(name),
    receipt_details(
      id, item_name, price, tax_type, owner_user_id,
@@ -170,6 +171,8 @@ export async function listReceipts(
       receiptImageUrl: row.receipt_image_path
         ? await getReceiptImageSignedUrl(supabase, row.receipt_image_path)
         : null,
+      isDuplicated: Boolean(row.is_duplicated),
+      createdByDisplayName: memberInfo.get(row.created_by)?.displayName ?? "unknown",
       items: mapReceiptDetailItems(
         (row.receipt_details ?? []) as unknown as RawReceiptDetail[],
         memberInfo
@@ -224,6 +227,9 @@ export async function getReceiptDetail(
     payerDisplayName: memberInfo.get(receipt.payer_user_id)?.displayName ?? "unknown",
     payerColor: memberInfo.get(receipt.payer_user_id)?.color ?? null,
     receiptImageUrl: imageUrl,
+    isDuplicated: Boolean(receipt.is_duplicated),
+    createdByDisplayName:
+      memberInfo.get(receipt.created_by)?.displayName ?? "unknown",
     isLocked: Boolean(confirmed),
     items,
   };

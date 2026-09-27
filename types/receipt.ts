@@ -81,6 +81,10 @@ export type ReceiptDetailView = {
   payerDisplayName: string;
   payerColor: string | null;
   receiptImageUrl: string | null;
+  // 相方分の同時登録（複製登録）で作られたレシートか。trueの場合は「複製」アイコンを表示する。
+  isDuplicated: boolean;
+  // 登録者（created_by）の表示名。複製アイコンの説明文「◯◯さんが複製登録」に使う。
+  createdByDisplayName: string;
   isLocked: boolean; // 精算確定済み月のため編集・削除不可
   items: ReceiptDetailItemView[];
 };
@@ -97,6 +101,10 @@ export type ReceiptListItem = {
   payerDisplayName: string;
   payerColor: string | null;
   receiptImageUrl: string | null;
+  // 相方分の同時登録（複製登録）で作られたレシートか。trueの場合は「複製」アイコンを表示する。
+  isDuplicated: boolean;
+  // 登録者（created_by）の表示名。複製アイコンの説明文「◯◯さんが複製登録」に使う。
+  createdByDisplayName: string;
   items: ReceiptDetailItemView[];
 };
 
