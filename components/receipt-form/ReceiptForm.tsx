@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { ReceiptUnitSection } from "@/components/receipt-form/ReceiptUnitSection";
 import { ReceiptItemsSection } from "@/components/receipt-form/ReceiptItemsSection";
 import { OcrUploadSection } from "@/components/receipt-form/OcrUploadSection";
@@ -377,7 +378,7 @@ export function ReceiptForm({
       />
 
       {partner && (
-        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+        <div className="flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
           <label className="flex items-center gap-2 text-sm font-medium text-orange-800">
             <input
               type="checkbox"
@@ -387,16 +388,22 @@ export function ReceiptForm({
             />
             相方（{partner.displayName}さん）の分も同じ内容で登録する
           </label>
-          {/* 複製レシートでは明細の帰属先が変わるため、登録前に変換ルールを明示する
-              （lib/receipts/duplicate.tsのbuildPartnerItemsと同じルール）。 */}
-          <div className="mt-2 pl-6 text-xs text-orange-700">
-            <p>複製すると、相方分のレシートでは明細の帰属先が次のように変更されます。</p>
-            <ul className="mt-1 list-inside list-disc">
-              <li>私 → {partner.displayName}さん</li>
-              <li>{partner.displayName}さん → {partner.displayName}さん（変化なし）</li>
-              <li>共同 → 共同（変化なし）</li>
-            </ul>
-          </div>
+          {/* 複製レシートでは明細の帰属先が変わるため、変換ルールをツールチップで示す
+              （lib/receipts/duplicate.tsのbuildPartnerItemsと同じルール）。
+              チェックボックスのlabel外に置き、アイコンのタップでチェックが切り替わらないようにする。 */}
+          <Tooltip
+            align="end"
+            text={
+              <>
+                複製すると、相方分のレシートでは明細の帰属先が次のように変更されます。
+                <span className="mt-1 block">・私 → {partner.displayName}さん</span>
+                <span className="block">
+                  ・{partner.displayName}さん → {partner.displayName}さん（変化なし）
+                </span>
+                <span className="block">・共同 → 共同（変化なし）</span>
+              </>
+            }
+          />
         </div>
       )}
 
