@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPieData, formatYen, sumByCategory } from "@/lib/analytics/aggregate";
+import {
+  buildPieData,
+  buildTrendData,
+  formatYen,
+  sumByCategory,
+  sumByMonth,
+} from "@/lib/analytics/aggregate";
 import type { AnalyticsRow } from "@/lib/analytics/types";
 
 const USER_A = "user-a";
@@ -113,5 +119,72 @@ describe("formatYen", () => {
     expect(formatYen(8500.5)).toBe("8,500.5円");
     expect(formatYen(-8000)).toBe("−8,000円");
     expect(formatYen(0)).toBe("0円");
+  });
+});
+
+describe("sumByMonth", () => {
+  const months = ["2026-07", "2026-08", "2026-09"];
+  const trendRows: AnalyticsRow[] = [
+    row(FOOD, null, 1000, "2026-07"),
+    row(DAILY, USER_A, 300, "2026-07"),
+    row(FOOD, USER_B, 2000, "2026-09"),
+    row(FOOD, null, 501, "2026-09"),
+    row(FOOD, null, 99999, "2025-01"), // 対象の12ヶ月以外
+  ];
+
+  it("U-76: 総支出は月ごとの合計を古い順に返し、データのない月は0円になる", () => {
+    expect(sumByMonth(trendRows, { kind: "all" }, months, null)).toEqual([
+      { month: "2026-07", amount: 1300 },
+      { month: "2026-08", amount: 0 },
+      { month: "2026-09", amount: 2501 },
+    ]);
+  });
+
+  it("U-77: カテゴリを指定すると、そのカテゴリだけが合計される", () => {
+    expect(sumByMonth(trendRows, { kind: "all" }, months, DAILY)).toEqual([
+      { month: "2026-07", amount: 300 },
+      { month: "2026-08", amount: 0 },
+      { month: "2026-09", amount: 0 },
+    ]);
+  });
+
+  it("U-78: ユーザーの表示対象では帰属先と共同の1/2が効く", () => {
+    expect(
+      sumByMonth(trendRows, { kind: "user", userId: USER_B, includeJoint: false }, months, null)
+    ).toEqual([
+      { month: "2026-07", amount: 0 },
+      { month: "2026-08", amount: 0 },
+      { month: "2026-09", amount: 2000 },
+    ]);
+    expect(
+      sumByMonth(trendRows, { kind: "user", userId: USER_B, includeJoint: true }, months, null)
+    ).toEqual([
+      { month: "2026-07", amount: 500 },
+      { month: "2026-08", amount: 0 },
+      { month: "2026-09", amount: 2250.5 },
+    ]);
+  });
+});
+
+describe("buildTrendData", () => {
+  const series = (...amounts: number[]) =>
+    amounts.map((amount, i) => ({ month: `2026-0${i + 1}`, amount }));
+
+  it("U-79: 前月比は 当月 ÷ 前月 × 100 を小数第1位で四捨五入する", () => {
+    const { points } = buildTrendData(series(30000, 5001, 6000, 6000));
+    expect(points.map((p) => p.mom)).toEqual([null, 16.7, 120, 100]);
+  });
+
+  it("U-80: 最初の月・前月が0円・前月がマイナスの月は前月比を出さない", () => {
+    const { points } = buildTrendData(series(1000, 0, 500, -3000, 30000));
+    // 1月：最初の月、2月：0÷1000=0%、3月：前月0円、4月：当月マイナス、5月：前月マイナス
+    expect(points.map((p) => p.mom)).toEqual([null, 0, null, null, null]);
+  });
+
+  it("U-81: マイナスの月は棒が0になり、金額はそのまま、注意書き用の一覧に入り、前月比は出ない", () => {
+    const { points, negatives } = buildTrendData(series(10000, -1000));
+    expect(points[1]).toEqual({ month: "2026-02", amount: -1000, barValue: 0, mom: null });
+    expect(points[0].barValue).toBe(10000);
+    expect(negatives).toEqual([{ month: "2026-02", amount: -1000 }]);
   });
 });
