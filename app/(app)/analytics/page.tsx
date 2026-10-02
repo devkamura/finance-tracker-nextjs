@@ -9,7 +9,13 @@ import { createClient } from "@/lib/supabase/server";
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ scope?: string; joint?: string; month?: string }>;
+  searchParams: Promise<{
+    scope?: string;
+    joint?: string;
+    month?: string;
+    chart?: string;
+    category?: string;
+  }>;
 }) {
   const params = await searchParams;
 
@@ -22,7 +28,7 @@ export default async function AnalyticsPage({
 
   const data = await getAnalyticsData(supabase, membership!.groupId);
 
-  // URLの初期状態を検証する。不正な値は初期値（全体・共同オフ・当月）に戻す。
+  // URLの初期状態を検証する。不正な値は初期値（全体・共同オフ・当月・円グラフ・総支出）に戻す。
   const scopeUserId = data.members.some((m) => m.userId === params.scope)
     ? params.scope!
     : null;
@@ -30,6 +36,9 @@ export default async function AnalyticsPage({
     params.month && data.months.includes(params.month)
       ? params.month
       : data.months[data.months.length - 1];
+  const initialChart = params.chart === "trend" ? "trend" : "pie";
+  const initialCategoryId =
+    data.categories.find((c) => String(c.id) === params.category)?.id ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,6 +48,8 @@ export default async function AnalyticsPage({
         initialScopeUserId={scopeUserId}
         initialIncludeJoint={scopeUserId !== null && params.joint === "1"}
         initialMonth={initialMonth}
+        initialChart={initialChart}
+        initialCategoryId={initialCategoryId}
       />
     </div>
   );
