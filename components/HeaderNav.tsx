@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBars,
+  faChartPie,
   faGear,
   faListUl,
   faRightFromBracket,
@@ -38,6 +39,10 @@ export function HeaderNav({ displayName, isAdmin, onLogout }: HeaderNavProps) {
         <Link href="/settlement" className={navLinkClass}>
           <FontAwesomeIcon icon={faScaleBalanced} />
           精算
+        </Link>
+        <Link href="/analytics" className={navLinkClass}>
+          <FontAwesomeIcon icon={faChartPie} />
+          分析
         </Link>
         {isAdmin && (
           <Link href="/admin" className={navLinkClass}>
@@ -87,6 +92,14 @@ export function HeaderNav({ displayName, isAdmin, onLogout }: HeaderNavProps) {
             >
               <FontAwesomeIcon icon={faScaleBalanced} />
               精算
+            </Link>
+            <Link
+              href="/analytics"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50 hover:text-slate-900"
+            >
+              <FontAwesomeIcon icon={faChartPie} />
+              分析
             </Link>
             {isAdmin && (
               <Link
