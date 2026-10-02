@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
 
 import { AnalyticsMonthSelect } from "@/components/analytics/AnalyticsMonthSelect";
 import { CategoryBreakdownTable } from "@/components/analytics/CategoryBreakdownTable";
@@ -168,16 +170,27 @@ export function AnalyticsView({
             <p className="text-center text-xs text-slate-500">
               {monthLabel(firstMonth)}〜{monthLabel(lastMonth)}　棒：金額（左軸）／線：前月比（右軸）
             </p>
-            <ul className="flex flex-col gap-0.5 text-xs text-slate-500">
-              <li>
-                ※ {monthLabel(lastMonth)}
-                は月の途中の金額です。前月比も途中までの金額で計算しています。
-              </li>
-              <li>
-                ※ {monthLabel(firstMonth)}
-                は前月のデータがないため、前月比を表示していません。前月が0円以下の月、返金が支出を上回った月も前月比を表示していません。
-              </li>
-            </ul>
+            {/* 常に出すと画面が長くなるため、補足の注記は折りたたんでおき、押したときだけ表示する。
+                返金でマイナスになった月の注意書き（必須）は折りたたまずに常に表示する。 */}
+            <details className="group text-xs text-slate-500">
+              <summary className="flex cursor-pointer list-none items-center gap-1 font-medium text-slate-600 [&::-webkit-details-marker]:hidden">
+                <FontAwesomeIcon
+                  icon={faChevronRight}
+                  className="h-2.5 w-2.5 transition-transform group-open:rotate-90"
+                />
+                ※注意事項
+              </summary>
+              <ul className="mt-1 flex flex-col gap-0.5 pl-3.5">
+                <li>
+                  ※ {monthLabel(lastMonth)}
+                  は月の途中の金額です。前月比も途中までの金額で計算しています。
+                </li>
+                <li>
+                  ※ {monthLabel(firstMonth)}
+                  は前月のデータがないため、前月比を表示していません。前月が0円以下の月、返金が支出を上回った月も前月比を表示していません。
+                </li>
+              </ul>
+            </details>
             <NegativeAmountNotice
               subject="月"
               negatives={trendData.negatives.map((p) => ({

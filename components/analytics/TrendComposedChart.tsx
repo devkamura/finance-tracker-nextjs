@@ -22,9 +22,9 @@ type TrendComposedChartProps = {
 const LINE_COLOR = "#334155"; // slate-700
 const REFERENCE_COLOR = "#94a3b8"; // slate-400
 
-// "2026-09" → "9月"（X軸用。年はグラフの下に期間として表示する）
+// "2026-09" → "9"（X軸用。単位「(月)」は軸の右に1回だけ表示し、年はグラフの下に期間として表示する）
 function shortMonthLabel(month: string): string {
-  return `${Number(month.slice(5, 7))}月`;
+  return String(Number(month.slice(5, 7)));
 }
 
 // "2026-09" → "2026年9月"（ツールチップ用）
@@ -66,7 +66,14 @@ export function TrendComposedChart({ points, barColor }: TrendComposedChartProps
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#f1f5f9" vertical={false} />
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} tickLine={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11 }}
+            interval={0}
+            tickLine={false}
+            // 単位は軸の右端（右軸の下の余白）に表示する
+            label={{ value: "(月)", position: "right", offset: 6, fontSize: 11, fill: "#64748b" }}
+          />
           <YAxis
             yAxisId="amount"
             tickFormatter={formatAxisYen}
