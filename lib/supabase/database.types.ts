@@ -36,18 +36,105 @@ export type Database = {
     Tables: {
       categories: {
         Row: {
+          default_cost_type: string
           id: number
           name: string
         }
         Insert: {
+          default_cost_type?: string
           id?: never
           name: string
         }
         Update: {
+          default_cost_type?: string
           id?: never
           name?: string
         }
         Relationships: []
+      }
+      category_breakdowns: {
+        Row: {
+          category_id: number
+          created_at: string
+          group_id: string
+          id: number
+          is_hidden: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category_id: number
+          created_at?: string
+          group_id: string
+          id?: never
+          is_hidden?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category_id?: number
+          created_at?: string
+          group_id?: string
+          id?: never
+          is_hidden?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_breakdowns_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "category_breakdowns_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      category_settings: {
+        Row: {
+          category_id: number
+          cost_type: string
+          group_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: number
+          cost_type: string
+          group_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: number
+          cost_type?: string
+          group_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_settings_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "category_settings_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       consumption_taxes: {
         Row: {
@@ -226,6 +313,7 @@ export type Database = {
       }
       receipt_details: {
         Row: {
+          breakdown_id: number | null
           category_id: number
           created_at: string
           id: string
@@ -239,6 +327,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          breakdown_id?: number | null
           category_id: number
           created_at?: string
           id?: string
@@ -252,6 +341,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          breakdown_id?: number | null
           category_id?: number
           created_at?: string
           id?: string
@@ -265,6 +355,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "receipt_details_breakdown_id_fkey"
+            columns: ["breakdown_id"]
+            isOneToOne: false
+            referencedRelation: "category_breakdowns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "receipt_details_category_id_fkey"
             columns: ["category_id"]

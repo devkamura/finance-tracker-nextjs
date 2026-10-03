@@ -1,4 +1,5 @@
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
+import { getCategoryBreakdowns } from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,6 +19,7 @@ export default async function Home() {
     { data: purposes, error: purposesError },
     { data: scenes, error: scenesError },
     members,
+    breakdowns,
   ] = await Promise.all([
     supabase.from("payees").select("id, name").order("id"),
     supabase.from("transaction_types").select("id, name").order("id"),
@@ -26,6 +28,7 @@ export default async function Home() {
     supabase.from("purposes").select("id, name").order("id"),
     supabase.from("scenes").select("id, name").order("id"),
     getGroupMembers(supabase, membership!.groupId),
+    getCategoryBreakdowns(supabase, membership!.groupId),
   ]);
 
   const error =
@@ -49,6 +52,7 @@ export default async function Home() {
         transactionTypes: transactionTypes!,
         consumptionTaxes: consumptionTaxes!,
         categories: categories!,
+        breakdowns,
         purposes: purposes!,
         scenes: scenes!,
         members,

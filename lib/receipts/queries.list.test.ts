@@ -112,4 +112,36 @@ describe("listReceipts", () => {
       [4, null],
     ]);
   });
+
+  it("U-98: 明細に内訳のIDと名前が入る（内訳なしはnull）", async () => {
+    const detail = {
+      item_name: "x",
+      price: 100,
+      tax_type: "inclusive",
+      owner_user_id: null,
+      category_id: 1,
+      consumption_taxes: null,
+      categories: { name: "食費" },
+      purposes: { name: "生活維持" },
+      receipt_detail_scenes: [],
+    };
+    const supabase = fakeSupabase([
+      buildRow({
+        receipt_details: [
+          { ...detail, id: "d1", breakdown_id: 10, category_breakdowns: { name: "外食" } },
+          { ...detail, id: "d2", breakdown_id: null, category_breakdowns: null },
+        ],
+      }),
+    ]);
+
+    const [receipt] = await listReceipts(supabase, "group-1", {
+      from: new Date(2026, 8, 1),
+      to: new Date(2026, 9, 1),
+    });
+
+    expect(receipt.items.map((i) => [i.breakdownId, i.breakdownName])).toEqual([
+      [10, "外食"],
+      [null, null],
+    ]);
+  });
 });

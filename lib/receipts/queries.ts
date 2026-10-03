@@ -89,6 +89,8 @@ type RawReceiptDetail = {
   tax_type: "inclusive" | "exclusive";
   owner_user_id: string | null;
   category_id: number;
+  breakdown_id: number | null;
+  category_breakdowns: { name: string } | { name: string }[] | null;
   consumption_taxes:
     | { name: string; multiplier: number }
     | { name: string; multiplier: number }[]
@@ -104,8 +106,8 @@ const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_name, amount, payer_
    is_duplicated, created_by,
    transaction_types(name),
    receipt_details(
-     id, item_name, price, tax_type, owner_user_id, category_id,
-     consumption_taxes(name, multiplier), categories(name), purposes(name),
+     id, item_name, price, tax_type, owner_user_id, category_id, breakdown_id,
+     consumption_taxes(name, multiplier), categories(name), category_breakdowns(name), purposes(name),
      receipt_detail_scenes(scenes(name))
    )`;
 
@@ -121,6 +123,8 @@ function mapReceiptDetailItems(
     taxRateName: unwrapToOne(detail.consumption_taxes)?.name ?? null,
     taxRateMultiplier: unwrapToOne(detail.consumption_taxes)?.multiplier ?? null,
     categoryId: detail.category_id,
+    breakdownId: detail.breakdown_id,
+    breakdownName: unwrapToOne(detail.category_breakdowns)?.name ?? null,
     categoryName: unwrapToOne(detail.categories)?.name ?? "",
     purposeName: unwrapToOne(detail.purposes)?.name ?? "",
     ownerUserId: detail.owner_user_id,
@@ -265,6 +269,7 @@ type RawEditDetail = {
   tax_type: "inclusive" | "exclusive";
   tax_rate_id: number | null;
   category_id: number;
+  breakdown_id: number | null;
   purpose_id: number;
   owner_user_id: string | null;
   receipt_detail_scenes: { scene_id: number }[];
@@ -282,7 +287,7 @@ export async function getReceiptForEdit(
     .select(
       `id, occurred_at, payee_id, payee_name, transaction_type_id, amount, receipt_image_path, payer_user_id,
        receipt_details(
-         id, item_name, price, tax_type, tax_rate_id, category_id, purpose_id, owner_user_id,
+         id, item_name, price, tax_type, tax_rate_id, category_id, breakdown_id, purpose_id, owner_user_id,
          receipt_detail_scenes(scene_id)
        )`
     )
@@ -314,6 +319,7 @@ export async function getReceiptForEdit(
     taxType: d.tax_type,
     taxRateId: d.tax_rate_id !== null ? String(d.tax_rate_id) : "",
     categoryId: String(d.category_id),
+    breakdownId: d.breakdown_id !== null ? String(d.breakdown_id) : "",
     purposeId: String(d.purpose_id),
     sceneIds: d.receipt_detail_scenes.map((s) => String(s.scene_id)),
     ownerUserId: d.owner_user_id ?? OWNER_JOINT_VALUE,

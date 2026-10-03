@@ -33,6 +33,7 @@ export function buildReceiptDetailRows(items: ReceiptItem[], receiptId: string) 
     tax_type: item.taxType,
     tax_rate_id: item.taxType === "exclusive" ? Number(item.taxRateId) : null,
     category_id: Number(item.categoryId),
+    breakdown_id: item.breakdownId ? Number(item.breakdownId) : null,
     purpose_id: Number(item.purposeId),
     owner_user_id:
       item.ownerUserId === OWNER_JOINT_VALUE ? null : item.ownerUserId,

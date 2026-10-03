@@ -8,6 +8,10 @@ import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
 import type { ReceiptFormState, ReceiptItem } from "@/types/receipt";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// 内訳はこのテストの対象外（内訳なし＝必須チェックなし）
+vi.mock("@/lib/settings/queries", () => ({
+  getCategoryBreakdowns: vi.fn().mockResolvedValue([]),
+}));
 vi.mock("@/lib/supabase/group", () => ({
   getCurrentMembership: vi.fn(),
   getGroupMembers: vi.fn(),
@@ -34,6 +38,7 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxType: "inclusive",
     taxRateId: "",
     categoryId: "1",
+    breakdownId: "",
     purposeId: "1",
     sceneIds: [],
     ownerUserId: OWNER_JOINT_VALUE,

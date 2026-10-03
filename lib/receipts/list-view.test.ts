@@ -15,6 +15,8 @@ function item(id: string, categoryId: number, price: number): ReceiptDetailItemV
     taxRateName: null,
     taxRateMultiplier: null,
     categoryId,
+    breakdownId: null,
+    breakdownName: null,
     categoryName: categoryId === FOOD ? "食費" : "日用品",
     purposeName: "生活維持",
     ownerUserId: null,

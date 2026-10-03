@@ -6,7 +6,10 @@ import { faPlus, faLayerGroup } from "@fortawesome/free-solid-svg-icons";
 
 import { Button } from "@/components/ui/Button";
 import { ReceiptItemCard } from "@/components/receipt-form/ReceiptItemCard";
-import { BulkInputModal } from "@/components/receipt-form/BulkInputModal";
+import {
+  BulkInputModal,
+  type BulkInputValues,
+} from "@/components/receipt-form/BulkInputModal";
 import type { ReceiptFormFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptItem } from "@/types/receipt";
 
@@ -16,13 +19,7 @@ type ReceiptItemsSectionProps = {
   onAddItem: () => void;
   onRemoveItem: (clientId: string) => void;
   onUpdateItem: (clientId: string, patch: Partial<ReceiptItem>) => void;
-  onBulkApply: (values: {
-    taxType?: "inclusive" | "exclusive";
-    taxRateId?: string;
-    categoryId?: string;
-    purposeId?: string;
-    ownerUserId?: string;
-  }) => void;
+  onBulkApply: (values: BulkInputValues) => void;
   fieldErrors: ReceiptFormFieldErrors["items"];
   // 一度に開けるのは1項目のみ（アコーディオン）。バリデーション失敗時に
   // エラーのある項目を自動的に開けるよう、親（ReceiptForm）に持たせて制御する。
@@ -30,7 +27,7 @@ type ReceiptItemsSectionProps = {
   onOpenItemChange: (clientId: string | null) => void;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "purposes" | "scenes" | "members"
+    "consumptionTaxes" | "categories" | "breakdowns" | "purposes" | "scenes" | "members"
   >;
 };
 

@@ -15,6 +15,7 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxType: "exclusive",
     taxRateId: "1",
     categoryId: "2",
+    breakdownId: "",
     purposeId: "3",
     sceneIds: ["4", "5"],
     ownerUserId: OWNER_JOINT_VALUE,
