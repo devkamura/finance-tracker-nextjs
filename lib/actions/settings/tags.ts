@@ -1,9 +1,10 @@
 "use server";
 
 import type { Tag } from "@/lib/receipts/labels";
-import { requireGroupAdmin } from "@/lib/settings/admin";
+import { requireGroupMember } from "@/lib/settings/admin";
 
-// 設定 ＞ タグの操作（管理者のみ。docs/分析拡充/基本設計書.md 2.5節・4.2節・Q2）。
+// 設定 ＞ タグの操作（docs/分析拡充/基本設計書.md 2.5節・4.2節・Q2）。
+// タグは集計に使わないため、グループのメンバー全員が編集できる。
 
 export type TagActionResult = { success: true; tag: Tag } | { success: false; error: string };
 
@@ -22,7 +23,7 @@ export async function createTag(name: string): Promise<TagActionResult> {
     return { success: false, error: "タグ名を入力してください。" };
   }
 
-  const auth = await requireGroupAdmin();
+  const auth = await requireGroupMember();
   if (!auth.ok) {
     return { success: false, error: auth.error };
   }
@@ -69,7 +70,7 @@ export async function updateTag(
     values.is_hidden = patch.isHidden;
   }
 
-  const auth = await requireGroupAdmin();
+  const auth = await requireGroupMember();
   if (!auth.ok) {
     return { success: false, error: auth.error };
   }
@@ -99,7 +100,7 @@ export async function updateTag(
 // タグを削除する。登録済みの明細で使われているタグは、DBの外部キー
 // （on delete restrict）で削除できないため、非表示を案内する（基本設計書 Q4）。
 export async function deleteTag(id: number): Promise<DeleteTagResult> {
-  const auth = await requireGroupAdmin();
+  const auth = await requireGroupMember();
   if (!auth.ok) {
     return { success: false, error: auth.error };
   }

@@ -255,12 +255,12 @@ create policy "member can read own group tags"
   to authenticated
   using (group_id in (select public.my_group_ids()));
 
--- 編集は管理者のみ（基本設計書 4.2節・Q2）
-create policy "admin can write own group tags"
+-- 編集はグループのメンバー全員ができる（基本設計書 4.2節・Q2。タグは集計に使わないため、2026-10-03 ユーザー確認済み）
+create policy "member can write own group tags"
   on public.tags for all
   to authenticated
-  using (public.is_group_admin(group_id))
-  with check (public.is_group_admin(group_id));
+  using (group_id in (select public.my_group_ids()))
+  with check (group_id in (select public.my_group_ids()));
 
 create table public.receipt_detail_tags (
   receipt_detail_id uuid not null references public.receipt_details (id) on delete cascade,

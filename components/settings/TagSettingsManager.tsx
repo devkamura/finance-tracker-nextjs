@@ -11,15 +11,11 @@ function toListItem(tag: Tag): NamedListItem {
   return { id: tag.id, name: tag.name, isHidden: tag.isHidden, editable: true };
 }
 
-// 設定 ＞ タグ（docs/分析拡充/基本設計書.md 2.5節）。追加・名前の変更・表示/非表示・削除。編集は管理者のみ。
-export function TagSettingsManager({ tags, canEdit }: { tags: Tag[]; canEdit: boolean }) {
+// 設定 ＞ タグ（docs/分析拡充/基本設計書.md 2.5節）。追加・名前の変更・表示/非表示・削除。
+// タグは集計に使わないため、グループのメンバー全員が編集できる（基本設計書 Q2）。
+export function TagSettingsManager({ tags }: { tags: Tag[] }) {
   return (
     <div className="flex flex-col gap-3">
-      {!canEdit && (
-        <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
-          タグの設定は管理者のみ編集できます。
-        </p>
-      )}
       <p className="text-xs text-slate-500">
         レシートの明細に任意で付けるラベルです（複数選択可）。使われているタグは削除できないため、
         選択肢から外すときは非表示にしてください。
@@ -28,7 +24,7 @@ export function TagSettingsManager({ tags, canEdit }: { tags: Tag[]; canEdit: bo
         label="タグ"
         placeholder="タグを追加（例：朝食）"
         initialItems={tags.map(toListItem)}
-        canEdit={canEdit}
+        canEdit
         onCreate={async (name) => {
           const result = await createTag(name);
           return result.success ? { success: true, item: toListItem(result.tag) } : result;

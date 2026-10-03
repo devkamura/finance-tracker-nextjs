@@ -145,7 +145,7 @@ describe("相手・タグ", () => {
     await owner.client.from("counterparts").update({ is_hidden: false }).eq("id", futariId);
   });
 
-  it("I-38: タグは管理者だけが追加でき、一般メンバーは読めるが追加できない。他グループは読めない", async () => {
+  it("I-38: タグはグループのメンバー全員が追加・変更でき、他グループは読めない", async () => {
     const { data, error } = await owner.client
       .from("tags")
       .insert({ group_id: groupId, name: "朝食" })
@@ -154,13 +154,28 @@ describe("相手・タグ", () => {
     expect(error).toBeNull();
     tagId = data!.id;
 
-    const { error: memberError } = await member.client
+    // 一般メンバーも追加・名前の変更ができる（タグは集計に使わないため。基本設計書 Q2）
+    const { data: memberTag, error: memberError } = await member.client
       .from("tags")
-      .insert({ group_id: groupId, name: "昼食" });
-    expect(memberError).not.toBeNull();
+      .insert({ group_id: groupId, name: "昼食" })
+      .select("id")
+      .single();
+    expect(memberError).toBeNull();
+    const { data: renamed } = await member.client
+      .from("tags")
+      .update({ name: "ランチ" })
+      .eq("id", memberTag!.id)
+      .select("name");
+    expect(renamed).toEqual([{ name: "ランチ" }]);
 
     const { data: memberRows } = await member.client.from("tags").select("id").eq("group_id", groupId);
-    expect(memberRows).toHaveLength(1);
+    expect(memberRows).toHaveLength(2);
+
+    // 他グループのタグは追加できない
+    const { error: outsiderError } = await outsider.client
+      .from("tags")
+      .insert({ group_id: groupId, name: "他グループから" });
+    expect(outsiderError).not.toBeNull();
 
     const { data: outsiderTags } = await outsider.client
       .from("tags")

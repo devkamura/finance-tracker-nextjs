@@ -6,11 +6,15 @@ import {
   updateCounterpart,
 } from "@/lib/actions/settings/counterparts";
 import { createTag, deleteTag, updateTag } from "@/lib/actions/settings/tags";
-import { requireGroupAdmin } from "@/lib/settings/admin";
+import { requireGroupAdmin, requireGroupMember } from "@/lib/settings/admin";
 
-vi.mock("@/lib/settings/admin", () => ({ requireGroupAdmin: vi.fn() }));
+vi.mock("@/lib/settings/admin", () => ({
+  requireGroupAdmin: vi.fn(),
+  requireGroupMember: vi.fn(),
+}));
 
 const mockedRequireGroupAdmin = vi.mocked(requireGroupAdmin);
+const mockedRequireGroupMember = vi.mocked(requireGroupMember);
 
 // Supabaseのクエリビルダーを最小限に再現する（breakdown-actions.test.ts と同じ考え方）。
 // 最初の limit 付きの maybeSingle は末尾の並び順の取得として last を返し、それ以外は write を返す。
@@ -42,6 +46,15 @@ function fakeSupabase(results: {
 
 function asAdmin(client: unknown) {
   mockedRequireGroupAdmin.mockResolvedValue({
+    ok: true,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    context: { supabase: client as any, groupId: "group-1" },
+  });
+}
+
+// タグはグループのメンバー全員が編集できる（一般メンバーでも同じ）
+function asMember(client: unknown) {
+  mockedRequireGroupMember.mockResolvedValue({
     ok: true,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     context: { supabase: client as any, groupId: "group-1" },
@@ -139,12 +152,13 @@ describe("タグの設定（Server Action）", () => {
     vi.clearAllMocks();
   });
 
-  it("U-105: 管理者以外はタグを追加・変更・削除できない", async () => {
-    mockedRequireGroupAdmin.mockResolvedValue({ ok: false, error: "管理者のみ編集できます。" });
-    const expected = { success: false, error: "管理者のみ編集できます。" };
+  it("U-105: グループに所属していなければタグを追加・変更・削除できない（管理者の確認はしない）", async () => {
+    mockedRequireGroupMember.mockResolvedValue({ ok: false, error: "グループに所属していません。" });
+    const expected = { success: false, error: "グループに所属していません。" };
     expect(await createTag("朝食")).toEqual(expected);
     expect(await updateTag(5, { name: "昼食" })).toEqual(expected);
     expect(await deleteTag(5)).toEqual(expected);
+    expect(mockedRequireGroupAdmin).not.toHaveBeenCalled();
   });
 
   it("U-105: 名前が空なら追加しない。末尾の並び順で追加し、同名はエラー", async () => {
@@ -154,7 +168,7 @@ describe("タグの設定（Server Action）", () => {
       last: { data: { sort_order: 7 } },
       write: { data: { id: 5, name: "朝食", is_hidden: false }, error: null },
     });
-    asAdmin(client);
+    asMember(client);
     expect(await createTag("朝食")).toEqual({
       success: true,
       tag: { id: 5, name: "朝食", isHidden: false },
@@ -166,7 +180,7 @@ describe("タグの設定（Server Action）", () => {
     });
 
     const { client: dup } = fakeSupabase({ write: { data: null, error: { code: "23505" } } });
-    asAdmin(dup);
+    asMember(dup);
     expect(await updateTag(5, { name: "昼食" })).toEqual({
       success: false,
       error: "同じ名前のタグが既に存在します。",
@@ -175,7 +189,7 @@ describe("タグの設定（Server Action）", () => {
 
   it("U-105: 使われているタグは削除できず非表示を案内し、非表示にはできる", async () => {
     const { client } = fakeSupabase({ write: { data: null, error: { code: "23503" } } });
-    asAdmin(client);
+    asMember(client);
     expect(await deleteTag(5)).toEqual({
       success: false,
       error: "このタグは登録済みの明細で使われているため削除できません。非表示にしてください。",
@@ -184,7 +198,7 @@ describe("タグの設定（Server Action）", () => {
     const { client: hide } = fakeSupabase({
       write: { data: { id: 5, name: "朝食", is_hidden: true }, error: null },
     });
-    asAdmin(hide);
+    asMember(hide);
     expect(await updateTag(5, { isHidden: true })).toEqual({
       success: true,
       tag: { id: 5, name: "朝食", isHidden: true },
