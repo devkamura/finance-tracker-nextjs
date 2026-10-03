@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import { visibleBreakdownsFor } from "@/lib/receipts/breakdowns";
+import { counterpartOptionLabel } from "@/lib/receipts/labels";
 import type { MasterData } from "@/types/receipt";
 
 // 一括入力で全項目に適用する値（undefined の項目は変更しない）
@@ -17,7 +18,7 @@ export type BulkInputValues = {
   // カテゴリと一緒にだけ指定できる。カテゴリだけを指定した場合は、各項目で内訳を選び直す
   // （内訳が1つだけのカテゴリは自動で選ばれる）
   breakdownId?: string;
-  purposeId?: string;
+  counterpartId?: string;
   ownerUserId?: string;
 };
 
@@ -27,8 +28,9 @@ type BulkInputModalProps = {
   onApply: (values: BulkInputValues) => void;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "breakdowns" | "purposes" | "members"
+    "consumptionTaxes" | "categories" | "breakdowns" | "counterparts" | "members"
   >;
+  currentUserId?: string;
 };
 
 const NOT_CHANGED = "";
@@ -38,12 +40,13 @@ export function BulkInputModal({
   onClose,
   onApply,
   masterData,
+  currentUserId,
 }: BulkInputModalProps) {
   const [taxType, setTaxType] = useState(NOT_CHANGED);
   const [taxRateId, setTaxRateId] = useState(NOT_CHANGED);
   const [categoryId, setCategoryId] = useState(NOT_CHANGED);
   const [breakdownId, setBreakdownId] = useState(NOT_CHANGED);
-  const [purposeId, setPurposeId] = useState(NOT_CHANGED);
+  const [counterpartId, setCounterpartId] = useState(NOT_CHANGED);
   const [ownerUserId, setOwnerUserId] = useState(NOT_CHANGED);
 
   const reset = () => {
@@ -51,7 +54,7 @@ export function BulkInputModal({
     setTaxRateId(NOT_CHANGED);
     setCategoryId(NOT_CHANGED);
     setBreakdownId(NOT_CHANGED);
-    setPurposeId(NOT_CHANGED);
+    setCounterpartId(NOT_CHANGED);
     setOwnerUserId(NOT_CHANGED);
   };
 
@@ -61,7 +64,7 @@ export function BulkInputModal({
       taxRateId: taxRateId || undefined,
       categoryId: categoryId || undefined,
       breakdownId: categoryId && breakdownId ? breakdownId : undefined,
-      purposeId: purposeId || undefined,
+      counterpartId: counterpartId || undefined,
       ownerUserId: ownerUserId || undefined,
     });
     reset();
@@ -144,16 +147,18 @@ export function BulkInputModal({
           </Select>
         )}
         <Select
-          label="目的"
-          value={purposeId}
-          onChange={(e) => setPurposeId(e.target.value)}
+          label="相手"
+          value={counterpartId}
+          onChange={(e) => setCounterpartId(e.target.value)}
         >
           <option value={NOT_CHANGED}>変更しない</option>
-          {masterData.purposes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+          {masterData.counterparts
+            .filter((c) => !c.isHidden)
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {counterpartOptionLabel(c, currentUserId)}
+              </option>
+            ))}
         </Select>
         <Select
           label="帰属先"

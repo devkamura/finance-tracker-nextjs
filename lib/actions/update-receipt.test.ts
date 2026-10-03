@@ -10,6 +10,11 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 // 内訳はこのテストの対象外（内訳なし＝必須チェックなし）
 vi.mock("@/lib/settings/queries", () => ({
   getCategoryBreakdowns: vi.fn().mockResolvedValue([]),
+  // 相手は id 1 だけ、タグは id 5 だけがグループのもの
+  getCounterparts: vi
+    .fn()
+    .mockResolvedValue([{ id: 1, kind: "default", userId: null, name: "ふたり", isHidden: false }]),
+  getTags: vi.fn().mockResolvedValue([{ id: 5, name: "朝食", isHidden: false }]),
 }));
 vi.mock("@/lib/supabase/group", () => ({
   getCurrentMembership: vi.fn(),
@@ -36,8 +41,8 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxRateId: "",
     categoryId: "1",
     breakdownId: "",
-    purposeId: "1",
-    sceneIds: [],
+    counterpartId: "1",
+    tagIds: [],
     ownerUserId: OWNER_JOINT_VALUE,
     ...overrides,
   };
@@ -124,7 +129,7 @@ function fakeSupabase({
           }),
         };
       }
-      if (table === "receipt_detail_scenes") {
+      if (table === "receipt_detail_tags") {
         return { insert: vi.fn().mockResolvedValue({ error: null }) };
       }
       throw new Error(`unexpected table: ${table}`);

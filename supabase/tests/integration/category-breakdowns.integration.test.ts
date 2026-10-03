@@ -19,7 +19,7 @@ describe("カテゴリの内訳・費用区分", () => {
   let groupId: string;
   let foodId: number;
   let dailyId: number;
-  let purposeId: number;
+  let counterpartId: number;
   let expenseTypeId: number;
   let foodBreakdownId: number;
 
@@ -45,15 +45,15 @@ describe("カテゴリの内訳・費用区分", () => {
 
     await outsider.client.rpc("create_group_with_admin", { p_name: "内訳テスト他グループ" });
 
-    const [{ data: food }, { data: daily }, { data: purpose }, { data: types }] = await Promise.all([
+    const [{ data: food }, { data: daily }, { data: counterpart }, { data: types }] = await Promise.all([
       admin.from("categories").select("id").eq("name", "食費").single(),
       admin.from("categories").select("id").eq("name", "日用品").single(),
-      admin.from("purposes").select("id").eq("name", "生活維持").single(),
+      admin.from("counterparts").select("id").eq("group_id", groupId).eq("name", "ふたり").single(),
       admin.from("transaction_types").select("id, name"),
     ]);
     foodId = food!.id;
     dailyId = daily!.id;
-    purposeId = purpose!.id;
+    counterpartId = counterpart!.id;
     expenseTypeId = types!.find((t) => t.name === "支出")!.id;
   });
 
@@ -136,7 +136,7 @@ describe("カテゴリの内訳・費用区分", () => {
       item_name: "テスト",
       price: 1000,
       tax_type: "inclusive",
-      purpose_id: purposeId,
+      counterpart_id: counterpartId,
       owner_user_id: null,
     };
     // 日用品の明細に、食費の内訳を付けることはできない

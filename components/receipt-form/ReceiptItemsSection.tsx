@@ -27,8 +27,10 @@ type ReceiptItemsSectionProps = {
   onOpenItemChange: (clientId: string | null) => void;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "breakdowns" | "purposes" | "scenes" | "members"
+    "consumptionTaxes" | "categories" | "breakdowns" | "counterparts" | "tags" | "members"
   >;
+  // ログイン中のユーザー。相手のプルダウンで「自分（A）」と表示するために使う。
+  currentUserId?: string;
 };
 
 export function ReceiptItemsSection({
@@ -42,6 +44,7 @@ export function ReceiptItemsSection({
   openItemId,
   onOpenItemChange,
   masterData,
+  currentUserId,
 }: ReceiptItemsSectionProps) {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
@@ -82,6 +85,7 @@ export function ReceiptItemsSection({
             onRemove={() => onRemoveItem(item.clientId)}
             fieldErrors={fieldErrors[item.clientId]}
             masterData={masterData}
+            currentUserId={currentUserId}
           />
         ))}
       </div>
@@ -101,6 +105,7 @@ export function ReceiptItemsSection({
         onClose={() => setBulkModalOpen(false)}
         onApply={onBulkApply}
         masterData={masterData}
+        currentUserId={currentUserId}
       />
     </section>
   );

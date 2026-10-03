@@ -154,6 +154,50 @@ export type Database = {
         }
         Relationships: []
       }
+      counterparts: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: number
+          is_hidden: boolean
+          kind: string
+          name: string | null
+          sort_order: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: never
+          is_hidden?: boolean
+          kind: string
+          name?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: never
+          is_hidden?: boolean
+          kind?: string
+          name?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counterparts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_members: {
         Row: {
           created_at: string
@@ -266,47 +310,32 @@ export type Database = {
         }
         Relationships: []
       }
-      purposes: {
-        Row: {
-          id: number
-          name: string
-        }
-        Insert: {
-          id?: never
-          name: string
-        }
-        Update: {
-          id?: never
-          name?: string
-        }
-        Relationships: []
-      }
-      receipt_detail_scenes: {
+      receipt_detail_tags: {
         Row: {
           receipt_detail_id: string
-          scene_id: number
+          tag_id: number
         }
         Insert: {
           receipt_detail_id: string
-          scene_id: number
+          tag_id: number
         }
         Update: {
           receipt_detail_id?: string
-          scene_id?: number
+          tag_id?: number
         }
         Relationships: [
           {
-            foreignKeyName: "receipt_detail_scenes_receipt_detail_id_fkey"
+            foreignKeyName: "receipt_detail_tags_receipt_detail_id_fkey"
             columns: ["receipt_detail_id"]
             isOneToOne: false
             referencedRelation: "receipt_details"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "receipt_detail_scenes_scene_id_fkey"
-            columns: ["scene_id"]
+            foreignKeyName: "receipt_detail_tags_tag_id_fkey"
+            columns: ["tag_id"]
             isOneToOne: false
-            referencedRelation: "scenes"
+            referencedRelation: "tags"
             referencedColumns: ["id"]
           },
         ]
@@ -315,12 +344,12 @@ export type Database = {
         Row: {
           breakdown_id: number | null
           category_id: number
+          counterpart_id: number
           created_at: string
           id: string
           item_name: string
           owner_user_id: string | null
           price: number
-          purpose_id: number
           receipt_id: string
           tax_rate_id: number | null
           tax_type: string
@@ -329,12 +358,12 @@ export type Database = {
         Insert: {
           breakdown_id?: number | null
           category_id: number
+          counterpart_id: number
           created_at?: string
           id?: string
           item_name: string
           owner_user_id?: string | null
           price: number
-          purpose_id: number
           receipt_id: string
           tax_rate_id?: number | null
           tax_type: string
@@ -343,12 +372,12 @@ export type Database = {
         Update: {
           breakdown_id?: number | null
           category_id?: number
+          counterpart_id?: number
           created_at?: string
           id?: string
           item_name?: string
           owner_user_id?: string | null
           price?: number
-          purpose_id?: number
           receipt_id?: string
           tax_rate_id?: number | null
           tax_type?: string
@@ -370,10 +399,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "receipt_details_purpose_id_fkey"
-            columns: ["purpose_id"]
+            foreignKeyName: "receipt_details_counterpart_id_fkey"
+            columns: ["counterpart_id"]
             isOneToOne: false
-            referencedRelation: "purposes"
+            referencedRelation: "counterparts"
             referencedColumns: ["id"]
           },
           {
@@ -462,21 +491,6 @@ export type Database = {
           },
         ]
       }
-      scenes: {
-        Row: {
-          id: number
-          name: string
-        }
-        Insert: {
-          id?: never
-          name: string
-        }
-        Update: {
-          id?: never
-          name?: string
-        }
-        Relationships: []
-      }
       settlement_periods: {
         Row: {
           confirmed_at: string
@@ -538,6 +552,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "settlement_periods_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tags: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: number
+          is_hidden: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: never
+          is_hidden?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: never
+          is_hidden?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tags_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"
@@ -610,6 +662,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_default_counterparts: {
+        Args: { p_group_id: string }
+        Returns: undefined
+      }
       create_group_with_admin: {
         Args: { p_name: string }
         Returns: {
@@ -630,8 +686,11 @@ export type Database = {
         Args: { p_group_id: string; p_occurred_at: string }
         Returns: boolean
       }
-      link_pending_group_memberships: { Args: never; Returns: undefined }
-      my_group_ids: { Args: never; Returns: string[] }
+      link_pending_group_memberships: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      my_group_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
       reopen_settlement: {
         Args: { p_group_id: string; p_period_month: string }
         Returns: {
@@ -679,12 +738,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -706,13 +765,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -731,13 +789,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -756,13 +813,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -775,11 +831,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -796,4 +852,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

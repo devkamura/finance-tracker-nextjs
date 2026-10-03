@@ -34,20 +34,20 @@ export function buildReceiptDetailRows(items: ReceiptItem[], receiptId: string) 
     tax_rate_id: item.taxType === "exclusive" ? Number(item.taxRateId) : null,
     category_id: Number(item.categoryId),
     breakdown_id: item.breakdownId ? Number(item.breakdownId) : null,
-    purpose_id: Number(item.purposeId),
+    counterpart_id: Number(item.counterpartId),
     owner_user_id:
       item.ownerUserId === OWNER_JOINT_VALUE ? null : item.ownerUserId,
   }));
 }
 
-export function buildReceiptDetailSceneRows(
+export function buildReceiptDetailTagRows(
   items: ReceiptItem[],
   insertedDetails: { id: string }[]
 ) {
   return items.flatMap((item, index) =>
-    item.sceneIds.map((sceneId) => ({
+    item.tagIds.map((tagId) => ({
       receipt_detail_id: insertedDetails[index].id,
-      scene_id: Number(sceneId),
+      tag_id: Number(tagId),
     }))
   );
 }

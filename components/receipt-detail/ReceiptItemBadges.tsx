@@ -11,7 +11,7 @@ export function ReceiptItemBadges({ item }: { item: ReceiptDetailItemView }) {
         label="カテゴリ"
         value={item.breakdownName ? `${item.categoryName} ＞ ${item.breakdownName}` : item.categoryName}
       />
-      <Badge label="目的" value={item.purposeName} />
+      <Badge label="相手" value={item.counterpartName} />
       <span
         className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${getOwnerBadgeClass(item.ownerUserId, item.ownerColor)}`}
       >
@@ -27,8 +27,8 @@ export function ReceiptItemBadges({ item }: { item: ReceiptDetailItemView }) {
             : "税込"
         }
       />
-      {item.sceneNames.length > 0 && (
-        <Badge label="シーン" value={item.sceneNames.join("・")} />
+      {item.tagNames.length > 0 && (
+        <Badge label="タグ" value={item.tagNames.join("・")} />
       )}
     </div>
   );
