@@ -11,6 +11,7 @@ import {
 } from "@/components/receipt-detail/DuplicatedBadge";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
 import { UserBadge } from "@/components/ui/UserBadge";
+import { formatYen } from "@/lib/analytics/aggregate";
 import type { ReceiptListItem } from "@/types/receipt";
 
 function formatDateTime(iso: string): string {
@@ -23,6 +24,12 @@ type ReceiptAccordionItemProps = {
   receipt: ReceiptListItem;
   detailHref: string;
   initiallyOpen: boolean;
+  // 分析画面からの絞り込み中のみ渡す。「うち〇〇円」の表示と、当てはまる明細の強調に使う。
+  match?: {
+    label: string; // カテゴリ名、またはカテゴリ指定がないときは「該当分」
+    amount: number; // 当てはまる明細の按分後の合計
+    itemIds: string[];
+  };
 };
 
 // 一覧の各行。タップで明細をその場（アコーディオン）に展開して確認できる。
@@ -32,6 +39,7 @@ export function ReceiptAccordionItem({
   receipt,
   detailHref,
   initiallyOpen,
+  match,
 }: ReceiptAccordionItemProps) {
   const [open, setOpen] = useState(initiallyOpen);
   const ref = useRef<HTMLLIElement>(null);
@@ -74,6 +82,15 @@ export function ReceiptAccordionItem({
             <span className="font-semibold text-slate-900">
               {receipt.amount.toLocaleString()}円
             </span>
+            {match && (
+              <span
+                className={`text-xs font-medium ${
+                  match.amount < 0 ? "text-red-600" : "text-indigo-700"
+                }`}
+              >
+                うち{match.label} {formatYen(match.amount)}
+              </span>
+            )}
             <span className="flex items-center gap-1 text-xs text-slate-500">
               支払者:
               <UserBadge name={receipt.payerDisplayName} color={receipt.payerColor} />
@@ -95,7 +112,13 @@ export function ReceiptAccordionItem({
           )}
           <ul className="divide-y divide-slate-100">
             {receipt.items.map((item) => (
-              <li key={item.id} className="flex items-start justify-between gap-3 py-2">
+              <li
+                key={item.id}
+                className={`flex items-start justify-between gap-3 py-2 ${
+                  // 絞り込み中は、条件に当てはまらない明細を薄く表示する
+                  match && !match.itemIds.includes(item.id) ? "opacity-40" : ""
+                }`}
+              >
                 <div>
                   <p className="text-sm font-medium text-slate-900">
                     {item.itemName || "（品目未入力）"}

@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
 
 import { AnalyticsMonthSelect } from "@/components/analytics/AnalyticsMonthSelect";
 import { CategoryBreakdownTable } from "@/components/analytics/CategoryBreakdownTable";
 import { CategoryPieChart } from "@/components/analytics/CategoryPieChart";
-import { ChartTypeTabs, type ChartType } from "@/components/analytics/ChartTypeTabs";
+import { ChartTypeTabs } from "@/components/analytics/ChartTypeTabs";
 import { NegativeAmountNotice } from "@/components/analytics/NegativeAmountNotice";
 import { ScopeSelector } from "@/components/analytics/ScopeSelector";
 import { TrendCategorySelect } from "@/components/analytics/TrendCategorySelect";
 import { TrendComposedChart } from "@/components/analytics/TrendComposedChart";
+import { TrendSelectedMonth } from "@/components/analytics/TrendSelectedMonth";
 import {
   buildPieData,
   buildTrendData,
@@ -21,17 +23,18 @@ import {
 } from "@/lib/analytics/aggregate";
 import { categoryColor } from "@/lib/analytics/category-colors";
 import type { AnalyticsData, Scope } from "@/lib/analytics/types";
+import {
+  parseAnalyticsState,
+  serializeAnalyticsState,
+  type AnalyticsState,
+} from "@/lib/analytics/url-state";
+import { buildFilteredListHref } from "@/lib/receipts/list-params";
 
 // 総支出の棒の色（カテゴリの色と区別するためグレー。詳細設計書 フェーズ2 確認事項3）
 const TOTAL_BAR_COLOR = "#94a3b8";
 
 type AnalyticsViewProps = {
   data: AnalyticsData;
-  initialScopeUserId: string | null; // null＝全体
-  initialIncludeJoint: boolean;
-  initialMonth: string;
-  initialChart: ChartType;
-  initialCategoryId: number | null; // null＝総支出
 };
 
 // "2026-09" → "2026年9月"
@@ -41,19 +44,18 @@ function monthLabel(month: string): string {
 
 // 分析画面の状態（表示対象・共同トグル・グラフ種類・月・カテゴリ）を管理し、サーバーから
 // 受け取ったデータをその場で再集計して描画する。切り替えでサーバー通信は発生しない。
-export function AnalyticsView({
-  data,
-  initialScopeUserId,
-  initialIncludeJoint,
-  initialMonth,
-  initialChart,
-  initialCategoryId,
-}: AnalyticsViewProps) {
-  const [scopeUserId, setScopeUserId] = useState<string | null>(initialScopeUserId);
-  const [includeJoint, setIncludeJoint] = useState(initialIncludeJoint);
-  const [chart, setChart] = useState<ChartType>(initialChart);
-  const [month, setMonth] = useState(initialMonth);
-  const [categoryId, setCategoryId] = useState<number | null>(initialCategoryId);
+export function AnalyticsView({ data }: AnalyticsViewProps) {
+  const searchParams = useSearchParams();
+  // 初期状態は現在のURLから読む。レシート一覧からブラウザの「戻る」で戻ったとき、
+  // ページはキャッシュから再利用されるが部品は作り直されるため、URLに保存しておいた
+  // 状態（replaceStateで書き込んだもの）から復元する（詳細設計書 フェーズ3 4章）。
+  const [state, setState] = useState<AnalyticsState>(() =>
+    parseAnalyticsState((key) => searchParams.get(key), data)
+  );
+  const update = (patch: Partial<AnalyticsState>) =>
+    setState((prev) => ({ ...prev, ...patch }));
+
+  const { scopeUserId, includeJoint, month, chart, categoryId, trendMonth } = state;
 
   const scope: Scope = useMemo(
     () =>
@@ -78,29 +80,19 @@ export function AnalyticsView({
   // 切り替えのたびに履歴が増えて「戻る」が操作の巻き戻しになるのを避けるため、
   // pushStateではなくreplaceStateを使う（詳細設計書6.2節）。
   useEffect(() => {
-    const params = new URLSearchParams();
-    params.set("scope", scopeUserId ?? "all");
-    if (scopeUserId !== null && includeJoint) {
-      params.set("joint", "1");
-    }
-    params.set("month", month);
-    params.set("chart", chart);
-    params.set("category", categoryId === null ? "total" : String(categoryId));
-    window.history.replaceState(null, "", `?${params.toString()}`);
-  }, [scopeUserId, includeJoint, month, chart, categoryId]);
+    window.history.replaceState(null, "", `?${serializeAnalyticsState(state).toString()}`);
+  }, [state]);
 
   const changeScope = (userId: string | null) => {
-    setScopeUserId(userId);
-    if (userId === null) {
-      // 全体に戻したら共同トグルは隠れるため、オフに戻す
-      setIncludeJoint(false);
-    }
+    // 全体に戻したら共同トグルは隠れるため、オフに戻す
+    update(userId === null ? { scopeUserId: null, includeJoint: false } : { scopeUserId: userId });
   };
 
   const nameOf = (id: number) => data.categories.find((c) => c.id === id)?.name ?? "不明";
 
   const firstMonth = data.months[0];
   const lastMonth = data.months[data.months.length - 1];
+  const selectedPoint = trendData.points.find((p) => p.month === trendMonth) ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -109,13 +101,17 @@ export function AnalyticsView({
         scopeUserId={scopeUserId}
         includeJoint={includeJoint}
         onChangeScope={changeScope}
-        onChangeIncludeJoint={setIncludeJoint}
+        onChangeIncludeJoint={(value) => update({ includeJoint: value })}
       />
-      <ChartTypeTabs value={chart} onChange={setChart} />
+      <ChartTypeTabs value={chart} onChange={(value) => update({ chart: value })} />
 
       {chart === "pie" ? (
         <>
-          <AnalyticsMonthSelect months={data.months} month={month} onChange={setMonth} />
+          <AnalyticsMonthSelect
+            months={data.months}
+            month={month}
+            onChange={(value) => update({ month: value })}
+          />
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             {pieData.slices.length === 0 &&
             pieData.negatives.length === 0 &&
@@ -146,7 +142,14 @@ export function AnalyticsView({
                       : undefined
                   }
                 />
-                <CategoryBreakdownTable pieData={pieData} categories={data.categories} />
+                <CategoryBreakdownTable
+                  pieData={pieData}
+                  categories={data.categories}
+                  // 行をタップすると、この月×カテゴリ×表示対象で絞り込んだレシート一覧へ移動する
+                  hrefFor={(id) =>
+                    buildFilteredListHref({ month, categoryId: id, scope, from: "analytics" })
+                  }
+                />
               </div>
             )}
           </div>
@@ -156,7 +159,7 @@ export function AnalyticsView({
           <TrendCategorySelect
             categories={data.categories}
             categoryId={categoryId}
-            onChange={setCategoryId}
+            onChange={(value) => update({ categoryId: value })}
           />
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5">
             <TrendComposedChart
@@ -166,10 +169,26 @@ export function AnalyticsView({
                   ? TOTAL_BAR_COLOR
                   : categoryColor(categoryId, data.categories)
               }
+              selectedMonth={trendMonth}
+              onSelectMonth={(value) => update({ trendMonth: value })}
             />
             <p className="text-center text-xs text-slate-500">
               {monthLabel(firstMonth)}〜{monthLabel(lastMonth)}　棒：金額（左軸）／線：前月比（右軸）
             </p>
+            <TrendSelectedMonth
+              point={selectedPoint}
+              monthLabel={selectedPoint ? monthLabel(selectedPoint.month) : ""}
+              href={
+                selectedPoint
+                  ? buildFilteredListHref({
+                      month: selectedPoint.month,
+                      categoryId,
+                      scope,
+                      from: "analytics",
+                    })
+                  : null
+              }
+            />
             {/* 常に出すと画面が長くなるため、補足の注記は折りたたんでおき、押したときだけ表示する。
                 返金でマイナスになった月の注意書き（必須）は折りたたまずに常に表示する。 */}
             <details className="group text-xs text-slate-500">

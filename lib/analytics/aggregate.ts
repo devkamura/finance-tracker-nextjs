@@ -5,14 +5,19 @@ import type { AnalyticsRow, Scope } from "@/lib/analytics/types";
 
 export type CategorySum = { categoryId: number; amount: number };
 
-// 表示対象に応じた行の重み。対象外の行は0。
-// 共同トグルがオンのとき、共同（ownerUserId=null）の行は1/2を計上する（基本設計書3.2節）。
+// 帰属先に応じた重み。表示対象に当てはまらない帰属先は0。
+// 共同トグルがオンのとき、共同（ownerUserId=null）は1/2を計上する（基本設計書3.2節）。
 // 1/2で生じる0.5円は丸めずにそのまま扱う（詳細設計書5.2節）。
-function weightFor(row: AnalyticsRow, scope: Scope): number {
+// レシート一覧の絞り込み（lib/analytics/drilldown.ts）でも同じ重みを使い、グラフと金額を一致させる。
+export function ownerWeight(ownerUserId: string | null, scope: Scope): number {
   if (scope.kind === "all") return 1;
-  if (row.ownerUserId === scope.userId) return 1;
-  if (row.ownerUserId === null && scope.includeJoint) return 0.5;
+  if (ownerUserId === scope.userId) return 1;
+  if (ownerUserId === null && scope.includeJoint) return 0.5;
   return 0;
+}
+
+function weightFor(row: AnalyticsRow, scope: Scope): number {
+  return ownerWeight(row.ownerUserId, scope);
 }
 
 // 指定した月・表示対象の、カテゴリごとの合計を金額の大きい順に返す。

@@ -69,4 +69,47 @@ describe("listReceipts", () => {
     // 複製レシートの支払者は相方のまま
     expect(result[0].payerDisplayName).toBe("みき");
   });
+
+  it("U-87: 明細にカテゴリIDと税率の倍率が入る（税込はnull）", async () => {
+    const supabase = fakeSupabase([
+      buildRow({
+        receipt_details: [
+          {
+            id: "d1",
+            item_name: "お米",
+            price: 1000,
+            tax_type: "exclusive",
+            owner_user_id: null,
+            category_id: 3,
+            consumption_taxes: { name: "8%", multiplier: 1.08 },
+            categories: { name: "食費" },
+            purposes: { name: "生活維持" },
+            receipt_detail_scenes: [],
+          },
+          {
+            id: "d2",
+            item_name: "洗剤",
+            price: 500,
+            tax_type: "inclusive",
+            owner_user_id: USER_A,
+            category_id: 4,
+            consumption_taxes: null,
+            categories: { name: "日用品" },
+            purposes: { name: "生活維持" },
+            receipt_detail_scenes: [],
+          },
+        ],
+      }),
+    ]);
+
+    const [receipt] = await listReceipts(supabase, "group-1", {
+      from: new Date(2026, 8, 1),
+      to: new Date(2026, 9, 1),
+    });
+
+    expect(receipt.items.map((i) => [i.categoryId, i.taxRateMultiplier])).toEqual([
+      [3, 1.08],
+      [4, null],
+    ]);
+  });
 });

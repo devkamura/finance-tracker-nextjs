@@ -9,6 +9,7 @@ import { DeleteReceiptButton } from "@/components/receipt-detail/DeleteReceiptBu
 import { ReceiptImagePreview } from "@/components/receipt-detail/ReceiptImagePreview";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
 import { UserBadge } from "@/components/ui/UserBadge";
+import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptDetail } from "@/lib/receipts/queries";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
@@ -24,10 +25,10 @@ export default async function ReceiptDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; sort?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const { month, sort } = await searchParams;
+  const searchParamValues = await searchParams;
 
   const supabase = await createClient();
   // ログイン必須・グループ所属必須はapp/(app)/layout.tsxで既に保証されている。
@@ -41,16 +42,13 @@ export default async function ReceiptDetailPage({
     notFound();
   }
 
-  // 一覧のどの月・並び順から遷移してきたかを維持しつつ、この行を開いた状態で
+  // 一覧のどの月・並び順・絞り込みから遷移してきたかを維持しつつ、この行を開いた状態で
   // 一覧に戻れるようにする（open=id）。削除時は開き直す対象が消えるのでopenは付けない。
-  const listParams = new URLSearchParams();
-  if (month) listParams.set("month", month);
-  if (sort) listParams.set("sort", sort);
+  // 引き継ぐパラメータは lib/receipts/list-params.ts で一元管理する。
+  const listParams = pickListParams(searchParamValues);
   const backParams = new URLSearchParams(listParams);
   backParams.set("open", id);
-  const editHref = `/receipts/${id}/edit?${new URLSearchParams(
-    month || sort ? { ...(month ? { month } : {}), ...(sort ? { sort } : {}) } : {}
-  ).toString()}`;
+  const editHref = withQuery(`/receipts/${id}/edit`, listParams);
 
   return (
     <div className="flex flex-col gap-4">
@@ -143,7 +141,7 @@ export default async function ReceiptDetailPage({
           <DeleteReceiptButton
             receiptId={receipt.id}
             disabled={receipt.isLocked}
-            backHref={`/receipts?${listParams.toString()}`}
+            backHref={withQuery("/receipts", listParams)}
           />
         </div>
       </div>

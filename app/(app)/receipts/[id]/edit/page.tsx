@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
+import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptForEdit } from "@/lib/receipts/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
@@ -11,14 +12,11 @@ export default async function ReceiptEditPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; sort?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const { month, sort } = await searchParams;
-  const detailParams = new URLSearchParams();
-  if (month) detailParams.set("month", month);
-  if (sort) detailParams.set("sort", sort);
-  const detailHref = `/receipts/${id}${detailParams.toString() ? `?${detailParams.toString()}` : ""}`;
+  // 一覧の月・並び順・絞り込みを詳細画面へ引き継ぐ（lib/receipts/list-params.ts）
+  const detailHref = withQuery(`/receipts/${id}`, pickListParams(await searchParams));
 
   const supabase = await createClient();
   // ログイン必須・グループ所属必須はapp/(app)/layout.tsxで既に保証されている。
