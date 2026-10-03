@@ -5,8 +5,20 @@
 
 import type { Scope } from "@/lib/analytics/types";
 
-// 一覧の状態として引き継ぐパラメータ（openは行を開く一時的な指定のため含めない）
-export const LIST_PARAM_KEYS = ["month", "sort", "category", "scope", "joint", "from"] as const;
+// 一覧の状態として引き継ぐパラメータ（openは行を開く一時的な指定のため含めない）。
+// ret は「← 分析に戻る」で開く分析画面の状態（詳細・編集と行き来しても失わないよう引き継ぐ）。
+export const LIST_PARAM_KEYS = [
+  "month",
+  "sort",
+  "category",
+  "scope",
+  "joint",
+  "from",
+  "ret",
+] as const;
+
+// ret に入れてよい分析画面の状態の項目（lib/analytics/url-state.ts と対応）
+const ANALYTICS_STATE_KEYS = ["scope", "joint", "month", "chart", "category", "trendMonth"] as const;
 
 type ListParamKey = (typeof LIST_PARAM_KEYS)[number];
 
@@ -36,11 +48,14 @@ export function withQuery(path: string, params: URLSearchParams): string {
 }
 
 // 分析画面などから、絞り込んだレシート一覧へのURLを作る。
+// returnState には移動元の分析画面の状態（serializeAnalyticsStateの結果）を渡し、
+// 一覧の「← 分析に戻る」でその状態の分析画面を開けるようにする。
 export function buildFilteredListHref(input: {
   month: string;
   categoryId: number | null;
   scope: Scope;
   from: DrilldownSource;
+  returnState?: URLSearchParams;
 }): string {
   const params = new URLSearchParams();
   params.set("month", input.month);
@@ -48,7 +63,22 @@ export function buildFilteredListHref(input: {
   params.set("scope", input.scope.kind === "all" ? "all" : input.scope.userId);
   if (input.scope.kind === "user" && input.scope.includeJoint) params.set("joint", "1");
   params.set("from", input.from);
+  if (input.returnState) params.set("ret", input.returnState.toString());
   return `/receipts?${params.toString()}`;
+}
+
+// 「← 分析に戻る」のURLを作る。
+// ret の値をそのまま行き先にすると、外部サイトへ飛ばされる危険（オープンリダイレクト）があるため、
+// 行き先は常に /analytics に固定し、ret からは分析画面の状態の項目だけを取り出して付ける。
+// 各項目の値の妥当性は分析画面側（parseAnalyticsState）で検証される。
+export function buildAnalyticsReturnHref(ret: string | null | undefined): string {
+  const source = new URLSearchParams(ret ?? "");
+  const params = new URLSearchParams();
+  for (const key of ANALYTICS_STATE_KEYS) {
+    const value = source.get(key);
+    if (value) params.set(key, value);
+  }
+  return withQuery("/analytics", params);
 }
 
 export type ReceiptListFilter = {

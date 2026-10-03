@@ -4,7 +4,11 @@ import { faPlus } from "@fortawesome/free-solid-svg-icons";
 
 import { BackToAnalyticsButton } from "@/components/receipt-list/BackToAnalyticsButton";
 import { ReceiptListView } from "@/components/receipt-list/ReceiptListView";
-import { parseDrilldownSource, pickListParams } from "@/lib/receipts/list-params";
+import {
+  buildAnalyticsReturnHref,
+  parseDrilldownSource,
+  pickListParams,
+} from "@/lib/receipts/list-params";
 import {
   listReceipts,
   monthPeriod,
@@ -24,7 +28,6 @@ export default async function ReceiptsPage({
 }) {
   const params = await searchParams;
   const monthParam = typeof params.month === "string" ? params.month : undefined;
-  const openReceiptId = typeof params.open === "string" ? params.open : null;
   const targetDate = parseMonthParam(monthParam);
   const month = toMonthParam(targetDate);
 
@@ -48,7 +51,11 @@ export default async function ReceiptsPage({
 
   return (
     <div className="flex flex-col gap-4">
-      {parseDrilldownSource(params) === "analytics" && <BackToAnalyticsButton />}
+      {parseDrilldownSource(params) === "analytics" && (
+        <BackToAnalyticsButton
+          href={buildAnalyticsReturnHref(typeof params.ret === "string" ? params.ret : null)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-900">レシート一覧</h1>
         <Link
@@ -71,7 +78,6 @@ export default async function ReceiptsPage({
         minMonth={toMonthParam(min)}
         maxMonth={toMonthParam(max)}
         confirmed={confirmed}
-        openReceiptId={openReceiptId}
       />
 
       {/* 一覧が長くなりページ上部までスクロールしなくても登録できるよう、

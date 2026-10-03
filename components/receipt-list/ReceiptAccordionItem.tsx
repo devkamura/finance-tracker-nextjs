@@ -24,6 +24,8 @@ type ReceiptAccordionItemProps = {
   receipt: ReceiptListItem;
   detailHref: string;
   initiallyOpen: boolean;
+  // 「詳細を見る」を押したとき（詳細画面へ移る直前）に呼ぶ。開いていた行をURLに記録するのに使う。
+  onOpenDetail?: () => void;
   // 分析画面からの絞り込み中のみ渡す。「うち〇〇円」の表示と、当てはまる明細の強調に使う。
   match?: {
     label: string; // カテゴリ名、またはカテゴリ指定がないときは「該当分」
@@ -39,6 +41,7 @@ export function ReceiptAccordionItem({
   receipt,
   detailHref,
   initiallyOpen,
+  onOpenDetail,
   match,
 }: ReceiptAccordionItemProps) {
   const [open, setOpen] = useState(initiallyOpen);
@@ -134,6 +137,7 @@ export function ReceiptAccordionItem({
 
           <Link
             href={detailHref}
+            onClick={onOpenDetail}
             className="mt-3 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-700"
           >
             詳細を見る（画像・編集・削除はこちら）→

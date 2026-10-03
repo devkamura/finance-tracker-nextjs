@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/AppHeader";
+import { NavigationTracker } from "@/components/navigation/NavigationTracker";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,6 +29,8 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
+      {/* 画面の移動を記録し、共通の「戻る」ボタン（BackLink）の動きを決める */}
+      <NavigationTracker />
       <main className="mx-auto max-w-2xl px-4 py-8">{children}</main>
     </div>
   );

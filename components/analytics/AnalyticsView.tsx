@@ -28,6 +28,7 @@ import {
   serializeAnalyticsState,
   type AnalyticsState,
 } from "@/lib/analytics/url-state";
+import { replaceUrlKeepingAppState } from "@/lib/navigation/history-state";
 import { buildFilteredListHref } from "@/lib/receipts/list-params";
 
 // 総支出の棒の色（カテゴリの色と区別するためグレー。詳細設計書 フェーズ2 確認事項3）
@@ -80,7 +81,8 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
   // 切り替えのたびに履歴が増えて「戻る」が操作の巻き戻しになるのを避けるため、
   // pushStateではなくreplaceStateを使う（詳細設計書6.2節）。
   useEffect(() => {
-    window.history.replaceState(null, "", `?${serializeAnalyticsState(state).toString()}`);
+    // 直前の画面の記録（共通の戻るボタン用）を消さないよう、共通の処理で書き換える
+    replaceUrlKeepingAppState(`?${serializeAnalyticsState(state).toString()}`);
   }, [state]);
 
   const changeScope = (userId: string | null) => {
@@ -93,6 +95,8 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
   const firstMonth = data.months[0];
   const lastMonth = data.months[data.months.length - 1];
   const selectedPoint = trendData.points.find((p) => p.month === trendMonth) ?? null;
+  // 一覧の「← 分析に戻る」で、タップしたときの状態の分析画面を開けるよう、今の状態を持たせる
+  const returnState = serializeAnalyticsState(state);
 
   return (
     <div className="flex flex-col gap-4">
@@ -147,7 +151,13 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
                   categories={data.categories}
                   // 行をタップすると、この月×カテゴリ×表示対象で絞り込んだレシート一覧へ移動する
                   hrefFor={(id) =>
-                    buildFilteredListHref({ month, categoryId: id, scope, from: "analytics" })
+                    buildFilteredListHref({
+                      month,
+                      categoryId: id,
+                      scope,
+                      from: "analytics",
+                      returnState,
+                    })
                   }
                 />
               </div>
@@ -185,6 +195,7 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
                       categoryId,
                       scope,
                       from: "analytics",
+                      returnState,
                     })
                   : null
               }

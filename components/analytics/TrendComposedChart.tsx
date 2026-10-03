@@ -88,7 +88,9 @@ export function TrendComposedChart({
   };
 
   return (
-    <div className="h-72 w-full">
+    // グラフをタップしたときにグラフ全体を囲むブラウザ標準のフォーカス枠を消す
+    // （選択中の月は棒の濃淡と枠線で示す。円グラフと同じ対応）
+    <div className="h-72 w-full [&_*:focus]:outline-none">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={chartData}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAnalyticsReturnHref,
   buildFilteredListHref,
   parseDrilldownSource,
   parseListFilter,
@@ -55,11 +56,12 @@ describe("list-params", () => {
       scope: "user-a",
       joint: "1",
       from: "analytics",
+      ret: "scope=user-a&month=2026-07",
       open: "receipt-1",
       other: "x",
     });
     expect(params.toString()).toBe(
-      "month=2026-07&sort=asc&category=1&scope=user-a&joint=1&from=analytics"
+      "month=2026-07&sort=asc&category=1&scope=user-a&joint=1&from=analytics&ret=scope%3Duser-a%26month%3D2026-07"
     );
     expect(withQuery("/receipts/r1", params)).toBe(`/receipts/r1?${params.toString()}`);
     expect(withQuery("/receipts", new URLSearchParams())).toBe("/receipts");
@@ -83,5 +85,37 @@ describe("list-params", () => {
     expect(parseDrilldownSource({ from: "analytics" })).toBe("analytics");
     expect(parseDrilldownSource({ from: "xxx" })).toBeNull();
     expect(parseDrilldownSource({})).toBeNull();
+  });
+
+  it("U-90: 分析画面の状態（ret）を付けた一覧のURLを作り、そこから状態付きの分析画面のURLに戻せる", () => {
+    const returnState = new URLSearchParams("scope=user-a&joint=1&month=2026-07&chart=pie&category=total");
+    const listHref = buildFilteredListHref({
+      month: "2026-07",
+      categoryId: 1,
+      scope: { kind: "user", userId: "user-a", includeJoint: true },
+      from: "analytics",
+      returnState,
+    });
+    const ret = new URL(listHref, "http://localhost").searchParams.get("ret");
+    expect(buildAnalyticsReturnHref(ret)).toBe(`/analytics?${returnState.toString()}`);
+    // ret がなければ初期状態の分析画面
+    expect(buildAnalyticsReturnHref(null)).toBe("/analytics");
+  });
+
+  it("U-90: 戻り先は常に /analytics で、分析画面の状態以外の項目や外部URLは使わない（オープンリダイレクト対策）", () => {
+    for (const ret of [
+      "https://evil.example.com",
+      "//evil.example.com",
+      "/admin?month=2026-07",
+      "next=https://evil.example.com&month=2026-07",
+    ]) {
+      const href = buildAnalyticsReturnHref(ret);
+      expect(href.startsWith("/analytics")).toBe(true);
+      expect(href).not.toContain("evil");
+      expect(href).not.toContain("admin");
+    }
+    expect(buildAnalyticsReturnHref("next=https://evil.example.com&month=2026-07")).toBe(
+      "/analytics?month=2026-07"
+    );
   });
 });

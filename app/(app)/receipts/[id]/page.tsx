@@ -5,6 +5,7 @@ import {
   DuplicatedBadge,
   DuplicatedNotice,
 } from "@/components/receipt-detail/DuplicatedBadge";
+import { BackLink } from "@/components/navigation/BackLink";
 import { DeleteReceiptButton } from "@/components/receipt-detail/DeleteReceiptButton";
 import { ReceiptImagePreview } from "@/components/receipt-detail/ReceiptImagePreview";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
@@ -52,12 +53,9 @@ export default async function ReceiptDetailPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href={`/receipts?${backParams.toString()}`}
-        className="text-sm text-slate-500 hover:text-slate-700"
-      >
-        ← レシート一覧に戻る
-      </Link>
+      {/* 一覧から来たときは1つ前に戻る（通信なし。一覧は開いていた行をURLから復元する）。
+          直接開いた場合や編集後などは、この行を開いた状態の一覧へのリンクとして開く */}
+      <BackLink href={`/receipts?${backParams.toString()}`}>← レシート一覧に戻る</BackLink>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
         <div className="flex items-start justify-between">

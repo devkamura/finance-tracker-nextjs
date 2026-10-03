@@ -13,6 +13,7 @@ import {
 import { ReceiptAccordionItem } from "@/components/receipt-list/ReceiptAccordionItem";
 import { ReceiptFilterBanner } from "@/components/receipt-list/ReceiptFilterBanner";
 import { MonthSelector } from "@/components/ui/MonthSelector";
+import { replaceUrlKeepingAppState } from "@/lib/navigation/history-state";
 import { parseDrilldownSource, parseListFilter, withQuery } from "@/lib/receipts/list-params";
 import { buildReceiptListView, type ReceiptSort } from "@/lib/receipts/list-view";
 import type { ReceiptListItem } from "@/types/receipt";
@@ -25,8 +26,14 @@ type ReceiptListViewProps = {
   minMonth: string;
   maxMonth: string;
   confirmed: boolean;
-  openReceiptId: string | null;
 };
+
+// 一覧のURLパラメータに、開いていた行（open）を加える
+function urlParamsWithOpen(listParams: URLSearchParams, openReceiptId: string | null) {
+  const params = new URLSearchParams(listParams);
+  if (openReceiptId) params.set("open", openReceiptId);
+  return params;
+}
 
 // 絞り込み条件のURLパラメータ（解除するとまとめて外す）
 type FilterParams = { category?: string; scope?: string; joint?: string };
@@ -42,9 +49,11 @@ export function ReceiptListView({
   minMonth,
   maxMonth,
   confirmed,
-  openReceiptId,
 }: ReceiptListViewProps) {
   const searchParams = useSearchParams();
+  // 開いておく行も現在のURLから読む（詳細画面から「戻る」で戻ったとき、ページはキャッシュから
+  // 再利用されるため、サーバーが最初に受け取った値ではなく、書き込んでおいたURLの値を使う）
+  const [openReceiptId] = useState<string | null>(() => searchParams.get("open"));
   // 初期状態は現在のURLから読む。詳細画面からブラウザの「戻る」で戻ったときも、
   // replaceStateで保存した並び順・絞り込みから復元できるようにする（分析画面と同じ考え方）。
   const [sort, setSort] = useState<ReceiptSort>(() =>
@@ -58,8 +67,10 @@ export function ReceiptListView({
     };
     return params.category || params.scope ? params : null;
   });
-  // 移動元（分析画面）は絞り込みを解除しても残す（「← 分析に戻る」を出し続けるため）
+  // 移動元（分析画面）と戻り先の分析画面の状態（ret）は、絞り込みを解除しても残す
+  // （「← 分析に戻る」を出し続け、詳細画面への行き来でも引き継ぐため）
   const from = parseDrilldownSource({ from: searchParams.get("from") ?? undefined });
+  const ret = searchParams.get("ret");
 
   const filter = useMemo(
     () => (filterParams ? parseListFilter(filterParams, categories, members) : null),
@@ -82,15 +93,23 @@ export function ReceiptListView({
       }
     }
     if (from) params.set("from", from);
+    if (from && ret) params.set("ret", ret);
     return params;
-  }, [month, sort, filterParams, from]);
+  }, [month, sort, filterParams, from, ret]);
 
   // 状態をURLに反映する。履歴には積まない（解除してからブラウザの「戻る」を押すと、
   // 解除の取り消しではなく、一覧に来る前の画面に戻る。詳細設計書 フェーズ3 確認事項）。
-  // openは詳細画面から戻ったときに一度だけ使う指定のため、残さない。
+  // 開いていた行（open）もURLに残し、詳細画面から「戻る」で戻ったときにその行を開いた状態にする。
+  // 直前の画面の記録（共通の戻るボタン用）を消さないよう、共通の処理で書き換える。
   useEffect(() => {
-    window.history.replaceState(null, "", withQuery("/receipts", listParams));
-  }, [listParams]);
+    replaceUrlKeepingAppState(withQuery("/receipts", urlParamsWithOpen(listParams, openReceiptId)));
+  }, [listParams, openReceiptId]);
+
+  // 「詳細を見る」を押した行を、詳細画面へ移る直前にURLへ書き込む（通信なし・履歴は増やさない）。
+  // 詳細画面から1つ前に戻る（またはブラウザの戻る）と、一覧はURLからこの行を開いた状態で復元する。
+  const rememberOpenRow = (receiptId: string) => {
+    replaceUrlKeepingAppState(withQuery("/receipts", urlParamsWithOpen(listParams, receiptId)));
+  };
 
   const monthSelectorExtraParams = Object.fromEntries(
     Array.from(listParams.entries()).filter(([key]) => key !== "month")
@@ -150,6 +169,7 @@ export function ReceiptListView({
               receipt={receipt}
               detailHref={withQuery(`/receipts/${receipt.id}`, listParams)}
               initiallyOpen={receipt.id === openReceiptId}
+              onOpenDetail={() => rememberOpenRow(receipt.id)}
               match={
                 filter && match
                   ? {

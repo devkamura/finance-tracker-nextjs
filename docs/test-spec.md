@@ -244,10 +244,12 @@ Gemini APIを呼び出す箇所（`extractReceiptFromImage`）は必ずモック
 | U-87 | `lib/receipts/queries.ts`（`listReceipts`） | 正常系：取得項目の追加 | 税別8%・税込の明細 | `categoryId`と`taxRateMultiplier`（1.08／null）が入る | Supabaseクライアント、`getGroupMembers` |
 | U-88 | `lib/analytics/url-state.ts` | 正常系／異常系：分析画面の状態とURL | 全項目ありのURL／不正な値・空 | 読み直して書き出すと同じURL／初期値になる | なし |
 | U-89 | `lib/receipts/list-view.ts`（`buildReceiptListView`） | 正常系：画面側での絞り込み・並び替え | 3件のレシート、絞り込みなし／食費で絞り込み、新しい順／古い順 | 全件が並び順どおり／当てはまる2件と合計3,000円。元の配列は並べ替えない | なし |
+| U-90 | `lib/receipts/list-params.ts`（`buildFilteredListHref`・`buildAnalyticsReturnHref`） | 正常系／異常系：「← 分析に戻る」の戻り先 | 分析画面の状態付きの一覧URL／`https://evil…`・`//evil…`・`/admin?…`・状態以外の項目を含む`ret` | 状態付きの`/analytics?…`に戻せる／行き先は常に`/analytics`で、外部URLや状態以外の項目は含まれない | なし |
+| U-91 | `lib/navigation/history-state.ts` | 正常系／異常系：共通の「戻る」ボタンの判定と履歴のメモ | 直前のパスと戻り先（クエリ違い・別の画面・記録なし）／記録の書き込み／URLの書き換え | パスが同じときだけ1つ前に戻る、記録がなければリンク／記録を読み出せる／URLを書き換えても記録が残り、Next.jsの項目（`__NA`）は渡さない | `window.history`（Node環境のため最小限を再現） |
 
 ### E2Eテスト
 
-**実施しない。**（ユーザー確認済み）画面操作の観点は [docs/支出分析機能/手動テスト仕様書.md](./支出分析機能/手動テスト仕様書.md)（フェーズ3：M-46〜M-65）で手動確認する。
+**実施しない。**（ユーザー確認済み）画面操作の観点は [docs/支出分析機能/手動テスト仕様書.md](./支出分析機能/手動テスト仕様書.md)（フェーズ3：M-46〜M-72）で手動確認する。
 
 ---
 

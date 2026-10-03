@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BackLink } from "@/components/navigation/BackLink";
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
 import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptForEdit } from "@/lib/receipts/queries";
@@ -65,12 +65,7 @@ export default async function ReceiptEditPage({
   if (editData.isLocked) {
     return (
       <div className="flex flex-col gap-4">
-        <Link
-          href={detailHref}
-          className="text-sm text-slate-500 hover:text-slate-700"
-        >
-          ← レシート詳細に戻る
-        </Link>
+        <BackLink href={detailHref}>← レシート詳細に戻る</BackLink>
         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
           この月の精算は確定済みのため編集できません。管理者に再オープンを依頼してください。
         </p>
@@ -80,12 +75,8 @@ export default async function ReceiptEditPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href={detailHref}
-        className="text-sm text-slate-500 hover:text-slate-700"
-      >
-        ← レシート詳細に戻る
-      </Link>
+      {/* 詳細画面から来たときは1つ前に戻る（共通の戻るボタン） */}
+      <BackLink href={detailHref}>← レシート詳細に戻る</BackLink>
       <h1 className="text-xl font-bold text-slate-900">レシートを編集</h1>
       <ReceiptForm
         mode="edit"
