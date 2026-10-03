@@ -1,6 +1,6 @@
 "use client";
 
-export type ChartType = "pie" | "trend";
+import type { ChartType } from "@/lib/analytics/url-state";
 
 type ChartTypeTabsProps = {
   value: ChartType;

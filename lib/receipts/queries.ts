@@ -88,7 +88,11 @@ type RawReceiptDetail = {
   price: number;
   tax_type: "inclusive" | "exclusive";
   owner_user_id: string | null;
-  consumption_taxes: { name: string } | { name: string }[] | null;
+  category_id: number;
+  consumption_taxes:
+    | { name: string; multiplier: number }
+    | { name: string; multiplier: number }[]
+    | null;
   categories: { name: string } | { name: string }[] | null;
   purposes: { name: string } | { name: string }[] | null;
   receipt_detail_scenes: {
@@ -100,8 +104,8 @@ const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_name, amount, payer_
    is_duplicated, created_by,
    transaction_types(name),
    receipt_details(
-     id, item_name, price, tax_type, owner_user_id,
-     consumption_taxes(name), categories(name), purposes(name),
+     id, item_name, price, tax_type, owner_user_id, category_id,
+     consumption_taxes(name, multiplier), categories(name), purposes(name),
      receipt_detail_scenes(scenes(name))
    )`;
 
@@ -115,6 +119,8 @@ function mapReceiptDetailItems(
     price: detail.price,
     taxType: detail.tax_type,
     taxRateName: unwrapToOne(detail.consumption_taxes)?.name ?? null,
+    taxRateMultiplier: unwrapToOne(detail.consumption_taxes)?.multiplier ?? null,
+    categoryId: detail.category_id,
     categoryName: unwrapToOne(detail.categories)?.name ?? "",
     purposeName: unwrapToOne(detail.purposes)?.name ?? "",
     ownerUserId: detail.owner_user_id,

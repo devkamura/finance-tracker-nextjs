@@ -63,6 +63,9 @@ export type ReceiptDetailItemView = {
   price: number;
   taxType: TaxType;
   taxRateName: string | null;
+  // 税別明細の税率の倍率（税込は null）。一覧の絞り込みで按分額を計算するのに使う。
+  taxRateMultiplier: number | null;
+  categoryId: number;
   categoryName: string;
   purposeName: string;
   ownerUserId: string | null;
