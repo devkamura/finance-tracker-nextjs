@@ -8,6 +8,7 @@ import {
   resolvePayeeName,
 } from "@/lib/receipts/shared";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
+import { getCategoryBreakdowns } from "@/lib/settings/queries";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState } from "@/types/receipt";
 
@@ -61,9 +62,12 @@ export async function updateReceipt(
     return { success: false, errors: ["レシートが見つかりません。"] };
   }
 
-  const members = await getGroupMembers(supabase, membership.groupId);
+  const [members, breakdowns] = await Promise.all([
+    getGroupMembers(supabase, membership.groupId),
+    getCategoryBreakdowns(supabase, membership.groupId),
+  ]);
   const memberUserIds = members.map((m) => m.userId);
-  const { errors } = validateReceiptForm(state, memberUserIds);
+  const { errors } = validateReceiptForm(state, memberUserIds, breakdowns);
   if (!memberUserIds.includes(state.payerUserId)) {
     errors.push("支払者が不正です。");
   }

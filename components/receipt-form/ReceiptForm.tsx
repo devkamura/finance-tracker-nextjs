@@ -8,12 +8,14 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { ReceiptUnitSection } from "@/components/receipt-form/ReceiptUnitSection";
 import { ReceiptItemsSection } from "@/components/receipt-form/ReceiptItemsSection";
 import { OcrUploadSection } from "@/components/receipt-form/OcrUploadSection";
+import type { BulkInputValues } from "@/components/receipt-form/BulkInputModal";
 import { ConfirmSubmitModal } from "@/components/receipt-form/ConfirmSubmitModal";
 import { SubmitLoadingOverlay } from "@/components/receipt-form/SubmitLoadingOverlay";
 import { Toast, type ToastState } from "@/components/receipt-form/Toast";
 import { createReceipt } from "@/lib/actions/create-receipt";
 import { updateReceipt } from "@/lib/actions/update-receipt";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
+import { autoBreakdownIdFor, breakdownIdAfterBulkApply } from "@/lib/receipts/breakdowns";
 import { findPartner } from "@/lib/receipts/duplicate";
 import {
   validateReceiptForm,
@@ -50,6 +52,7 @@ function createEmptyItem(): ReceiptItem {
     taxType: "inclusive",
     taxRateId: "",
     categoryId: "",
+    breakdownId: "",
     purposeId: "",
     sceneIds: [],
     // 帰属先は誤って共同のまま登録されることがないよう、既定は未選択にする。
@@ -87,6 +90,7 @@ export function buildOcrItem(
     taxType: "exclusive",
     taxRateId: resolveTaxRateId(item.taxRatePercent, consumptionTaxes),
     categoryId: "",
+    breakdownId: "",
     purposeId: "",
     sceneIds: [],
     ownerUserId: "",
@@ -206,21 +210,29 @@ export function ReceiptForm({
       items: prev.items.filter((item) => item.clientId !== clientId),
     }));
 
+  // カテゴリを変えたら内訳は選び直し。新しいカテゴリの内訳が1つだけなら自動で選ぶ
+  // （docs/分析拡充/基本設計書.md 3.1節）。内訳を同時に指定した場合はその値を使う。
+  const withBreakdownForCategory = (
+    item: ReceiptItem,
+    patch: Partial<ReceiptItem>
+  ): Partial<ReceiptItem> =>
+    patch.categoryId !== undefined &&
+    patch.categoryId !== item.categoryId &&
+    patch.breakdownId === undefined
+      ? { ...patch, breakdownId: autoBreakdownIdFor(patch.categoryId, masterData.breakdowns) }
+      : patch;
+
   const updateItem = (clientId: string, patch: Partial<ReceiptItem>) =>
     setState((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        item.clientId === clientId ? { ...item, ...patch } : item
+        item.clientId === clientId
+          ? { ...item, ...withBreakdownForCategory(item, patch) }
+          : item
       ),
     }));
 
-  const bulkApply = (values: {
-    taxType?: "inclusive" | "exclusive";
-    taxRateId?: string;
-    categoryId?: string;
-    purposeId?: string;
-    ownerUserId?: string;
-  }) =>
+  const bulkApply = (values: BulkInputValues) =>
     setState((prev) => ({
       ...prev,
       items: prev.items.map((item) => ({
@@ -231,13 +243,19 @@ export function ReceiptForm({
             ? ""
             : (values.taxRateId ?? item.taxRateId),
         categoryId: values.categoryId ?? item.categoryId,
+        breakdownId: breakdownIdAfterBulkApply(
+          item.breakdownId,
+          values.categoryId,
+          values.breakdownId,
+          masterData.breakdowns
+        ),
         purposeId: values.purposeId ?? item.purposeId,
         ownerUserId: values.ownerUserId ?? item.ownerUserId,
       })),
     }));
 
   const handleSubmitClick = () => {
-    const result = validateReceiptForm(state, memberUserIds);
+    const result = validateReceiptForm(state, memberUserIds, masterData.breakdowns);
     if (result.errors.length > 0) {
       setClientErrors(result.errors);
       setFieldErrors(result.fieldErrors);

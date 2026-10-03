@@ -1,10 +1,16 @@
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import {
+  isBreakdownOfCategory,
+  isBreakdownRequired,
+  type CategoryBreakdown,
+} from "@/lib/receipts/breakdowns";
 import type { ReceiptFormState } from "@/types/receipt";
 
 export type ReceiptItemFieldErrors = {
   price?: boolean;
   taxRateId?: boolean;
   categoryId?: boolean;
+  breakdownId?: boolean;
   purposeId?: boolean;
   ownerUserId?: boolean;
 };
@@ -23,9 +29,12 @@ export type ReceiptFormValidationResult = {
 // memberUserIds: 帰属先として選択可能なグループメンバーのuser_id一覧。
 // クライアント入力を信用せず、帰属先が実在するグループメンバー（または共同）に
 // 限定されているかをここで検証する。
+// breakdowns: グループのカテゴリの内訳（非表示を含む）。内訳を設定したカテゴリでは
+// 内訳を必須とし、選んだ内訳がそのカテゴリのものかを検証する（docs/分析拡充/基本設計書.md 3.1節）。
 export function validateReceiptForm(
   state: ReceiptFormState,
-  memberUserIds: string[]
+  memberUserIds: string[],
+  breakdowns: CategoryBreakdown[]
 ): ReceiptFormValidationResult {
   const errors: string[] = [];
   const fieldErrors: ReceiptFormFieldErrors = { items: {} };
@@ -60,6 +69,14 @@ export function validateReceiptForm(
     if (!item.categoryId) {
       errors.push(`項目${n}: カテゴリーは必須です。`);
       itemErrors.categoryId = true;
+    } else if (item.breakdownId) {
+      if (!isBreakdownOfCategory(item.breakdownId, item.categoryId, breakdowns)) {
+        errors.push(`項目${n}: 内訳が不正です。`);
+        itemErrors.breakdownId = true;
+      }
+    } else if (isBreakdownRequired(item.categoryId, breakdowns)) {
+      errors.push(`項目${n}: 内訳は必須です。`);
+      itemErrors.breakdownId = true;
     }
     if (!item.purposeId) {
       errors.push(`項目${n}: 目的は必須です。`);

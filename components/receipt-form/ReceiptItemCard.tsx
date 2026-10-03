@@ -11,6 +11,7 @@ import {
 
 import { Select } from "@/components/ui/Select";
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { visibleBreakdownsFor } from "@/lib/receipts/breakdowns";
 import type { ReceiptItemFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptItem } from "@/types/receipt";
 
@@ -30,7 +31,7 @@ type ReceiptItemCardProps = {
   fieldErrors?: ReceiptItemFieldErrors;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "purposes" | "scenes" | "members"
+    "consumptionTaxes" | "categories" | "breakdowns" | "purposes" | "scenes" | "members"
   >;
 };
 
@@ -53,6 +54,18 @@ export function ReceiptItemCard({
       : [...item.sceneIds, sceneId];
     onChange({ sceneIds });
   };
+
+  // 内訳の選択肢：表示中の内訳。編集時に非表示の内訳が選ばれていれば、その値も残して表示する。
+  const breakdownOptions = item.categoryId
+    ? masterData.breakdowns.filter(
+        (b) =>
+          String(b.categoryId) === item.categoryId &&
+          (!b.isHidden || String(b.id) === item.breakdownId)
+      )
+    : [];
+  const showBreakdown =
+    visibleBreakdownsFor(item.categoryId, masterData.breakdowns).length > 0 ||
+    breakdownOptions.length > 0;
 
   const truncatedName = item.name.slice(0, MAX_ITEM_NAME_LENGTH);
   const heading = truncatedName
@@ -208,6 +221,24 @@ export function ReceiptItemCard({
               </option>
             ))}
           </Select>
+
+          {/* 内訳はカテゴリに内訳を設定しているときだけ表示する（必須。docs/分析拡充/基本設計書.md 3.1節） */}
+          {showBreakdown && (
+            <Select
+              label="内訳"
+              value={item.breakdownId}
+              onChange={(e) => onChange({ breakdownId: e.target.value })}
+              error={fieldErrors?.breakdownId}
+            >
+              <option value="">選択してください</option>
+              {breakdownOptions.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                  {b.isHidden ? "（非表示）" : ""}
+                </option>
+              ))}
+            </Select>
+          )}
 
           <Select
             label="目的"

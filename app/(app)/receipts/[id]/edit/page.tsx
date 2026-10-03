@@ -4,6 +4,7 @@ import { BackLink } from "@/components/navigation/BackLink";
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
 import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptForEdit } from "@/lib/receipts/queries";
+import { getCategoryBreakdowns } from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,9 +26,10 @@ export default async function ReceiptEditPage({
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
-  const [editData, members, masters] = await Promise.all([
+  const [editData, members, breakdowns, masters] = await Promise.all([
     getReceiptForEdit(supabase, membership!.groupId, id),
     getGroupMembers(supabase, membership!.groupId),
+    getCategoryBreakdowns(supabase, membership!.groupId),
     Promise.all([
       supabase.from("payees").select("id, name").order("id"),
       supabase.from("transaction_types").select("id, name").order("id"),
@@ -89,6 +91,7 @@ export default async function ReceiptEditPage({
           transactionTypes: transactionTypes!,
           consumptionTaxes: consumptionTaxes!,
           categories: categories!,
+          breakdowns,
           purposes: purposes!,
           scenes: scenes!,
           members,

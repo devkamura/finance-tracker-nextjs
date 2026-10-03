@@ -15,8 +15,8 @@ insert into public.consumption_taxes (name, multiplier) values
   ('10%', 1.10)
 on conflict (name) do update set multiplier = excluded.multiplier;
 
--- 家計簿アプリ要件定義書4章のカテゴリ一覧（交際費は目的ではなくこちらに属する。
--- 20260831000001_categories_purposes_update.sql参照）。
+-- 家計簿アプリ要件定義書4章のカテゴリ一覧（交際費は分析拡充で削除。
+-- 20261003000003_delete_social_category.sql参照）。
 insert into public.categories (name) values
   ('食費'),
   ('日用品'),
@@ -25,7 +25,6 @@ insert into public.categories (name) values
   ('通信費'),
   ('賃料'),
   ('水道光熱費'),
-  ('交際費'),
   ('娯楽'),
   ('宿泊・旅行'),
   ('医療費'),

@@ -1,3 +1,5 @@
+import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
+
 export type TaxType = "inclusive" | "exclusive";
 
 export type ReceiptItem = {
@@ -7,6 +9,8 @@ export type ReceiptItem = {
   taxType: TaxType;
   taxRateId: string; // taxTypeが"exclusive"の場合のみ必須
   categoryId: string;
+  // 内訳。"" または実際の内訳ID（内訳を設定したカテゴリでは必須。docs/分析拡充/基本設計書.md 3.1節）
+  breakdownId: string;
   purposeId: string;
   sceneIds: string[];
   // 帰属先。OWNER_JOINT_VALUE（共同）または実際のuser id
@@ -36,6 +40,8 @@ export type MasterData = {
   transactionTypes: { id: number; name: string }[];
   consumptionTaxes: { id: number; name: string; multiplier: number }[];
   categories: { id: number; name: string }[];
+  // カテゴリの内訳（非表示のものも含む。編集時に既存の値を表示するため）
+  breakdowns: CategoryBreakdown[];
   purposes: { id: number; name: string }[];
   scenes: { id: number; name: string }[];
   members: GroupMemberOption[];
@@ -67,6 +73,8 @@ export type ReceiptDetailItemView = {
   taxRateMultiplier: number | null;
   categoryId: number;
   categoryName: string;
+  breakdownId: number | null;
+  breakdownName: string | null; // 内訳なしはnull
   purposeName: string;
   ownerUserId: string | null;
   ownerDisplayName: string; // "共同" またはユーザー表示名

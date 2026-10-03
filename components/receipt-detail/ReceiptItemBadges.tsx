@@ -6,7 +6,11 @@ import type { ReceiptDetailItemView } from "@/types/receipt";
 export function ReceiptItemBadges({ item }: { item: ReceiptDetailItemView }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1.5">
-      <Badge label="カテゴリ" value={item.categoryName} />
+      {/* 内訳があれば「食費 ＞ 外食」のようにカテゴリと続けて表示する */}
+      <Badge
+        label="カテゴリ"
+        value={item.breakdownName ? `${item.categoryName} ＞ ${item.breakdownName}` : item.categoryName}
+      />
       <Badge label="目的" value={item.purposeName} />
       <span
         className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${getOwnerBadgeClass(item.ownerUserId, item.ownerColor)}`}

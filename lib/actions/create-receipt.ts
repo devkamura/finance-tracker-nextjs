@@ -11,6 +11,7 @@ import {
 } from "@/lib/receipts/shared";
 import { buildPartnerItems, findPartner } from "@/lib/receipts/duplicate";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
+import { getCategoryBreakdowns } from "@/lib/settings/queries";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState, ReceiptItem } from "@/types/receipt";
 
@@ -52,10 +53,14 @@ export async function createReceipt(
     return { success: false, errors: ["グループに所属していません。"] };
   }
 
-  const members = await getGroupMembers(supabase, membership.groupId);
+  const [members, breakdowns] = await Promise.all([
+    getGroupMembers(supabase, membership.groupId),
+    getCategoryBreakdowns(supabase, membership.groupId),
+  ]);
   const { errors } = validateReceiptForm(
     state,
-    members.map((m) => m.userId)
+    members.map((m) => m.userId),
+    breakdowns
   );
   if (errors.length > 0) {
     return { success: false, errors };

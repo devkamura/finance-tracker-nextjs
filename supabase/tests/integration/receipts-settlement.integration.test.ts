@@ -76,7 +76,8 @@ describe("レシート・精算のRLS/RPC", () => {
   it("マスタデータが要件定義書どおりに整理されている", async () => {
     const { data: categories } = await admin.from("categories").select("name");
     const names = (categories ?? []).map((c) => c.name);
-    expect(names).toContain("交際費");
+    // 交際費は分析拡充で削除した（相手＝友人などで表す）
+    expect(names).not.toContain("交際費");
     expect(names).toContain("衣類・ファッション");
 
     const { data: purposes } = await admin.from("purposes").select("name");
