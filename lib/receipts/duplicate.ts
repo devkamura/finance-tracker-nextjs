@@ -14,7 +14,7 @@ export function findPartner<T extends { userId: string }>(
 
 // 複製レシート用の明細を作る。帰属先は「私→相方」のみ置き換え、
 // 「相方」「共同」はそのまま（相方のために買った物が複製で私の物にならないように）。
-// それ以外の項目（商品名・価格・税区分・税率・カテゴリー・目的・シーン）は元と同じ。
+// それ以外の項目（商品名・価格・税区分・税率・カテゴリー・内訳・相手・タグ）は元と同じ。
 export function buildPartnerItems(
   items: ReceiptItem[],
   currentUserId: string,
@@ -23,6 +23,6 @@ export function buildPartnerItems(
   return items.map((item) => {
     const ownerUserId =
       item.ownerUserId === currentUserId ? partnerUserId : item.ownerUserId;
-    return { ...item, sceneIds: [...item.sceneIds], ownerUserId };
+    return { ...item, tagIds: [...item.tagIds], ownerUserId };
   });
 }

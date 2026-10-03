@@ -6,12 +6,12 @@ import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildReceiptDetailRows,
-  buildReceiptDetailSceneRows,
+  buildReceiptDetailTagRows,
   resolvePayeeName,
 } from "@/lib/receipts/shared";
 import { buildPartnerItems, findPartner } from "@/lib/receipts/duplicate";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
-import { getCategoryBreakdowns } from "@/lib/settings/queries";
+import { getCategoryBreakdowns, getCounterparts, getTags } from "@/lib/settings/queries";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState, ReceiptItem } from "@/types/receipt";
 
@@ -53,14 +53,17 @@ export async function createReceipt(
     return { success: false, errors: ["グループに所属していません。"] };
   }
 
-  const [members, breakdowns] = await Promise.all([
+  const [members, breakdowns, tags] = await Promise.all([
     getGroupMembers(supabase, membership.groupId),
     getCategoryBreakdowns(supabase, membership.groupId),
+    getTags(supabase, membership.groupId),
   ]);
+  const counterparts = await getCounterparts(supabase, membership.groupId, members);
   const { errors } = validateReceiptForm(
     state,
     members.map((m) => m.userId),
-    breakdowns
+    breakdowns,
+    { counterparts, tags }
   );
   if (errors.length > 0) {
     return { success: false, errors };
@@ -141,7 +144,7 @@ export async function createReceipt(
     });
     if (!partnerResult.success) {
       // 2件とも登録するか両方登録しないかのどちらかにするため、自分のレシートも取り消す
-      // （明細・シーンはon delete cascadeで消える）。ベストエフォートの補償処理。
+      // （明細・タグはon delete cascadeで消える）。ベストエフォートの補償処理。
       await supabase.from("receipts").delete().eq("id", ownResult.receiptId);
       if (ownResult.receiptImagePath) {
         await deleteReceiptImage(supabase, ownResult.receiptImagePath);
@@ -174,7 +177,7 @@ type InsertReceiptResult =
   | { success: true; receiptId: string; receiptImagePath: string | null }
   | { success: false; error: string };
 
-// レシート1件分（画像・本体・明細・シーン）を登録する。
+// レシート1件分（画像・本体・明細・タグ）を登録する。
 // 途中で失敗した場合は、その1件分で作成済みのデータを補償的に削除してからエラーを返す。
 async function insertReceiptWithDetails(
   supabase: SupabaseClient,
@@ -238,14 +241,14 @@ async function insertReceiptWithDetails(
     return { success: false, error: "レシート明細の登録に失敗しました。" };
   }
 
-  const sceneRows = buildReceiptDetailSceneRows(input.items, insertedDetails);
-  if (sceneRows.length > 0) {
-    const { error: sceneError } = await supabase
-      .from("receipt_detail_scenes")
-      .insert(sceneRows);
-    if (sceneError) {
-      // シーンはあくまで任意タグのため、失敗してもレシート登録全体は成功とする。
-      console.error("Failed to insert receipt detail scenes", sceneError);
+  const tagRows = buildReceiptDetailTagRows(input.items, insertedDetails);
+  if (tagRows.length > 0) {
+    const { error: tagError } = await supabase
+      .from("receipt_detail_tags")
+      .insert(tagRows);
+    if (tagError) {
+      // タグはあくまで任意のラベルのため、失敗してもレシート登録全体は成功とする。
+      console.error("Failed to insert receipt detail tags", tagError);
     }
   }
 

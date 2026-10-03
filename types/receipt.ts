@@ -1,4 +1,5 @@
 import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
+import type { Counterpart, Tag } from "@/lib/receipts/labels";
 
 export type TaxType = "inclusive" | "exclusive";
 
@@ -11,8 +12,10 @@ export type ReceiptItem = {
   categoryId: string;
   // 内訳。"" または実際の内訳ID（内訳を設定したカテゴリでは必須。docs/分析拡充/基本設計書.md 3.1節）
   breakdownId: string;
-  purposeId: string;
-  sceneIds: string[];
+  // 相手（必須。docs/分析拡充/基本設計書.md 3.3節）
+  counterpartId: string;
+  // タグ（任意・複数）
+  tagIds: string[];
   // 帰属先。OWNER_JOINT_VALUE（共同）または実際のuser id
   ownerUserId: string;
 };
@@ -42,8 +45,9 @@ export type MasterData = {
   categories: { id: number; name: string }[];
   // カテゴリの内訳（非表示のものも含む。編集時に既存の値を表示するため）
   breakdowns: CategoryBreakdown[];
-  purposes: { id: number; name: string }[];
-  scenes: { id: number; name: string }[];
+  // 相手・タグ（非表示のものも含む。編集時に既存の値を表示するため）
+  counterparts: Counterpart[];
+  tags: Tag[];
   members: GroupMemberOption[];
 };
 
@@ -75,11 +79,11 @@ export type ReceiptDetailItemView = {
   categoryName: string;
   breakdownId: number | null;
   breakdownName: string | null; // 内訳なしはnull
-  purposeName: string;
+  counterpartName: string;
   ownerUserId: string | null;
   ownerDisplayName: string; // "共同" またはユーザー表示名
   ownerColor: string | null; // 共同の場合はnull
-  sceneNames: string[];
+  tagNames: string[];
 };
 
 export type ReceiptDetailView = {

@@ -1,5 +1,5 @@
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
-import { getCategoryBreakdowns } from "@/lib/settings/queries";
+import { getCategoryBreakdowns, getCounterparts, getTags } from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,28 +16,26 @@ export default async function Home() {
     { data: transactionTypes, error: transactionTypesError },
     { data: consumptionTaxes, error: consumptionTaxesError },
     { data: categories, error: categoriesError },
-    { data: purposes, error: purposesError },
-    { data: scenes, error: scenesError },
     members,
     breakdowns,
+    tags,
   ] = await Promise.all([
     supabase.from("payees").select("id, name").order("id"),
     supabase.from("transaction_types").select("id, name").order("id"),
     supabase.from("consumption_taxes").select("id, name, multiplier").order("id"),
     supabase.from("categories").select("id, name").order("id"),
-    supabase.from("purposes").select("id, name").order("id"),
-    supabase.from("scenes").select("id, name").order("id"),
     getGroupMembers(supabase, membership!.groupId),
     getCategoryBreakdowns(supabase, membership!.groupId),
+    getTags(supabase, membership!.groupId),
   ]);
+  // メンバーの相手の名前はメンバーの表示名を使うため、メンバーの取得後に取得する
+  const counterparts = await getCounterparts(supabase, membership!.groupId, members);
 
   const error =
     payeesError ||
     transactionTypesError ||
     consumptionTaxesError ||
-    categoriesError ||
-    purposesError ||
-    scenesError;
+    categoriesError;
   if (error) {
     throw error;
   }
@@ -53,8 +51,8 @@ export default async function Home() {
         consumptionTaxes: consumptionTaxes!,
         categories: categories!,
         breakdowns,
-        purposes: purposes!,
-        scenes: scenes!,
+        counterparts,
+        tags,
         members,
       }}
       defaultTransactionTypeId={String(defaultTransactionType?.id ?? "")}

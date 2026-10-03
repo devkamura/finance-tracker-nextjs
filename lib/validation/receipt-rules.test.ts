@@ -2,13 +2,34 @@ import { describe, expect, it } from "vitest";
 
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
-import { validateReceiptForm } from "@/lib/validation/receipt-rules";
+import type { Counterpart, Tag } from "@/lib/receipts/labels";
+import { validateReceiptForm as validateWithLabels } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState, ReceiptItem } from "@/types/receipt";
 
 const USER_A = "user-a";
 const USER_B = "user-b";
 const MEMBER_USER_IDS = [USER_A, USER_B];
 const NO_BREAKDOWNS: CategoryBreakdown[] = [];
+
+// グループの相手・タグ（id 2 の相手・id 6 のタグは非表示）
+const COUNTERPARTS: Counterpart[] = [
+  { id: 1, kind: "default", userId: null, name: "ふたり", isHidden: false },
+  { id: 2, kind: "default", userId: null, name: "実家", isHidden: true },
+];
+const TAGS: Tag[] = [
+  { id: 5, name: "朝食", isHidden: false },
+  { id: 6, name: "旧タグ", isHidden: true },
+];
+
+// 相手・タグを省略したときは上の値で検証する
+function validateReceiptForm(
+  state: ReceiptFormState,
+  memberUserIds: string[],
+  breakdowns: CategoryBreakdown[],
+  labels = { counterparts: COUNTERPARTS, tags: TAGS }
+) {
+  return validateWithLabels(state, memberUserIds, breakdowns, labels);
+}
 
 function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
   return {
@@ -19,8 +40,8 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxRateId: "",
     categoryId: "1",
     breakdownId: "",
-    purposeId: "1",
-    sceneIds: [],
+    counterpartId: "1",
+    tagIds: [],
     ownerUserId: OWNER_JOINT_VALUE,
     ...overrides,
   };
@@ -110,21 +131,21 @@ describe("validateReceiptForm", () => {
     expect(result.fieldErrors.items["1"]?.taxRateId).toBeUndefined();
   });
 
-  it("requires item categoryId, purposeId", () => {
+  it("requires item categoryId, counterpartId", () => {
     const result = validateReceiptForm(
       buildState({
-        items: [buildItem({ categoryId: "", purposeId: "" })],
+        items: [buildItem({ categoryId: "", counterpartId: "" })],
       }),
       MEMBER_USER_IDS, NO_BREAKDOWNS
     );
     expect(result.errors).toEqual(
       expect.arrayContaining([
         "項目1: カテゴリーは必須です。",
-        "項目1: 目的は必須です。",
+        "項目1: 相手は必須です。",
       ])
     );
     expect(result.fieldErrors.items["1"]?.categoryId).toBe(true);
-    expect(result.fieldErrors.items["1"]?.purposeId).toBe(true);
+    expect(result.fieldErrors.items["1"]?.counterpartId).toBe(true);
   });
 
   it("allows an owner of the joint sentinel value", () => {
@@ -196,6 +217,39 @@ describe("validateReceiptForm", () => {
         buildItem({ categoryId: "3", breakdownId: "" }),
       ]) {
         const result = validateReceiptForm(buildState({ items: [item] }), MEMBER_USER_IDS, breakdowns);
+        expect(result.errors).toEqual([]);
+      }
+    });
+  });
+
+  describe("相手・タグ（docs/分析拡充/基本設計書.md 3.3節）", () => {
+    it("U-101: グループにない相手は「相手が不正です。」", () => {
+      const result = validateReceiptForm(
+        buildState({ items: [buildItem({ counterpartId: "999" })] }),
+        MEMBER_USER_IDS,
+        NO_BREAKDOWNS
+      );
+      expect(result.errors).toContain("項目1: 相手が不正です。");
+      expect(result.fieldErrors.items["1"]?.counterpartId).toBe(true);
+    });
+
+    it("U-101: グループにないタグが含まれていれば「タグが不正です。」", () => {
+      const result = validateReceiptForm(
+        buildState({ items: [buildItem({ tagIds: ["5", "999"] })] }),
+        MEMBER_USER_IDS,
+        NO_BREAKDOWNS
+      );
+      expect(result.errors).toContain("項目1: タグが不正です。");
+      expect(result.fieldErrors.items["1"]?.tagIds).toBe(true);
+    });
+
+    it("U-101: 非表示でも既存の相手・タグ、タグなしはエラーにならない", () => {
+      for (const item of [
+        buildItem({ counterpartId: "2", tagIds: ["6"] }),
+        buildItem({ counterpartId: "1", tagIds: ["5"] }),
+        buildItem({ counterpartId: "1", tagIds: [] }),
+      ]) {
+        const result = validateReceiptForm(buildState({ items: [item] }), MEMBER_USER_IDS, NO_BREAKDOWNS);
         expect(result.errors).toEqual([]);
       }
     });

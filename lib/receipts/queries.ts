@@ -96,19 +96,34 @@ type RawReceiptDetail = {
     | { name: string; multiplier: number }[]
     | null;
   categories: { name: string } | { name: string }[] | null;
-  purposes: { name: string } | { name: string }[] | null;
-  receipt_detail_scenes: {
-    scenes: { name: string } | { name: string }[] | null;
+  counterparts: RawCounterpart | RawCounterpart[] | null;
+  receipt_detail_tags: {
+    tags: { name: string; sort_order: number } | { name: string; sort_order: number }[] | null;
   }[];
 };
+
+type RawCounterpart = { kind: string; user_id: string | null; name: string | null };
+
+// 明細の相手の表示名。メンバーの相手はメンバーの表示名（グループから外れたメンバーは unknown）。
+function counterpartDisplayName(
+  counterpart: RawCounterpart | null,
+  memberInfo: Map<string, MemberInfo>
+): string {
+  if (!counterpart) return "";
+  if (counterpart.kind === "member") {
+    return memberInfo.get(counterpart.user_id ?? "")?.displayName ?? "unknown";
+  }
+  return counterpart.name ?? "";
+}
 
 const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_name, amount, payer_user_id, receipt_image_path,
    is_duplicated, created_by,
    transaction_types(name),
    receipt_details(
      id, item_name, price, tax_type, owner_user_id, category_id, breakdown_id,
-     consumption_taxes(name, multiplier), categories(name), category_breakdowns(name), purposes(name),
-     receipt_detail_scenes(scenes(name))
+     consumption_taxes(name, multiplier), categories(name), category_breakdowns(name),
+     counterparts(kind, user_id, name),
+     receipt_detail_tags(tags(name, sort_order))
    )`;
 
 function mapReceiptDetailItems(
@@ -126,7 +141,7 @@ function mapReceiptDetailItems(
     breakdownId: detail.breakdown_id,
     breakdownName: unwrapToOne(detail.category_breakdowns)?.name ?? null,
     categoryName: unwrapToOne(detail.categories)?.name ?? "",
-    purposeName: unwrapToOne(detail.purposes)?.name ?? "",
+    counterpartName: counterpartDisplayName(unwrapToOne(detail.counterparts), memberInfo),
     ownerUserId: detail.owner_user_id,
     ownerDisplayName:
       detail.owner_user_id === null
@@ -136,9 +151,12 @@ function mapReceiptDetailItems(
       detail.owner_user_id === null
         ? null
         : (memberInfo.get(detail.owner_user_id)?.color ?? null),
-    sceneNames: detail.receipt_detail_scenes
-      .map((s) => unwrapToOne(s.scenes)?.name)
-      .filter((name): name is string => Boolean(name)),
+    // タグは設定画面の並び順で表示する
+    tagNames: detail.receipt_detail_tags
+      .map((t) => unwrapToOne(t.tags))
+      .filter((tag): tag is { name: string; sort_order: number } => Boolean(tag))
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((tag) => tag.name),
   }));
 }
 
@@ -270,9 +288,9 @@ type RawEditDetail = {
   tax_rate_id: number | null;
   category_id: number;
   breakdown_id: number | null;
-  purpose_id: number;
+  counterpart_id: number;
   owner_user_id: string | null;
-  receipt_detail_scenes: { scene_id: number }[];
+  receipt_detail_tags: { tag_id: number }[];
 };
 
 // レシート編集フォームの初期値（IDベース）を取得する。getReceiptDetailは
@@ -287,8 +305,8 @@ export async function getReceiptForEdit(
     .select(
       `id, occurred_at, payee_id, payee_name, transaction_type_id, amount, receipt_image_path, payer_user_id,
        receipt_details(
-         id, item_name, price, tax_type, tax_rate_id, category_id, breakdown_id, purpose_id, owner_user_id,
-         receipt_detail_scenes(scene_id)
+         id, item_name, price, tax_type, tax_rate_id, category_id, breakdown_id, counterpart_id, owner_user_id,
+         receipt_detail_tags(tag_id)
        )`
     )
     .eq("id", receiptId)
@@ -320,8 +338,8 @@ export async function getReceiptForEdit(
     taxRateId: d.tax_rate_id !== null ? String(d.tax_rate_id) : "",
     categoryId: String(d.category_id),
     breakdownId: d.breakdown_id !== null ? String(d.breakdown_id) : "",
-    purposeId: String(d.purpose_id),
-    sceneIds: d.receipt_detail_scenes.map((s) => String(s.scene_id)),
+    counterpartId: String(d.counterpart_id),
+    tagIds: d.receipt_detail_tags.map((t) => String(t.tag_id)),
     ownerUserId: d.owner_user_id ?? OWNER_JOINT_VALUE,
   }));
 

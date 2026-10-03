@@ -18,11 +18,11 @@ function item(id: string, categoryId: number, price: number): ReceiptDetailItemV
     breakdownId: null,
     breakdownName: null,
     categoryName: categoryId === FOOD ? "食費" : "日用品",
-    purposeName: "生活維持",
+    counterpartName: "ふたり",
     ownerUserId: null,
     ownerDisplayName: "共同",
     ownerColor: null,
-    sceneNames: [],
+    tagNames: [],
   };
 }
 

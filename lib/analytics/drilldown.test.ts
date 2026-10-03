@@ -27,11 +27,11 @@ function item(
     breakdownId: null,
     breakdownName: null,
     categoryName: categoryId === FOOD ? "食費" : "日用品",
-    purposeName: "生活維持",
+    counterpartName: "ふたり",
     ownerUserId,
     ownerDisplayName: ownerUserId ?? "共同",
     ownerColor: null,
-    sceneNames: [],
+    tagNames: [],
   };
 }
 

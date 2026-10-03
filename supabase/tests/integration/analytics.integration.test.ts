@@ -23,7 +23,6 @@ describe("支出分析のデータ取得", () => {
   let otherGroupId: string;
   let foodId: number;
   let dailyId: number;
-  let purposeId: number;
   let expenseTypeId: number;
 
   // service_roleでレシートと明細（1件ずつ）をまとめて登録する。
@@ -45,6 +44,15 @@ describe("支出分析のデータ取得", () => {
     const { error: receiptError } = await admin.from("receipts").insert(receipts);
     if (receiptError) throw receiptError;
 
+    // 相手はグループごとのため、登録先のグループの「ふたり」を使う
+    const { data: counterpart, error: counterpartError } = await admin
+      .from("counterparts")
+      .select("id")
+      .eq("group_id", targetGroupId)
+      .eq("name", "ふたり")
+      .single();
+    if (counterpartError) throw counterpartError;
+
     const { error: detailError } = await admin.from("receipt_details").insert(
       receipts.map((r, i) => ({
         receipt_id: r.id,
@@ -52,7 +60,7 @@ describe("支出分析のデータ取得", () => {
         price: r.amount,
         tax_type: "inclusive",
         category_id: items[i].categoryId,
-        purpose_id: purposeId,
+        counterpart_id: counterpart.id,
         owner_user_id: null,
       }))
     );
@@ -77,16 +85,14 @@ describe("支出分析のデータ取得", () => {
     if (otherGroupError) throw otherGroupError;
     otherGroupId = otherGroup.id;
 
-    const [{ data: food }, { data: daily }, { data: purpose }, { data: types }] =
+    const [{ data: food }, { data: daily }, { data: types }] =
       await Promise.all([
         admin.from("categories").select("id").eq("name", "食費").single(),
         admin.from("categories").select("id").eq("name", "日用品").single(),
-        admin.from("purposes").select("id").eq("name", "生活維持").single(),
         admin.from("transaction_types").select("id, name"),
       ]);
     foodId = food!.id;
     dailyId = daily!.id;
-    purposeId = purpose!.id;
     expenseTypeId = types!.find((t) => t.name === "支出")!.id;
 
     // I-28用：取得上限（1,000件）を超える1,001件（2026年9月・食費・各100円）

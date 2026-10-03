@@ -4,11 +4,11 @@ import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildReceiptDetailRows,
-  buildReceiptDetailSceneRows,
+  buildReceiptDetailTagRows,
   resolvePayeeName,
 } from "@/lib/receipts/shared";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
-import { getCategoryBreakdowns } from "@/lib/settings/queries";
+import { getCategoryBreakdowns, getCounterparts, getTags } from "@/lib/settings/queries";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState } from "@/types/receipt";
 
@@ -62,12 +62,17 @@ export async function updateReceipt(
     return { success: false, errors: ["レシートが見つかりません。"] };
   }
 
-  const [members, breakdowns] = await Promise.all([
+  const [members, breakdowns, tags] = await Promise.all([
     getGroupMembers(supabase, membership.groupId),
     getCategoryBreakdowns(supabase, membership.groupId),
+    getTags(supabase, membership.groupId),
   ]);
+  const counterparts = await getCounterparts(supabase, membership.groupId, members);
   const memberUserIds = members.map((m) => m.userId);
-  const { errors } = validateReceiptForm(state, memberUserIds, breakdowns);
+  const { errors } = validateReceiptForm(state, memberUserIds, breakdowns, {
+    counterparts,
+    tags,
+  });
   if (!memberUserIds.includes(state.payerUserId)) {
     errors.push("支払者が不正です。");
   }
@@ -148,7 +153,7 @@ export async function updateReceipt(
     return { success: false, errors: ["レシートの更新に失敗しました。"] };
   }
 
-  // 明細は一旦削除して作り直す（receipt_detail_scenesはon delete cascadeで連動削除される）。
+  // 明細は一旦削除して作り直す（receipt_detail_tagsはon delete cascadeで連動削除される）。
   const { error: deleteDetailsError } = await supabase
     .from("receipt_details")
     .delete()
@@ -168,13 +173,13 @@ export async function updateReceipt(
     return { success: false, errors: ["レシート明細の更新に失敗しました。"] };
   }
 
-  const sceneRows = buildReceiptDetailSceneRows(state.items, insertedDetails);
-  if (sceneRows.length > 0) {
-    const { error: sceneError } = await supabase
-      .from("receipt_detail_scenes")
-      .insert(sceneRows);
-    if (sceneError) {
-      console.error("Failed to insert receipt detail scenes", sceneError);
+  const tagRows = buildReceiptDetailTagRows(state.items, insertedDetails);
+  if (tagRows.length > 0) {
+    const { error: tagError } = await supabase
+      .from("receipt_detail_tags")
+      .insert(tagRows);
+    if (tagError) {
+      console.error("Failed to insert receipt detail tags", tagError);
     }
   }
 

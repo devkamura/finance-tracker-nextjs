@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CategoryBreakdown, CostType } from "@/lib/receipts/breakdowns";
+import type { Counterpart, CounterpartKind, Tag } from "@/lib/receipts/labels";
 
 // グループのカテゴリの内訳を取得する（非表示のものも含む。並び順→登録順）。
 // 登録画面の選択肢・入力チェック、設定画面の両方で使う。
@@ -55,4 +56,46 @@ export async function getCategoriesWithCostType(
     name: c.name,
     costType: overrides.get(c.id) ?? (c.default_cost_type as CostType),
   }));
+}
+
+// グループの相手を取得する（非表示のものも含む。並び順→登録順。基本設計書 2.4節）。
+// メンバーの相手の名前は、グループのメンバーの表示名を使う。グループから外れたメンバーの相手は
+// 選択肢・設定画面に出さないため含めない（既存の明細の表示は receipts/queries.ts で行う）。
+export async function getCounterparts(
+  supabase: SupabaseClient,
+  groupId: string,
+  members: { userId: string; displayName: string }[]
+): Promise<Counterpart[]> {
+  const { data, error } = await supabase
+    .from("counterparts")
+    .select("id, kind, user_id, name, is_hidden")
+    .eq("group_id", groupId)
+    .order("sort_order")
+    .order("id");
+  if (error) {
+    throw error;
+  }
+  const memberNames = new Map(members.map((m) => [m.userId, m.displayName]));
+  return (data ?? []).flatMap((row) => {
+    const kind = row.kind as CounterpartKind;
+    const name = kind === "member" ? memberNames.get(row.user_id ?? "") : row.name;
+    if (name === undefined || name === null) {
+      return [];
+    }
+    return [{ id: row.id, kind, userId: row.user_id, name, isHidden: row.is_hidden }];
+  });
+}
+
+// グループのタグを取得する（非表示のものも含む。並び順→登録順。基本設計書 2.5節）
+export async function getTags(supabase: SupabaseClient, groupId: string): Promise<Tag[]> {
+  const { data, error } = await supabase
+    .from("tags")
+    .select("id, name, is_hidden")
+    .eq("group_id", groupId)
+    .order("sort_order")
+    .order("id");
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).map((row) => ({ id: row.id, name: row.name, isHidden: row.is_hidden }));
 }

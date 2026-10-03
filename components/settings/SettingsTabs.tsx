@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// 設定画面のタブ。相手・タグ・支払い先は、分析拡充の F2・F3 で追加する。
-const TABS = [{ href: "/settings/categories", label: "カテゴリ" }];
+// 設定画面のタブ。支払い先は、分析拡充の F3 で追加する。
+const TABS = [
+  { href: "/settings/categories", label: "カテゴリ" },
+  { href: "/settings/counterparts", label: "相手" },
+  { href: "/settings/tags", label: "タグ" },
+];
 
 export function SettingsTabs() {
   const pathname = usePathname();

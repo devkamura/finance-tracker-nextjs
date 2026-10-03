@@ -25,3 +25,22 @@ export async function requireGroupAdmin(): Promise<
   }
   return { ok: true, context: { supabase, groupId: membership.groupId } };
 }
+
+// 設定画面のうち、グループのメンバー全員が編集できる操作（タグ）で使う、ログイン・グループ所属の確認。
+// 最終的な防御はDBのRLS（my_group_ids）が担う。
+export async function requireGroupMember(): Promise<
+  { ok: true; context: AdminContext } | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "ログインが必要です。" };
+  }
+  const membership = await getCurrentMembership(supabase, user.id);
+  if (!membership) {
+    return { ok: false, error: "グループに所属していません。" };
+  }
+  return { ok: true, context: { supabase, groupId: membership.groupId } };
+}

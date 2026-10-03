@@ -83,8 +83,8 @@ describe("listReceipts", () => {
             category_id: 3,
             consumption_taxes: { name: "8%", multiplier: 1.08 },
             categories: { name: "食費" },
-            purposes: { name: "生活維持" },
-            receipt_detail_scenes: [],
+            counterparts: { kind: "default", user_id: null, name: "ふたり" },
+            receipt_detail_tags: [],
           },
           {
             id: "d2",
@@ -95,8 +95,8 @@ describe("listReceipts", () => {
             category_id: 4,
             consumption_taxes: null,
             categories: { name: "日用品" },
-            purposes: { name: "生活維持" },
-            receipt_detail_scenes: [],
+            counterparts: { kind: "default", user_id: null, name: "ふたり" },
+            receipt_detail_tags: [],
           },
         ],
       }),
@@ -122,8 +122,8 @@ describe("listReceipts", () => {
       category_id: 1,
       consumption_taxes: null,
       categories: { name: "食費" },
-      purposes: { name: "生活維持" },
-      receipt_detail_scenes: [],
+      counterparts: { kind: "default", user_id: null, name: "ふたり" },
+      receipt_detail_tags: [],
     };
     const supabase = fakeSupabase([
       buildRow({
@@ -142,6 +142,49 @@ describe("listReceipts", () => {
     expect(receipt.items.map((i) => [i.breakdownId, i.breakdownName])).toEqual([
       [10, "外食"],
       [null, null],
+    ]);
+  });
+
+  it("U-100: 相手の表示名（メンバーは表示名、外れたメンバーはunknown）とタグ名（並び順）が入る", async () => {
+    const detail = {
+      item_name: "x",
+      price: 100,
+      tax_type: "inclusive",
+      owner_user_id: null,
+      category_id: 1,
+      breakdown_id: null,
+      category_breakdowns: null,
+      consumption_taxes: null,
+      categories: { name: "食費" },
+      receipt_detail_tags: [],
+    };
+    const supabase = fakeSupabase([
+      buildRow({
+        receipt_details: [
+          {
+            ...detail,
+            id: "d1",
+            counterparts: { kind: "default", user_id: null, name: "友人" },
+            receipt_detail_tags: [
+              { tags: { name: "夕食", sort_order: 3 } },
+              { tags: { name: "朝食", sort_order: 1 } },
+            ],
+          },
+          { ...detail, id: "d2", counterparts: { kind: "member", user_id: USER_A, name: null } },
+          { ...detail, id: "d3", counterparts: { kind: "member", user_id: "gone", name: null } },
+        ],
+      }),
+    ]);
+
+    const [receipt] = await listReceipts(supabase, "group-1", {
+      from: new Date(2026, 8, 1),
+      to: new Date(2026, 9, 1),
+    });
+
+    expect(receipt.items.map((i) => [i.counterpartName, i.tagNames])).toEqual([
+      ["友人", ["朝食", "夕食"]],
+      ["あきら", []],
+      ["unknown", []],
     ]);
   });
 });

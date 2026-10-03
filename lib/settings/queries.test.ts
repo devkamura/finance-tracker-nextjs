@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { getCategoriesWithCostType, getCategoryBreakdowns } from "@/lib/settings/queries";
+import {
+  getCategoriesWithCostType,
+  getCategoryBreakdowns,
+  getCounterparts,
+  getTags,
+} from "@/lib/settings/queries";
 
 // テーブルごとに返すデータを決めた、Supabaseクエリビルダーの最小限の再現
 function fakeSupabase(tables: Record<string, unknown[]>) {
@@ -47,6 +52,37 @@ describe("settings/queries", () => {
     expect(await getCategoryBreakdowns(supabase, "group-1")).toEqual([
       { id: 10, categoryId: 1, name: "外食", isHidden: false },
       { id: 11, categoryId: 1, name: "旧", isHidden: true },
+    ]);
+  });
+
+  it("U-106: 相手のメンバーは表示名を使い、グループから外れたメンバーの相手は含めない", async () => {
+    const supabase = fakeSupabase({
+      counterparts: [
+        { id: 1, kind: "member", user_id: "user-a", name: null, is_hidden: false },
+        { id: 2, kind: "member", user_id: "gone", name: null, is_hidden: false },
+        { id: 3, kind: "default", user_id: null, name: "ふたり", is_hidden: false },
+        { id: 4, kind: "custom", user_id: null, name: "同僚", is_hidden: true },
+      ],
+    });
+    expect(
+      await getCounterparts(supabase, "group-1", [{ userId: "user-a", displayName: "あきら" }])
+    ).toEqual([
+      { id: 1, kind: "member", userId: "user-a", name: "あきら", isHidden: false },
+      { id: 3, kind: "default", userId: null, name: "ふたり", isHidden: false },
+      { id: 4, kind: "custom", userId: null, name: "同僚", isHidden: true },
+    ]);
+  });
+
+  it("U-106: タグを画面用の形（非表示を含む）に変換する", async () => {
+    const supabase = fakeSupabase({
+      tags: [
+        { id: 5, name: "朝食", is_hidden: false },
+        { id: 6, name: "旧", is_hidden: true },
+      ],
+    });
+    expect(await getTags(supabase, "group-1")).toEqual([
+      { id: 5, name: "朝食", isHidden: false },
+      { id: 6, name: "旧", isHidden: true },
     ]);
   });
 });

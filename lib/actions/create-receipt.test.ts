@@ -11,6 +11,11 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 // 内訳はこのテストの対象外（内訳なし＝必須チェックなし）
 vi.mock("@/lib/settings/queries", () => ({
   getCategoryBreakdowns: vi.fn().mockResolvedValue([]),
+  // 相手は id 1 だけ、タグは id 5 だけがグループのもの
+  getCounterparts: vi
+    .fn()
+    .mockResolvedValue([{ id: 1, kind: "default", userId: null, name: "ふたり", isHidden: false }]),
+  getTags: vi.fn().mockResolvedValue([{ id: 5, name: "朝食", isHidden: false }]),
 }));
 vi.mock("@/lib/supabase/group", () => ({
   getCurrentMembership: vi.fn(),
@@ -39,8 +44,8 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxRateId: "",
     categoryId: "1",
     breakdownId: "",
-    purposeId: "1",
-    sceneIds: [],
+    counterpartId: "1",
+    tagIds: [],
     ownerUserId: OWNER_JOINT_VALUE,
     ...overrides,
   };
@@ -98,6 +103,7 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
   const receiptInserts: Record<string, unknown>[] = [];
   const receiptDeletes: string[] = [];
   const detailInserts: Record<string, unknown>[][] = [];
+  const tagInserts: Record<string, unknown>[][] = [];
 
   const from = vi.fn((table: string) => {
     if (table === "payees") {
@@ -144,8 +150,13 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
         }),
       };
     }
-    if (table === "receipt_detail_scenes") {
-      return { insert: vi.fn().mockResolvedValue({ error: null }) };
+    if (table === "receipt_detail_tags") {
+      return {
+        insert: vi.fn((rows: Record<string, unknown>[]) => {
+          tagInserts.push(rows);
+          return Promise.resolve({ error: null });
+        }),
+      };
     }
     throw new Error(`unexpected table: ${table}`);
   });
@@ -159,6 +170,7 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
     receiptInserts,
     receiptDeletes,
     detailInserts,
+    tagInserts,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
@@ -431,6 +443,36 @@ describe("createReceipt", () => {
     expect(result).toEqual({
       success: false,
       errors: ["相方がグループにいないため、複製登録できません。"],
+    });
+    expect(supabase.receiptInserts).toHaveLength(0);
+  });
+
+  it("U-102: 明細の相手を保存し、タグを明細ごとに登録する", async () => {
+    const supabase = fakeSupabase();
+    mockedCreateClient.mockResolvedValue(supabase);
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+    const result = await createReceipt(
+      buildFormData(buildState({ items: [buildItem({ counterpartId: "1", tagIds: ["5"] })] }))
+    );
+
+    expect(result.success).toBe(true);
+    expect(supabase.detailInserts[0][0]).toMatchObject({ counterpart_id: 1 });
+    expect(supabase.tagInserts).toEqual([[{ receipt_detail_id: "detail-1", tag_id: 5 }]]);
+  });
+
+  it("U-102: グループにない相手・タグは登録しない", async () => {
+    const supabase = fakeSupabase();
+    mockedCreateClient.mockResolvedValue(supabase);
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+    const result = await createReceipt(
+      buildFormData(buildState({ items: [buildItem({ counterpartId: "999", tagIds: ["999"] })] }))
+    );
+
+    expect(result).toEqual({
+      success: false,
+      errors: ["項目1: 相手が不正です。", "項目1: タグが不正です。"],
     });
     expect(supabase.receiptInserts).toHaveLength(0);
   });

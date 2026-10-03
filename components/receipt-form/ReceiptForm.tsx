@@ -53,8 +53,8 @@ function createEmptyItem(): ReceiptItem {
     taxRateId: "",
     categoryId: "",
     breakdownId: "",
-    purposeId: "",
-    sceneIds: [],
+    counterpartId: "",
+    tagIds: [],
     // 帰属先は誤って共同のまま登録されることがないよう、既定は未選択にする。
     ownerUserId: "",
   };
@@ -91,14 +91,14 @@ export function buildOcrItem(
     taxRateId: resolveTaxRateId(item.taxRatePercent, consumptionTaxes),
     categoryId: "",
     breakdownId: "",
-    purposeId: "",
-    sceneIds: [],
+    counterpartId: "",
+    tagIds: [],
     ownerUserId: "",
   };
 }
 
 // OCR読み取り結果を既存フォームの状態にマッピングする。
-// カテゴリー・目的・帰属先はマスタ選択式でOCRからは判定できないため既定値のままとし、
+// カテゴリー・相手・帰属先はマスタ選択式でOCRからは判定できないため既定値のままとし、
 // 支払い先名は登録済みマスタと名称が一致すればプルダウン選択、一致しなければ
 // 手入力欄に反映する。
 function buildOcrPatch(
@@ -154,7 +154,8 @@ type ReceiptFormProps = {
   receiptId?: string;
   initialState?: ReceiptFormState;
   initialImageUrl?: string | null;
-  // ログインユーザーのid。相方分の複製登録で「相方」を特定するために使う（新規登録モードのみ）。
+  // ログインユーザーのid。相方分の複製登録で「相方」を特定する（新規登録モードのみ）ほか、
+  // 相手のプルダウンで自分を「自分（A）」と表示するために使う。
   currentUserId?: string;
   // 編集成功後の遷移先（一覧から開いていた月・並び順付きの詳細URLなど）。
   // 省略時は/receipts/{receiptId}へ遷移する。
@@ -249,13 +250,16 @@ export function ReceiptForm({
           values.breakdownId,
           masterData.breakdowns
         ),
-        purposeId: values.purposeId ?? item.purposeId,
+        counterpartId: values.counterpartId ?? item.counterpartId,
         ownerUserId: values.ownerUserId ?? item.ownerUserId,
       })),
     }));
 
   const handleSubmitClick = () => {
-    const result = validateReceiptForm(state, memberUserIds, masterData.breakdowns);
+    const result = validateReceiptForm(state, memberUserIds, masterData.breakdowns, {
+      counterparts: masterData.counterparts,
+      tags: masterData.tags,
+    });
     if (result.errors.length > 0) {
       setClientErrors(result.errors);
       setFieldErrors(result.fieldErrors);
@@ -393,6 +397,7 @@ export function ReceiptForm({
         openItemId={openItemId}
         onOpenItemChange={setOpenItemId}
         masterData={masterData}
+        currentUserId={currentUserId}
       />
 
       {partner && (
