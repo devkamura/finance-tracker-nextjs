@@ -1,5 +1,6 @@
 import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
 import type { Counterpart, Tag } from "@/lib/receipts/labels";
+import type { Payee } from "@/lib/receipts/payees";
 
 export type TaxType = "inclusive" | "exclusive";
 
@@ -39,7 +40,9 @@ export type GroupMemberOption = {
 };
 
 export type MasterData = {
-  payees: { id: number; name: string }[];
+  // 支払い先（グループ全体・全員の自分用・非表示のものも含む。プルダウンには
+  // グループ全体と自分用だけを出し、編集時は保存済みの支払い先も表示するため）
+  payees: Payee[];
   transactionTypes: { id: number; name: string }[];
   consumptionTaxes: { id: number; name: string; multiplier: number }[];
   categories: { id: number; name: string }[];

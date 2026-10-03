@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// 設定画面のタブ。支払い先は、分析拡充の F3 で追加する。
+// 設定画面のタブ（docs/分析拡充/基本設計書.md 2.2節）
 const TABS = [
   { href: "/settings/categories", label: "カテゴリ" },
   { href: "/settings/counterparts", label: "相手" },
   { href: "/settings/tags", label: "タグ" },
+  { href: "/settings/payees", label: "支払い先" },
 ];
 
 export function SettingsTabs() {

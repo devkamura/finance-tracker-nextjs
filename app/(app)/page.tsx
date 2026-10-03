@@ -1,5 +1,10 @@
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
-import { getCategoryBreakdowns, getCounterparts, getTags } from "@/lib/settings/queries";
+import {
+  getCategoryBreakdowns,
+  getCounterparts,
+  getPayees,
+  getTags,
+} from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,7 +17,7 @@ export default async function Home() {
   const membership = await getCurrentMembership(supabase, user!.id);
 
   const [
-    { data: payees, error: payeesError },
+    payees,
     { data: transactionTypes, error: transactionTypesError },
     { data: consumptionTaxes, error: consumptionTaxesError },
     { data: categories, error: categoriesError },
@@ -20,7 +25,7 @@ export default async function Home() {
     breakdowns,
     tags,
   ] = await Promise.all([
-    supabase.from("payees").select("id, name").order("id"),
+    getPayees(supabase, membership!.groupId),
     supabase.from("transaction_types").select("id, name").order("id"),
     supabase.from("consumption_taxes").select("id, name, multiplier").order("id"),
     supabase.from("categories").select("id, name").order("id"),
@@ -32,7 +37,6 @@ export default async function Home() {
   const counterparts = await getCounterparts(supabase, membership!.groupId, members);
 
   const error =
-    payeesError ||
     transactionTypesError ||
     consumptionTaxesError ||
     categoriesError;
@@ -46,7 +50,7 @@ export default async function Home() {
   return (
     <ReceiptForm
       masterData={{
-        payees: payees!,
+        payees,
         transactionTypes: transactionTypes!,
         consumptionTaxes: consumptionTaxes!,
         categories: categories!,

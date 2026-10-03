@@ -44,3 +44,33 @@ export async function requireGroupMember(): Promise<
   }
   return { ok: true, context: { supabase, groupId: membership.groupId } };
 }
+
+export type MembershipContext = AdminContext & { userId: string; isAdmin: boolean };
+
+// 設定画面のうち、対象によって編集できる人が変わる操作（支払い先：グループ全体は管理者、
+// 自分用は登録したユーザー本人）で使う、ログイン・グループ所属の確認。権限の判定は呼び出し側で行う。
+// 最終的な防御はDBのRLSが担う。
+export async function requireGroupMembership(): Promise<
+  { ok: true; context: MembershipContext } | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "ログインが必要です。" };
+  }
+  const membership = await getCurrentMembership(supabase, user.id);
+  if (!membership) {
+    return { ok: false, error: "グループに所属していません。" };
+  }
+  return {
+    ok: true,
+    context: {
+      supabase,
+      groupId: membership.groupId,
+      userId: user.id,
+      isAdmin: membership.role === "admin",
+    },
+  };
+}

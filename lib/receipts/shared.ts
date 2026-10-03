@@ -1,28 +1,28 @@
 import "server-only";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import { OWNER_JOINT_VALUE, SELECT_NONE_VALUE } from "@/lib/constants";
+import { isSelectablePayee, type Payee } from "@/lib/receipts/payees";
 import type { ReceiptItem } from "@/types/receipt";
 
-export async function resolvePayeeName(
-  supabase: SupabaseClient,
+// 選ばれた支払い先から、レシートに保存する支払い先ID・名前を求める。
+// 選べるのはグループ全体と自分用の、非表示でない支払い先（docs/分析拡充/基本設計書.md 3.5節）。
+// 編集で、保存済みの支払い先（相方用・非表示になったもの）をそのまま保存する場合は許す。
+export function resolvePayeeName(
+  payees: Payee[],
   payeeSelect: string,
-  payeeInputText: string
-): Promise<{ payeeId: number | null; payeeName: string }> {
+  payeeInputText: string,
+  currentUserId: string,
+  existingPayeeId: number | null = null
+): { payeeId: number | null; payeeName: string } {
   if (!payeeSelect || payeeSelect === SELECT_NONE_VALUE) {
     return { payeeId: null, payeeName: payeeInputText };
   }
 
-  const { data, error } = await supabase
-    .from("payees")
-    .select("name")
-    .eq("id", Number(payeeSelect))
-    .single();
-  if (error || !data) {
+  const payee = payees.find((p) => String(p.id) === payeeSelect);
+  if (!payee || (!isSelectablePayee(payee, currentUserId) && payee.id !== existingPayeeId)) {
     throw new Error("支払い先が見つかりません。");
   }
-  return { payeeId: Number(payeeSelect), payeeName: data.name };
+  return { payeeId: payee.id, payeeName: payee.name };
 }
 
 export function buildReceiptDetailRows(items: ReceiptItem[], receiptId: string) {
