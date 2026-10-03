@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
-import type { Counterpart } from "@/lib/receipts/labels";
+import type { Counterpart, Tag } from "@/lib/receipts/labels";
 import {
   applyPayeeDefaults,
   describePayeeDefaults,
@@ -33,6 +33,12 @@ const counterparts: Counterpart[] = [
   { id: 3, kind: "default", userId: null, name: "ふたり", isHidden: false },
   { id: 5, kind: "default", userId: null, name: "実家", isHidden: true },
 ];
+// タグ 7＝夕食、8＝朝食、9＝昼食（非表示）
+const tags: Tag[] = [
+  { id: 7, name: "夕食", isHidden: false },
+  { id: 8, name: "朝食", isHidden: false },
+  { id: 9, name: "昼食", isHidden: true },
+];
 const members = [
   { userId: USER_A, displayName: "A" },
   { userId: USER_B, displayName: "B" },
@@ -42,7 +48,7 @@ const categories = [
   { id: 2, name: "水道光熱費" },
   { id: 3, name: "日用品" },
 ];
-const context = { breakdowns, counterparts, members };
+const context = { breakdowns, counterparts, tags, members };
 
 function item(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
   return {
@@ -76,10 +82,16 @@ function payee(overrides: Partial<Payee> = {}): Payee {
 }
 
 describe("applyPayeeDefaults（支払い先の既定値の自動入力）", () => {
-  it("U-107: 設定された項目をすべて上書きする（入力済みの欄も上書き）", () => {
+  it("U-107: 既定値ですべての項目を上書きする（入力済みの欄も上書き）", () => {
     const result = applyPayeeDefaults(
       item(),
-      defaults({ categoryId: "2", breakdownId: "21", counterpartId: "3", ownerUserId: OWNER_JOINT_VALUE }),
+      defaults({
+        categoryId: "2",
+        breakdownId: "21",
+        counterpartId: "3",
+        ownerUserId: OWNER_JOINT_VALUE,
+        tagIds: ["8"],
+      }),
       context
     );
     expect(result).toMatchObject({
@@ -87,43 +99,54 @@ describe("applyPayeeDefaults（支払い先の既定値の自動入力）", () =
       breakdownId: "21",
       counterpartId: "3",
       ownerUserId: OWNER_JOINT_VALUE,
+      tagIds: ["8"],
     });
     // 既定値の対象外の項目はそのまま
-    expect(result).toMatchObject({ name: "ガス代", price: "8000", tagIds: ["7"] });
+    expect(result).toMatchObject({ name: "ガス代", price: "8000", taxType: "inclusive" });
   });
 
-  it("U-107: 設定されていない項目は残す", () => {
-    const result = applyPayeeDefaults(item(), defaults({ counterpartId: "3" }), context);
-    expect(result).toMatchObject({
-      categoryId: "1",
-      breakdownId: "11",
+  it("U-107: 既定値のない項目は未選択にする（入力済みの値・前の支払い先の値は残さない）", () => {
+    expect(applyPayeeDefaults(item(), defaults({ counterpartId: "3" }), context)).toMatchObject({
+      categoryId: "",
+      breakdownId: "",
       counterpartId: "3",
+      ownerUserId: "",
+      tagIds: [],
+    });
+    // 選び直したとき：前の支払い先で入った値も消える
+    const first = applyPayeeDefaults(
+      item(),
+      defaults({ categoryId: "2", counterpartId: "3", ownerUserId: OWNER_JOINT_VALUE, tagIds: ["7"] }),
+      context
+    );
+    expect(applyPayeeDefaults(first, defaults({ ownerUserId: USER_A }), context)).toMatchObject({
+      categoryId: "",
+      breakdownId: "",
+      counterpartId: "",
       ownerUserId: USER_A,
+      tagIds: [],
     });
   });
 
-  it("U-107: 既定値がなければ何も変えない", () => {
-    expect(applyPayeeDefaults(item(), EMPTY_PAYEE_DEFAULTS, context)).toEqual(item());
+  it("U-107: 既定値がまったくない支払い先では、すべて未選択にする", () => {
+    expect(applyPayeeDefaults(item(), EMPTY_PAYEE_DEFAULTS, context)).toEqual(
+      item({ categoryId: "", breakdownId: "", counterpartId: "", ownerUserId: "", tagIds: [] })
+    );
   });
 
-  it("U-107: カテゴリだけ設定されていてカテゴリが変わるときは、内訳を選び直す（1つだけなら自動で選ぶ）", () => {
+  it("U-107: 内訳の既定値がなければ、カテゴリの内訳が1つだけのとき自動で選び、それ以外は未選択", () => {
     expect(applyPayeeDefaults(item(), defaults({ categoryId: "2" }), context)).toMatchObject({
       categoryId: "2",
       breakdownId: "21",
     });
-    expect(
-      applyPayeeDefaults(item({ categoryId: "2", breakdownId: "21" }), defaults({ categoryId: "1" }), context)
-    ).toMatchObject({ categoryId: "1", breakdownId: "" });
+    // カテゴリが同じでも、今の内訳は残さない
+    expect(applyPayeeDefaults(item(), defaults({ categoryId: "1" }), context)).toMatchObject({
+      categoryId: "1",
+      breakdownId: "",
+    });
     expect(applyPayeeDefaults(item(), defaults({ categoryId: "3" }), context)).toMatchObject({
       categoryId: "3",
       breakdownId: "",
-    });
-  });
-
-  it("U-107: カテゴリが同じで内訳の既定値がなければ、今の内訳を残す", () => {
-    expect(applyPayeeDefaults(item(), defaults({ categoryId: "1" }), context)).toMatchObject({
-      categoryId: "1",
-      breakdownId: "11",
     });
   });
 
@@ -132,17 +155,20 @@ describe("applyPayeeDefaults（支払い先の既定値の自動入力）", () =
       applyPayeeDefaults(item(), defaults({ categoryId: "2", breakdownId: "12" }), context)
     ).toMatchObject({ categoryId: "2", breakdownId: "21" });
     expect(
-      applyPayeeDefaults(item({ categoryId: "3", breakdownId: "" }), defaults({ categoryId: "1", breakdownId: "13" }), context)
+      applyPayeeDefaults(item(), defaults({ categoryId: "1", breakdownId: "13" }), context)
     ).toMatchObject({ categoryId: "1", breakdownId: "" });
   });
 
-  it("U-107: 非表示の相手、グループにいないメンバーの帰属先は入れない", () => {
-    const result = applyPayeeDefaults(
-      item(),
-      defaults({ counterpartId: "5", ownerUserId: "left-user" }),
-      context
-    );
-    expect(result).toMatchObject({ counterpartId: "1", ownerUserId: USER_A });
+  it("U-107: 非表示の相手・タグ、グループにいないメンバーの帰属先は入れず、未選択にする", () => {
+    expect(
+      applyPayeeDefaults(
+        item(),
+        defaults({ counterpartId: "5", ownerUserId: "left-user", tagIds: ["9", "99"] }),
+        context
+      )
+    ).toMatchObject({ counterpartId: "", ownerUserId: "", tagIds: [] });
+    // 非表示のタグだけを除く
+    expect(applyPayeeDefaults(item(), defaults({ tagIds: ["8", "9"] }), context).tagIds).toEqual(["8"]);
   });
 
   it("U-107: 帰属先の既定値がメンバーなら、そのメンバーにする", () => {
@@ -199,6 +225,7 @@ describe("既定値の変換・表示・入力チェック", () => {
       default_counterpart_id: 3,
       default_owner_joint: true,
       default_owner_user_id: null,
+      payee_default_tags: [{ tag_id: 7 }, { tag_id: 8 }],
     };
     const converted = toPayee(row);
     expect(converted.defaults).toEqual({
@@ -206,7 +233,9 @@ describe("既定値の変換・表示・入力チェック", () => {
       breakdownId: "21",
       counterpartId: "3",
       ownerUserId: OWNER_JOINT_VALUE,
+      tagIds: ["7", "8"],
     });
+    // タグは別の表に保存するため、列には含めない
     expect(toPayeeDefaultColumns(converted.defaults)).toEqual({
       default_category_id: 2,
       default_breakdown_id: 21,
@@ -224,7 +253,7 @@ describe("既定値の変換・表示・入力チェック", () => {
   });
 
   it("U-108: 一覧の既定値の説明（未設定の項目は「―」、すべて未設定は「なし」）", () => {
-    const describeContext = { categories, breakdowns, counterparts, members };
+    const describeContext = { categories, breakdowns, counterparts, tags, members };
     expect(
       describePayeeDefaults(
         defaults({ categoryId: "2", breakdownId: "21", counterpartId: "3", ownerUserId: OWNER_JOINT_VALUE }),
@@ -233,10 +262,14 @@ describe("既定値の変換・表示・入力チェック", () => {
     ).toBe("水道光熱費 ＞ ガス／ふたり／共同");
     expect(describePayeeDefaults(defaults({ ownerUserId: USER_B }), describeContext)).toBe("―／―／B");
     expect(describePayeeDefaults(EMPTY_PAYEE_DEFAULTS, describeContext)).toBe("なし");
+    // タグはタグの並び順で後ろに付ける
+    expect(describePayeeDefaults(defaults({ tagIds: ["8", "7"] }), describeContext)).toBe(
+      "―／―／―／タグ 夕食・朝食"
+    );
   });
 
   it("U-108: 既定値の入力チェック", () => {
-    const validateContext = { categories, breakdowns, counterparts, members };
+    const validateContext = { categories, breakdowns, counterparts, tags, members };
     const check = (d: Partial<PayeeDefaults>, current?: PayeeDefaults) =>
       validatePayeeDefaults(defaults(d), validateContext, current);
 
@@ -249,8 +282,17 @@ describe("既定値の変換・表示・入力チェック", () => {
     expect(check({ counterpartId: "99" })).toBe("相手の既定値が不正です。");
     expect(check({ counterpartId: "5" })).toBe("相手の既定値が不正です。");
     expect(check({ ownerUserId: "left-user" })).toBe("帰属先の既定値が不正です。");
-    // 非表示の内訳・相手、グループから外れたメンバーも、保存済みの値ならそのまま残せる
-    const current = defaults({ categoryId: "1", breakdownId: "13", counterpartId: "5", ownerUserId: "left-user" });
+    expect(check({ tagIds: ["7", "8"] })).toBeNull();
+    expect(check({ tagIds: ["7", "99"] })).toBe("タグの既定値が不正です。");
+    expect(check({ tagIds: ["9"] })).toBe("タグの既定値が不正です。");
+    // 非表示の内訳・相手・タグ、グループから外れたメンバーも、保存済みの値ならそのまま残せる
+    const current = defaults({
+      categoryId: "1",
+      breakdownId: "13",
+      counterpartId: "5",
+      ownerUserId: "left-user",
+      tagIds: ["9"],
+    });
     expect(check(current, current)).toBeNull();
   });
 });

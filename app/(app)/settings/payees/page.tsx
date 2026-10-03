@@ -4,6 +4,7 @@ import {
   getCategoryBreakdowns,
   getCounterparts,
   getPayees,
+  getTags,
 } from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
@@ -19,10 +20,11 @@ export default async function PayeeSettingsPage() {
   const membership = await getCurrentMembership(supabase, user!.id);
   const groupId = membership!.groupId;
 
-  const [payees, categories, breakdowns, members] = await Promise.all([
+  const [payees, categories, breakdowns, tags, members] = await Promise.all([
     getPayees(supabase, groupId),
     getCategoriesWithCostType(supabase, groupId),
     getCategoryBreakdowns(supabase, groupId),
+    getTags(supabase, groupId),
     getGroupMembers(supabase, groupId),
   ]);
   // メンバーの相手の名前はメンバーの表示名を使うため、メンバーの取得後に取得する
@@ -34,6 +36,7 @@ export default async function PayeeSettingsPage() {
       categories={categories}
       breakdowns={breakdowns}
       counterparts={counterparts}
+      tags={tags}
       members={members}
       currentUserId={user!.id}
       isAdmin={membership!.role === "admin"}

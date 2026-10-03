@@ -260,6 +260,36 @@ export type Database = {
         }
         Relationships: []
       }
+      payee_default_tags: {
+        Row: {
+          payee_id: number
+          tag_id: number
+        }
+        Insert: {
+          payee_id: number
+          tag_id: number
+        }
+        Update: {
+          payee_id?: number
+          tag_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payee_default_tags_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "payees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payee_default_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payees: {
         Row: {
           created_at: string

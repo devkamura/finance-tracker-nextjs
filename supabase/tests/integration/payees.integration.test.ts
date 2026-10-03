@@ -86,6 +86,7 @@ describe("支払い先", () => {
     // 支払い先はレシートから参照されるため、先にレシートを消す
     await admin.from("receipts").delete().in("group_id", [groupId, otherGroupId]);
     await admin.from("payees").delete().in("group_id", [groupId, otherGroupId]);
+    await admin.from("tags").delete().in("group_id", [groupId, otherGroupId]);
     await deleteTestUser(admin, owner.id);
     await deleteTestUser(admin, member.id);
     await deleteTestUser(admin, outsider.id);
@@ -166,26 +167,55 @@ describe("支払い先", () => {
     expect(outsiderOwnError).not.toBeNull();
   });
 
-  it("I-42: 同じ一覧の中では名前が重複できず、グループ全体と自分用・ユーザー間では重複できる", async () => {
+  it("I-42: 同じ一覧の中、グループ全体と自分用の間では名前が重複できず、ユーザーどうしの自分用では重複できる", async () => {
+    // グループ全体どうし
     const { error: sharedDup } = await owner.client
       .from("payees")
       .insert({ group_id: groupId, name: "myTOKYOGAS" });
     expect(sharedDup?.code).toBe("23505");
 
-    const { error: ownSameAsShared } = await owner.client
+    // グループ全体にある名前は、自分用に登録できない（管理者・一般メンバーとも）
+    const { error: ownerOwnSameAsShared } = await owner.client
       .from("payees")
       .insert({ group_id: groupId, owner_user_id: owner.id, name: "myTOKYOGAS" });
-    expect(ownSameAsShared).toBeNull();
-
-    const { error: otherUserSame } = await member.client
+    expect(ownerOwnSameAsShared?.code).toBe("23505");
+    expect(ownerOwnSameAsShared?.message).toContain("conflicts with a shared payee");
+    const { error: memberOwnSameAsShared } = await member.client
       .from("payees")
       .insert({ group_id: groupId, owner_user_id: member.id, name: "myTOKYOGAS" });
-    expect(otherUserSame).toBeNull();
+    expect(memberOwnSameAsShared?.code).toBe("23505");
 
+    // ユーザーどうしの自分用は同じ名前でよい
+    const { error: ownerOwn } = await owner.client
+      .from("payees")
+      .insert({ group_id: groupId, owner_user_id: owner.id, name: "近所の店" });
+    expect(ownerOwn).toBeNull();
+    const { data: memberOwn, error: memberOwnError } = await member.client
+      .from("payees")
+      .insert({ group_id: groupId, owner_user_id: member.id, name: "近所の店" })
+      .select("id")
+      .single();
+    expect(memberOwnError).toBeNull();
+
+    // 同じユーザーの自分用どうし
     const { error: ownDup } = await member.client
       .from("payees")
-      .insert({ group_id: groupId, owner_user_id: member.id, name: "myTOKYOGAS" });
+      .insert({ group_id: groupId, owner_user_id: member.id, name: "近所の店" });
     expect(ownDup?.code).toBe("23505");
+
+    // 誰かの自分用にある名前は、グループ全体に登録できない
+    const { error: sharedSameAsOwn } = await owner.client
+      .from("payees")
+      .insert({ group_id: groupId, name: "近所の店" });
+    expect(sharedSameAsOwn?.code).toBe("23505");
+    expect(sharedSameAsOwn?.message).toContain("conflicts with an own payee");
+
+    // 名前の変更でも同じ
+    const { error: renameError } = await member.client
+      .from("payees")
+      .update({ name: "myTOKYOGAS" })
+      .eq("id", memberOwn!.id);
+    expect(renameError?.code).toBe("23505");
   });
 
   it("I-43: 既定値は、カテゴリの内訳・グループの相手・グループのメンバーでなければDBで拒否される", async () => {
@@ -300,5 +330,56 @@ describe("支払い先", () => {
       .select("is_hidden");
     expect(hideError).toBeNull();
     expect(hidden).toEqual([{ is_hidden: true }]);
+  });
+
+  it("I-46: 既定値のタグは支払い先と同じ権限で設定でき、他グループのタグは拒否され、タグを削除すると既定値から外れる", async () => {
+    const [{ data: tag }, { data: otherTag }] = await Promise.all([
+      member.client.from("tags").insert({ group_id: groupId, name: "支払い先テストタグ" }).select("id").single(),
+      outsider.client.from("tags").insert({ group_id: otherGroupId, name: "他グループタグ" }).select("id").single(),
+    ]);
+
+    // グループ全体の支払い先：管理者は設定でき、一般メンバーは設定できない
+    const { error: ownerError } = await owner.client
+      .from("payee_default_tags")
+      .insert({ payee_id: sharedPayeeId, tag_id: tag!.id });
+    expect(ownerError).toBeNull();
+    const { error: memberSharedError } = await member.client
+      .from("payee_default_tags")
+      .insert({ payee_id: sharedPayeeId, tag_id: tag!.id });
+    expect(memberSharedError).not.toBeNull();
+
+    // 自分用の支払い先：本人は設定でき、相方（管理者）は設定できない
+    const { error: memberOwnError } = await member.client
+      .from("payee_default_tags")
+      .insert({ payee_id: memberPayeeId, tag_id: tag!.id });
+    expect(memberOwnError).toBeNull();
+    const { data: ownerDeleted } = await owner.client
+      .from("payee_default_tags")
+      .delete()
+      .eq("payee_id", memberPayeeId)
+      .select("tag_id");
+    expect(ownerDeleted ?? []).toEqual([]);
+
+    // 他グループのタグは設定できない
+    const { error: otherTagError } = await owner.client
+      .from("payee_default_tags")
+      .insert({ payee_id: sharedPayeeId, tag_id: otherTag!.id });
+    expect(otherTagError).not.toBeNull();
+
+    // 他グループからは読めない
+    const { data: outsiderRead } = await outsider.client
+      .from("payee_default_tags")
+      .select("tag_id")
+      .eq("payee_id", sharedPayeeId);
+    expect(outsiderRead).toEqual([]);
+
+    // タグを削除すると、支払い先の既定値からも外れる（明細で使われていないタグ）
+    const { error: deleteError } = await member.client.from("tags").delete().eq("id", tag!.id);
+    expect(deleteError).toBeNull();
+    const { data: remaining } = await admin
+      .from("payee_default_tags")
+      .select("payee_id")
+      .eq("tag_id", tag!.id);
+    expect(remaining).toEqual([]);
   });
 });

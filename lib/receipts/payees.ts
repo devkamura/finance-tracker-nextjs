@@ -3,14 +3,14 @@
 
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import { autoBreakdownIdFor, type CategoryBreakdown } from "@/lib/receipts/breakdowns";
-import type { Counterpart } from "@/lib/receipts/labels";
+import type { Counterpart, Tag } from "@/lib/receipts/labels";
 import type { ReceiptItem } from "@/types/receipt";
 
 // 支払い先の既定値。明細（ReceiptItem）と同じ形の文字列で持ち、"" は「設定しない」。
-// ownerUserId は OWNER_JOINT_VALUE（共同）またはメンバーの user id。
+// ownerUserId は OWNER_JOINT_VALUE（共同）またはメンバーの user id。tagIds は空なら「設定しない」。
 export type PayeeDefaults = Pick<
   ReceiptItem,
-  "categoryId" | "breakdownId" | "counterpartId" | "ownerUserId"
+  "categoryId" | "breakdownId" | "counterpartId" | "ownerUserId" | "tagIds"
 >;
 
 export const EMPTY_PAYEE_DEFAULTS: PayeeDefaults = {
@@ -18,6 +18,7 @@ export const EMPTY_PAYEE_DEFAULTS: PayeeDefaults = {
   breakdownId: "",
   counterpartId: "",
   ownerUserId: "",
+  tagIds: [],
 };
 
 export type Payee = {
@@ -41,10 +42,11 @@ export type PayeeRow = {
   default_counterpart_id: number | null;
   default_owner_joint: boolean;
   default_owner_user_id: string | null;
+  payee_default_tags: { tag_id: number }[];
 };
 
 export const PAYEE_SELECT =
-  "id, name, owner_user_id, is_hidden, default_category_id, default_breakdown_id, default_counterpart_id, default_owner_joint, default_owner_user_id";
+  "id, name, owner_user_id, is_hidden, default_category_id, default_breakdown_id, default_counterpart_id, default_owner_joint, default_owner_user_id, payee_default_tags(tag_id)";
 
 export function toPayee(row: PayeeRow): Payee {
   return {
@@ -59,11 +61,13 @@ export function toPayee(row: PayeeRow): Payee {
       ownerUserId: row.default_owner_joint
         ? OWNER_JOINT_VALUE
         : (row.default_owner_user_id ?? ""),
+      tagIds: (row.payee_default_tags ?? []).map((t) => String(t.tag_id)),
     },
   };
 }
 
 // 既定値を DB の列に変換する（Server Action で保存するとき）。
+// タグは payee_default_tags に別に保存するため含めない。
 export function toPayeeDefaultColumns(defaults: PayeeDefaults) {
   return {
     default_category_id: defaults.categoryId ? Number(defaults.categoryId) : null,
@@ -129,65 +133,79 @@ export function payeeOptionLabel(
 type DefaultsContext = {
   breakdowns: CategoryBreakdown[];
   counterparts: Counterpart[];
+  tags: Tag[];
   members: { userId: string }[];
 };
 
 // 明細に支払い先の既定値を入れる（基本設計書 3.4節）。
-// 設定された項目だけを上書きし、設定されていない項目は残す。
-// - カテゴリを変えたら内訳は選び直し（内訳の既定値があればそれ、なければ1つだけのとき自動で選ぶ）
-// - 既定値の内訳がカテゴリに属していない・非表示のときは、内訳の既定値は使わない
-// - 非表示の相手、グループから外れたメンバーの帰属先は入れない
+// カテゴリ・内訳・相手・帰属先・タグをすべて上書きし、既定値のない項目は未選択（空）にする
+// （前の支払い先の既定値や入力済みの値は残さない。2026-10-03 ユーザー確認済み）。
+// - 内訳：内訳の既定値があればそれ、なければカテゴリの内訳が1つだけのとき自動で選ぶ
+// - 既定値の内訳がカテゴリに属していない・非表示、相手が非表示、帰属先のメンバーがグループにいない、
+//   タグが非表示のときは、その既定値は使わない（未選択にする）
 export function applyPayeeDefaults(
   item: ReceiptItem,
   defaults: PayeeDefaults,
   context: DefaultsContext
 ): ReceiptItem {
-  const next = { ...item };
+  const defaultBreakdown = context.breakdowns.find(
+    (b) =>
+      String(b.id) === defaults.breakdownId &&
+      String(b.categoryId) === defaults.categoryId &&
+      !b.isHidden
+  );
+  const breakdownId = !defaults.categoryId
+    ? ""
+    : defaultBreakdown
+      ? String(defaultBreakdown.id)
+      : autoBreakdownIdFor(defaults.categoryId, context.breakdowns);
 
-  if (defaults.categoryId) {
-    const defaultBreakdown = context.breakdowns.find(
-      (b) =>
-        String(b.id) === defaults.breakdownId &&
-        String(b.categoryId) === defaults.categoryId &&
-        !b.isHidden
-    );
-    if (defaultBreakdown) {
-      next.breakdownId = String(defaultBreakdown.id);
-    } else if (defaults.categoryId !== item.categoryId) {
-      next.breakdownId = autoBreakdownIdFor(defaults.categoryId, context.breakdowns);
-    }
-    next.categoryId = defaults.categoryId;
-  }
+  const counterpartId = context.counterparts.some(
+    (c) => String(c.id) === defaults.counterpartId && !c.isHidden
+  )
+    ? defaults.counterpartId
+    : "";
 
-  if (
-    defaults.counterpartId &&
-    context.counterparts.some((c) => String(c.id) === defaults.counterpartId && !c.isHidden)
-  ) {
-    next.counterpartId = defaults.counterpartId;
-  }
-
-  if (
+  const ownerUserId =
     defaults.ownerUserId === OWNER_JOINT_VALUE ||
     context.members.some((m) => m.userId === defaults.ownerUserId)
-  ) {
-    next.ownerUserId = defaults.ownerUserId;
-  }
+      ? defaults.ownerUserId
+      : "";
 
-  return next;
+  const tagIds = defaults.tagIds.filter((id) =>
+    context.tags.some((t) => String(t.id) === id && !t.isHidden)
+  );
+
+  return {
+    ...item,
+    categoryId: defaults.categoryId,
+    breakdownId,
+    counterpartId,
+    ownerUserId,
+    tagIds,
+  };
 }
 
 // 既定値が設定されているか
 export function hasPayeeDefaults(defaults: PayeeDefaults): boolean {
-  return Object.values(defaults).some((v) => v !== "");
+  return (
+    defaults.categoryId !== "" ||
+    defaults.breakdownId !== "" ||
+    defaults.counterpartId !== "" ||
+    defaults.ownerUserId !== "" ||
+    defaults.tagIds.length > 0
+  );
 }
 
 // 設定画面の一覧に出す既定値の説明（例：「水道光熱費 ＞ ガス／ふたり／共同」）。未設定の項目は「―」。
+// タグがあれば「／タグ 朝食・夕食」を後ろに付ける（タグの並び順）。
 export function describePayeeDefaults(
   defaults: PayeeDefaults,
   context: {
     categories: { id: number; name: string }[];
     breakdowns: CategoryBreakdown[];
     counterparts: Counterpart[];
+    tags: Tag[];
     members: { userId: string; displayName: string }[];
   }
 ): string {
@@ -207,7 +225,14 @@ export function describePayeeDefaults(
       ? `${category.name} ＞ ${breakdown.name}`
       : category.name
     : "―";
-  return [categoryLabel, counterpart?.name ?? "―", owner ?? "―"].join("／");
+  const tagNames = context.tags
+    .filter((t) => defaults.tagIds.includes(String(t.id)))
+    .map((t) => t.name);
+  const parts = [categoryLabel, counterpart?.name ?? "―", owner ?? "―"];
+  if (tagNames.length > 0) {
+    parts.push(`タグ ${tagNames.join("・")}`);
+  }
+  return parts.join("／");
 }
 
 // 既定値の入力チェック（設定画面の Server Action）。問題がなければ null。
@@ -218,6 +243,7 @@ export function validatePayeeDefaults(
     categories: { id: number }[];
     breakdowns: CategoryBreakdown[];
     counterparts: Counterpart[];
+    tags: Tag[];
     members: { userId: string }[];
   },
   current: PayeeDefaults = EMPTY_PAYEE_DEFAULTS
@@ -249,6 +275,13 @@ export function validatePayeeDefaults(
     !context.members.some((m) => m.userId === defaults.ownerUserId)
   ) {
     return "帰属先の既定値が不正です。";
+  }
+  const invalidTag = defaults.tagIds.some((id) => {
+    const tag = context.tags.find((t) => String(t.id) === id);
+    return !tag || (tag.isHidden && !current.tagIds.includes(id));
+  });
+  if (invalidTag) {
+    return "タグの既定値が不正です。";
   }
   return null;
 }

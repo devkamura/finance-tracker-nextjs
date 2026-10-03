@@ -87,7 +87,7 @@ describe("settings/queries", () => {
     ]);
   });
 
-  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値）に変換する", async () => {
+  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値・既定値のタグ）に変換する", async () => {
     const supabase = fakeSupabase({
       payees: [
         {
@@ -100,6 +100,7 @@ describe("settings/queries", () => {
           default_counterpart_id: 3,
           default_owner_joint: true,
           default_owner_user_id: null,
+          payee_default_tags: [{ tag_id: 7 }],
         },
         {
           id: 2,
@@ -111,6 +112,7 @@ describe("settings/queries", () => {
           default_counterpart_id: null,
           default_owner_joint: false,
           default_owner_user_id: "user-b",
+          payee_default_tags: [],
         },
       ],
     });
@@ -121,14 +123,26 @@ describe("settings/queries", () => {
         name: "myTOKYOGAS",
         ownerUserId: null,
         isHidden: false,
-        defaults: { categoryId: "4", breakdownId: "", counterpartId: "3", ownerUserId: "joint" },
+        defaults: {
+          categoryId: "4",
+          breakdownId: "",
+          counterpartId: "3",
+          ownerUserId: "joint",
+          tagIds: ["7"],
+        },
       },
       {
         id: 2,
         name: "〇〇薬局",
         ownerUserId: "user-b",
         isHidden: true,
-        defaults: { categoryId: "", breakdownId: "", counterpartId: "", ownerUserId: "user-b" },
+        defaults: {
+          categoryId: "",
+          breakdownId: "",
+          counterpartId: "",
+          ownerUserId: "user-b",
+          tagIds: [],
+        },
       },
     ]);
   });

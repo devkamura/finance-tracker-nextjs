@@ -6,7 +6,7 @@ import { EMPTY_PAYEE_DEFAULTS } from "@/lib/receipts/payees";
 import { requireGroupMembership } from "@/lib/settings/admin";
 
 vi.mock("@/lib/settings/admin", () => ({ requireGroupMembership: vi.fn() }));
-// 既定値の入力チェックに使うグループのデータ。カテゴリ 2＝水道光熱費（内訳 21＝ガス）、相手 3＝ふたり
+// 既定値の入力チェックに使うグループのデータ。カテゴリ 2＝水道光熱費（内訳 21＝ガス）、相手 3＝ふたり、タグ 7＝夕食・8＝朝食
 vi.mock("@/lib/settings/queries", () => ({
   getCategoriesWithCostType: vi.fn().mockResolvedValue([
     { id: 1, name: "食費", costType: "variable" },
@@ -18,6 +18,10 @@ vi.mock("@/lib/settings/queries", () => ({
   getCounterparts: vi
     .fn()
     .mockResolvedValue([{ id: 3, kind: "default", userId: null, name: "ふたり", isHidden: false }]),
+  getTags: vi.fn().mockResolvedValue([
+    { id: 7, name: "夕食", isHidden: false },
+    { id: 8, name: "朝食", isHidden: false },
+  ]),
 }));
 vi.mock("@/lib/supabase/group", () => ({
   getGroupMembers: vi.fn().mockResolvedValue([
@@ -42,6 +46,7 @@ function row(overrides: Record<string, unknown> = {}) {
     default_counterpart_id: null,
     default_owner_joint: false,
     default_owner_user_id: null,
+    payee_default_tags: [],
     ...overrides,
   };
 }
@@ -153,7 +158,13 @@ describe("支払い先の設定（Server Action）", () => {
     const result = await createPayee({
       scope: "shared",
       name: "myTOKYOGAS",
-      defaults: { categoryId: "2", breakdownId: "21", counterpartId: "3", ownerUserId: OWNER_JOINT_VALUE },
+      defaults: {
+        categoryId: "2",
+        breakdownId: "21",
+        counterpartId: "3",
+        ownerUserId: OWNER_JOINT_VALUE,
+        tagIds: [],
+      },
     });
 
     expect(result.success).toBe(true);
@@ -179,6 +190,30 @@ describe("支払い先の設定（Server Action）", () => {
     expect(await createPayee({ scope: "own", name: "スーパー" })).toEqual(expected);
     signIn(duplicate(), USER_A, false);
     expect(await updatePayee(10, { name: "スーパー" })).toEqual(expected);
+  });
+
+  it("U-109: グループ全体と自分用の間で名前が重なるときは、どちらと重なったかを表示する", async () => {
+    const conflict = (message: string) =>
+      fakeSupabase({
+        existing: row({ owner_user_id: USER_A }),
+        write: { data: null, error: { code: "23505", message } },
+      }).client;
+
+    signIn(conflict("payee name conflicts with a shared payee"), USER_A, false);
+    expect(await createPayee({ scope: "own", name: "myTOKYOGAS" })).toEqual({
+      success: false,
+      error: "グループ全体に同じ名前の支払い先があります。",
+    });
+    signIn(conflict("payee name conflicts with a shared payee"), USER_A, false);
+    expect(await updatePayee(10, { name: "myTOKYOGAS" })).toEqual({
+      success: false,
+      error: "グループ全体に同じ名前の支払い先があります。",
+    });
+    signIn(conflict("payee name conflicts with an own payee"), USER_A, true);
+    expect(await createPayee({ scope: "shared", name: "〇〇薬局" })).toEqual({
+      success: false,
+      error: "メンバーの自分用に同じ名前の支払い先があります。",
+    });
   });
 
   it("U-109: 既定値が不正なら保存しない（別カテゴリの内訳・グループにない相手）", async () => {
@@ -216,6 +251,43 @@ describe("支払い先の設定（Server Action）", () => {
       default_category_id: 2,
       default_breakdown_id: null,
     });
+  });
+
+  it("U-109: 既定値のタグを保存し、返す支払い先に反映する（変更時は入れ替える）", async () => {
+    const created = fakeSupabase({ write: { data: row(), error: null } });
+    signIn(created.client, USER_A, true);
+    const createResult = await createPayee({
+      scope: "shared",
+      name: "スーパー",
+      defaults: { ...EMPTY_PAYEE_DEFAULTS, tagIds: ["7", "8"] },
+    });
+    expect(createResult).toMatchObject({ success: true, payee: { defaults: { tagIds: ["7", "8"] } } });
+    const createInserts = created.calls.filter((c) => c.method === "insert");
+    expect(createInserts[1].args[0]).toEqual([
+      { payee_id: 10, tag_id: 7 },
+      { payee_id: 10, tag_id: 8 },
+    ]);
+
+    const updated = fakeSupabase({
+      existing: row({ payee_default_tags: [{ tag_id: 7 }] }),
+      write: { data: row({ payee_default_tags: [{ tag_id: 7 }] }), error: null },
+    });
+    signIn(updated.client, USER_A, true);
+    const updateResult = await updatePayee(10, { defaults: { ...EMPTY_PAYEE_DEFAULTS, tagIds: [] } });
+    expect(updateResult).toMatchObject({ success: true, payee: { defaults: { tagIds: [] } } });
+    // 既存の既定値のタグを消し、空なので追加はしない
+    expect(updated.client.from).toHaveBeenCalledWith("payee_default_tags");
+    expect(updated.calls.filter((c) => c.method === "delete")).toHaveLength(1);
+    expect(updated.calls.filter((c) => c.method === "insert")).toHaveLength(0);
+  });
+
+  it("U-109: グループにないタグは既定値に保存しない", async () => {
+    const { client, calls } = fakeSupabase({ existing: row() });
+    signIn(client, USER_A, true);
+    expect(
+      await updatePayee(10, { defaults: { ...EMPTY_PAYEE_DEFAULTS, tagIds: ["99"] } })
+    ).toEqual({ success: false, error: "タグの既定値が不正です。" });
+    expect(calls.some((c) => ["update", "insert", "delete"].includes(c.method))).toBe(false);
   });
 
   it("U-109: 非表示にできる", async () => {

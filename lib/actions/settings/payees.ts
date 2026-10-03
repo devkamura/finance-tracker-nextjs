@@ -5,6 +5,7 @@ import {
   getCategoriesWithCostType,
   getCategoryBreakdowns,
   getCounterparts,
+  getTags,
 } from "@/lib/settings/queries";
 import { getGroupMembers } from "@/lib/supabase/group";
 import {
@@ -31,6 +32,18 @@ export type PayeeActionResult =
 export type DeletePayeeResult = { success: true } | { success: false; error: string };
 
 const DUPLICATE_NAME = "同じ名前の支払い先が既に存在します。";
+
+// 名前の重複（23505）のメッセージ。グループ全体と自分用の間の重複はDBのトリガー
+// （check_payee_name_across_scopes）で防いでおり、どちらと重なったかをメッセージから判断する。
+function duplicateNameError(error: { message?: string }): string {
+  if (error.message?.includes("conflicts with a shared payee")) {
+    return "グループ全体に同じ名前の支払い先があります。";
+  }
+  if (error.message?.includes("conflicts with an own payee")) {
+    return "メンバーの自分用に同じ名前の支払い先があります。";
+  }
+  return DUPLICATE_NAME;
+}
 const EMPTY_NAME = "支払い先名を入力してください。";
 const SHARED_ADMIN_ONLY = "グループ全体の支払い先は管理者のみ編集できます。";
 const NOT_OWNER = "他のメンバーの支払い先は編集できません。";
@@ -42,17 +55,50 @@ async function checkDefaults(
   current: PayeeDefaults = EMPTY_PAYEE_DEFAULTS
 ): Promise<string | null> {
   const { supabase, groupId } = context;
-  const [categories, breakdowns, members] = await Promise.all([
+  const [categories, breakdowns, tags, members] = await Promise.all([
     getCategoriesWithCostType(supabase, groupId),
     getCategoryBreakdowns(supabase, groupId),
+    getTags(supabase, groupId),
     getGroupMembers(supabase, groupId),
   ]);
   const counterparts = await getCounterparts(supabase, groupId, members);
   return validatePayeeDefaults(
     defaults,
-    { categories, breakdowns, counterparts, members },
+    { categories, breakdowns, counterparts, tags, members },
     current
   );
+}
+
+// 既定値のタグ（payee_default_tags）を、指定したタグに入れ替える。失敗したらエラーメッセージを返す。
+async function replaceDefaultTags(
+  context: MembershipContext,
+  payeeId: number,
+  tagIds: string[]
+): Promise<string | null> {
+  const { error: deleteError } = await context.supabase
+    .from("payee_default_tags")
+    .delete()
+    .eq("payee_id", payeeId);
+  if (deleteError) {
+    console.error("Failed to delete payee default tags", deleteError);
+    return "既定値のタグの保存に失敗しました。";
+  }
+  if (tagIds.length === 0) {
+    return null;
+  }
+  const { error: insertError } = await context.supabase
+    .from("payee_default_tags")
+    .insert(tagIds.map((tagId) => ({ payee_id: payeeId, tag_id: Number(tagId) })));
+  if (insertError) {
+    console.error("Failed to insert payee default tags", insertError);
+    return "既定値のタグの保存に失敗しました。";
+  }
+  return null;
+}
+
+// 保存したタグを、返す支払い先の既定値に反映する
+function withTagIds(payee: Payee, tagIds: string[]): Payee {
+  return { ...payee, defaults: { ...payee.defaults, tagIds } };
 }
 
 // 対象の支払い先を編集できるか（グループ全体は管理者、自分用は本人）。編集できれば null。
@@ -104,12 +150,20 @@ export async function createPayee(input: {
 
   if (error) {
     if (error.code === "23505") {
-      return { success: false, error: DUPLICATE_NAME };
+      return { success: false, error: duplicateNameError(error) };
     }
     console.error("Failed to create payee", error);
     return { success: false, error: "支払い先の登録に失敗しました。" };
   }
-  return { success: true, payee: toPayee(data as PayeeRow) };
+  const payee = toPayee(data as PayeeRow);
+
+  const tagError = await replaceDefaultTags(context, payee.id, defaults.tagIds);
+  if (tagError) {
+    // 既定値のタグだけが欠けた支払い先を残さないよう、追加した支払い先を取り消す
+    await context.supabase.from("payees").delete().eq("id", payee.id);
+    return { success: false, error: tagError };
+  }
+  return { success: true, payee: withTagIds(payee, defaults.tagIds) };
 }
 
 // 支払い先の名前・既定値の変更、または表示・非表示の切り替え。
@@ -167,7 +221,7 @@ export async function updatePayee(
 
   if (error) {
     if (error.code === "23505") {
-      return { success: false, error: DUPLICATE_NAME };
+      return { success: false, error: duplicateNameError(error) };
     }
     console.error("Failed to update payee", error);
     return { success: false, error: "支払い先の更新に失敗しました。" };
@@ -175,7 +229,16 @@ export async function updatePayee(
   if (!data) {
     return { success: false, error: "権限がありません。" };
   }
-  return { success: true, payee: toPayee(data as PayeeRow) };
+  const payee = toPayee(data as PayeeRow);
+
+  if (patch.defaults !== undefined) {
+    const tagError = await replaceDefaultTags(context, id, patch.defaults.tagIds);
+    if (tagError) {
+      return { success: false, error: tagError };
+    }
+    return { success: true, payee: withTagIds(payee, patch.defaults.tagIds) };
+  }
+  return { success: true, payee };
 }
 
 // 支払い先を削除する。登録済みのレシートで使われている支払い先は、DBの外部キーで

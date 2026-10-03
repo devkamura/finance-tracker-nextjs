@@ -14,7 +14,12 @@ import { Select } from "@/components/ui/Select";
 import { createPayee, deletePayee, updatePayee } from "@/lib/actions/settings/payees";
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import { autoBreakdownIdFor, type CategoryBreakdown } from "@/lib/receipts/breakdowns";
-import { counterpartOptionLabel, selectableOptions, type Counterpart } from "@/lib/receipts/labels";
+import {
+  counterpartOptionLabel,
+  selectableOptions,
+  type Counterpart,
+  type Tag,
+} from "@/lib/receipts/labels";
 import {
   describePayeeDefaults,
   EMPTY_PAYEE_DEFAULTS,
@@ -28,6 +33,7 @@ type PayeeSettingsManagerProps = {
   categories: { id: number; name: string }[];
   breakdowns: CategoryBreakdown[];
   counterparts: Counterpart[];
+  tags: Tag[];
   members: GroupMemberOption[];
   currentUserId: string;
   isAdmin: boolean;
@@ -47,6 +53,7 @@ export function PayeeSettingsManager({
   categories,
   breakdowns,
   counterparts,
+  tags,
   members,
   currentUserId,
   isAdmin,
@@ -118,7 +125,7 @@ export function PayeeSettingsManager({
       return null;
     });
 
-  const context = { categories, breakdowns, counterparts, members };
+  const context = { categories, breakdowns, counterparts, tags, members };
 
   return (
     <div className="flex flex-col gap-3">
@@ -267,6 +274,7 @@ type PayeeEditorProps = {
   categories: { id: number; name: string }[];
   breakdowns: CategoryBreakdown[];
   counterparts: Counterpart[];
+  tags: Tag[];
   members: GroupMemberOption[];
 };
 
@@ -281,6 +289,7 @@ function PayeeEditor({
   categories,
   breakdowns,
   counterparts,
+  tags,
   members,
 }: PayeeEditorProps) {
   const { defaults } = draft;
@@ -295,6 +304,13 @@ function PayeeEditor({
       (!b.isHidden || String(b.id) === defaults.breakdownId)
   );
   const counterpartOptions = selectableOptions(counterparts, [defaults.counterpartId]);
+  const tagOptions = selectableOptions(tags, defaults.tagIds);
+  const toggleTag = (tagId: string) =>
+    setDefaults({
+      tagIds: defaults.tagIds.includes(tagId)
+        ? defaults.tagIds.filter((id) => id !== tagId)
+        : [...defaults.tagIds, tagId],
+    });
 
   return (
     <form
@@ -312,7 +328,7 @@ function PayeeEditor({
           onChange={(e) => onChange({ ...draft, name: e.target.value })}
           disabled={isPending}
           autoFocus
-          placeholder="例：myTOKYOGAS"
+          placeholder="支払い先名を入力"
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </label>
@@ -382,6 +398,36 @@ function PayeeEditor({
           ))}
         </Select>
       </div>
+
+      {tagOptions.length > 0 && (
+        <div>
+          <span className="text-sm font-medium text-slate-700">
+            タグ（任意・複数選択可。支払い先を選ぶと明細のタグをこれに置き換えます）
+          </span>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tagOptions.map((tag) => {
+              const checked = defaults.tagIds.includes(String(tag.id));
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  aria-pressed={checked}
+                  disabled={isPending}
+                  onClick={() => toggleTag(String(tag.id))}
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    checked
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {tag.name}
+                  {tag.isHidden ? "（非表示）" : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2">
         <button

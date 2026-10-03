@@ -17,7 +17,11 @@ import { updateReceipt } from "@/lib/actions/update-receipt";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
 import { autoBreakdownIdFor, breakdownIdAfterBulkApply } from "@/lib/receipts/breakdowns";
 import { findPartner } from "@/lib/receipts/duplicate";
-import { applyPayeeDefaults, isSelectablePayee } from "@/lib/receipts/payees";
+import {
+  applyPayeeDefaults,
+  EMPTY_PAYEE_DEFAULTS,
+  isSelectablePayee,
+} from "@/lib/receipts/payees";
 import {
   validateReceiptForm,
   type ReceiptFormFieldErrors,
@@ -205,14 +209,14 @@ export function ReceiptForm({
       : null;
 
   // 選択中の支払い先の既定値を明細に入れる（docs/分析拡充/基本設計書.md 3.4節）。
-  // 支払い先が未選択・「該当なし」のときは何もしない。
+  // 「該当なし」・未選択は、既定値のない支払い先と同じ扱い（すべて未選択にする）。
   const withPayeeDefaults = (item: ReceiptItem, payeeSelect: string): ReceiptItem => {
     const payee = masterData.payees.find((p) => String(p.id) === payeeSelect);
-    return payee ? applyPayeeDefaults(item, payee.defaults, masterData) : item;
+    return applyPayeeDefaults(item, payee?.defaults ?? EMPTY_PAYEE_DEFAULTS, masterData);
   };
 
-  // 支払い先を選んだ（選び直した）ときだけ、その既定値を全明細に上書きする。
-  // 編集画面を開いたときは保存済みの内容のまま（既定値で上書きしない）。
+  // 支払い先の欄を変えたら、その既定値で全明細を上書きする（既定値のない項目は未選択にする。ユーザー確認済み）。
+  // 編集画面を開いたときは保存済みの内容のまま（欄を変えたときだけ上書きする）。
   const updateState = (patch: Partial<ReceiptFormState>) =>
     setState((prev) => {
       const next = { ...prev, ...patch };
