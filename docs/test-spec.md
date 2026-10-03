@@ -268,6 +268,7 @@ Gemini APIを呼び出す箇所（`extractReceiptFromImage`）は必ずモック
 | U-96 | `lib/actions/settings/update-category-cost-type.ts` | 異常系／正常系：費用区分 | 不正な値／固定費 | 「不正な費用区分です。」／グループの設定として保存 | 同上 |
 | U-97 | `lib/settings/queries.ts` | 正常系：費用区分と内訳の取得 | グループの設定あり・なし | 設定を優先し、なければ初期値。内訳を画面用に変換 | Supabaseクライアント |
 | U-98 | `lib/receipts/queries.ts`（`listReceipts`） | 正常系：内訳の表示 | 内訳あり・なしの明細 | 内訳のIDと名前（なしはnull） | Supabaseクライアント、`getGroupMembers` |
+| U-99 | `lib/receipts/breakdowns.ts`（`breakdownIdAfterBulkApply`） | 正常系（リグレッション）：一括入力の内訳 | 内訳「自炊」の明細に、同じカテゴリ「食費」だけ（内訳は「各項目で選ぶ」）を適用／内訳も指定／内訳が1つのカテゴリ／カテゴリの指定なし | 同じカテゴリでも内訳は未選択に戻る／指定した内訳／自動で選ぶ／今の内訳のまま | なし |
 
 ### 結合テスト
 

@@ -51,3 +51,16 @@ export function isBreakdownOfCategory(
     (b) => String(b.id) === breakdownId && String(b.categoryId) === categoryId
   );
 }
+
+// 一括入力を適用したあとの内訳。カテゴリを指定したときは、内訳の指定があればそれを使い、
+// なければ（「各項目で選ぶ」）同じカテゴリでも各項目で選び直す（内訳が1つだけなら自動で選ぶ）。
+// カテゴリを指定しないときは今の内訳のまま。
+export function breakdownIdAfterBulkApply(
+  currentBreakdownId: string,
+  bulkCategoryId: string | undefined,
+  bulkBreakdownId: string | undefined,
+  breakdowns: CategoryBreakdown[]
+): string {
+  if (bulkCategoryId === undefined) return currentBreakdownId;
+  return bulkBreakdownId ?? autoBreakdownIdFor(bulkCategoryId, breakdowns);
+}

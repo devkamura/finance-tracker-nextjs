@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   autoBreakdownIdFor,
+  breakdownIdAfterBulkApply,
   isBreakdownOfCategory,
   isBreakdownRequired,
   visibleBreakdownsFor,
@@ -43,5 +44,16 @@ describe("breakdowns", () => {
     expect(isBreakdownOfCategory("12", "1", breakdowns)).toBe(true);
     expect(isBreakdownOfCategory("20", "1", breakdowns)).toBe(false);
     expect(isBreakdownOfCategory("999", "1", breakdowns)).toBe(false);
+  });
+
+  it("U-99: 一括入力で同じカテゴリだけを適用したら、内訳は未選択に戻る（F1-M-13 の不具合の再発防止）", () => {
+    // 「食費 ＞ 自炊」の明細に、カテゴリ「食費」・内訳「各項目で選ぶ」を適用
+    expect(breakdownIdAfterBulkApply("11", "1", undefined, breakdowns)).toBe("");
+  });
+
+  it("U-99: 一括入力で内訳も指定したらその内訳、内訳が1つのカテゴリは自動、カテゴリの指定なしは今のまま", () => {
+    expect(breakdownIdAfterBulkApply("", "1", "11", breakdowns)).toBe("11");
+    expect(breakdownIdAfterBulkApply("11", "2", undefined, breakdowns)).toBe("20");
+    expect(breakdownIdAfterBulkApply("11", undefined, undefined, breakdowns)).toBe("11");
   });
 });

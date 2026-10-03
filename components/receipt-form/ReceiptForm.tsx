@@ -15,7 +15,7 @@ import { Toast, type ToastState } from "@/components/receipt-form/Toast";
 import { createReceipt } from "@/lib/actions/create-receipt";
 import { updateReceipt } from "@/lib/actions/update-receipt";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
-import { autoBreakdownIdFor } from "@/lib/receipts/breakdowns";
+import { autoBreakdownIdFor, breakdownIdAfterBulkApply } from "@/lib/receipts/breakdowns";
 import { findPartner } from "@/lib/receipts/duplicate";
 import {
   validateReceiptForm,
@@ -242,10 +242,13 @@ export function ReceiptForm({
           values.taxType === "inclusive"
             ? ""
             : (values.taxRateId ?? item.taxRateId),
-        ...withBreakdownForCategory(item, {
-          categoryId: values.categoryId ?? item.categoryId,
-          ...(values.breakdownId !== undefined ? { breakdownId: values.breakdownId } : {}),
-        }),
+        categoryId: values.categoryId ?? item.categoryId,
+        breakdownId: breakdownIdAfterBulkApply(
+          item.breakdownId,
+          values.categoryId,
+          values.breakdownId,
+          masterData.breakdowns
+        ),
         purposeId: values.purposeId ?? item.purposeId,
         ownerUserId: values.ownerUserId ?? item.ownerUserId,
       })),
