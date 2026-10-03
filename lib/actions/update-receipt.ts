@@ -8,7 +8,12 @@ import {
   resolvePayeeName,
 } from "@/lib/receipts/shared";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
-import { getCategoryBreakdowns, getCounterparts, getTags } from "@/lib/settings/queries";
+import {
+  getCategoryBreakdowns,
+  getCounterparts,
+  getPayees,
+  getTags,
+} from "@/lib/settings/queries";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState } from "@/types/receipt";
 
@@ -54,7 +59,7 @@ export async function updateReceipt(
 
   const { data: existing } = await supabase
     .from("receipts")
-    .select("id, group_id, occurred_at, receipt_image_path")
+    .select("id, group_id, occurred_at, receipt_image_path, payee_id")
     .eq("id", receiptId)
     .maybeSingle();
 
@@ -62,10 +67,11 @@ export async function updateReceipt(
     return { success: false, errors: ["レシートが見つかりません。"] };
   }
 
-  const [members, breakdowns, tags] = await Promise.all([
+  const [members, breakdowns, tags, payees] = await Promise.all([
     getGroupMembers(supabase, membership.groupId),
     getCategoryBreakdowns(supabase, membership.groupId),
     getTags(supabase, membership.groupId),
+    getPayees(supabase, membership.groupId),
   ]);
   const counterparts = await getCounterparts(supabase, membership.groupId, members);
   const memberUserIds = members.map((m) => m.userId);
@@ -101,10 +107,13 @@ export async function updateReceipt(
   let payeeId: number | null;
   let payeeName: string;
   try {
-    ({ payeeId, payeeName } = await resolvePayeeName(
-      supabase,
+    // 保存済みの支払い先（相方用・非表示になったもの）は、そのまま保存できる
+    ({ payeeId, payeeName } = resolvePayeeName(
+      payees,
       state.payeeSelect,
-      state.payeeInputText
+      state.payeeInputText,
+      user.id,
+      existing.payee_id
     ));
   } catch (e) {
     return {

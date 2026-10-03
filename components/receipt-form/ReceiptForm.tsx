@@ -18,6 +18,11 @@ import { SELECT_NONE_VALUE } from "@/lib/constants";
 import { autoBreakdownIdFor, breakdownIdAfterBulkApply } from "@/lib/receipts/breakdowns";
 import { findPartner } from "@/lib/receipts/duplicate";
 import {
+  applyPayeeDefaults,
+  EMPTY_PAYEE_DEFAULTS,
+  isSelectablePayee,
+} from "@/lib/receipts/payees";
+import {
   validateReceiptForm,
   type ReceiptFormFieldErrors,
 } from "@/lib/validation/receipt-rules";
@@ -99,12 +104,14 @@ export function buildOcrItem(
 
 // OCR読み取り結果を既存フォームの状態にマッピングする。
 // カテゴリー・相手・帰属先はマスタ選択式でOCRからは判定できないため既定値のままとし、
-// 支払い先名は登録済みマスタと名称が一致すればプルダウン選択、一致しなければ
-// 手入力欄に反映する。
+// 支払い先名はプルダウンに出す支払い先（グループ全体・自分用）と名称が一致すれば
+// プルダウン選択、一致しなければ手入力欄に反映する。
+// OCRで支払い先が入った場合の既定値の自動入力は対象外（要件定義書 4.3節）。
 function buildOcrPatch(
   result: OcrReceiptResult,
   payees: MasterData["payees"],
-  consumptionTaxes: MasterData["consumptionTaxes"]
+  consumptionTaxes: MasterData["consumptionTaxes"],
+  currentUserId: string | undefined
 ): Partial<ReceiptFormState> {
   const patch: Partial<ReceiptFormState> = {};
 
@@ -115,7 +122,9 @@ function buildOcrPatch(
     patch.amount = String(result.totalPrice);
   }
   if (result.payeeName) {
-    const matched = payees.find((payee) => payee.name === result.payeeName);
+    const matched = payees.find(
+      (payee) => payee.name === result.payeeName && isSelectablePayee(payee, currentUserId)
+    );
     if (matched) {
       patch.payeeSelect = String(matched.id);
       patch.payeeInputText = "";
@@ -199,11 +208,30 @@ export function ReceiptForm({
       ? findPartner(masterData.members, currentUserId)
       : null;
 
-  const updateState = (patch: Partial<ReceiptFormState>) =>
-    setState((prev) => ({ ...prev, ...patch }));
+  // 選択中の支払い先の既定値を明細に入れる（docs/分析拡充/基本設計書.md 3.4節）。
+  // 「該当なし」・未選択は、既定値のない支払い先と同じ扱い（すべて未選択にする）。
+  const withPayeeDefaults = (item: ReceiptItem, payeeSelect: string): ReceiptItem => {
+    const payee = masterData.payees.find((p) => String(p.id) === payeeSelect);
+    return applyPayeeDefaults(item, payee?.defaults ?? EMPTY_PAYEE_DEFAULTS, masterData);
+  };
 
+  // 支払い先の欄を変えたら、その既定値で全明細を上書きする（既定値のない項目は未選択にする。ユーザー確認済み）。
+  // 編集画面を開いたときは保存済みの内容のまま（欄を変えたときだけ上書きする）。
+  const updateState = (patch: Partial<ReceiptFormState>) =>
+    setState((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.payeeSelect !== undefined && patch.payeeSelect !== prev.payeeSelect) {
+        next.items = next.items.map((item) => withPayeeDefaults(item, patch.payeeSelect!));
+      }
+      return next;
+    });
+
+  // 明細を追加したときも、選択中の支払い先の既定値を入れる
   const addItem = () =>
-    setState((prev) => ({ ...prev, items: [...prev.items, createEmptyItem()] }));
+    setState((prev) => ({
+      ...prev,
+      items: [...prev.items, withPayeeDefaults(createEmptyItem(), prev.payeeSelect)],
+    }));
 
   const removeItem = (clientId: string) =>
     setState((prev) => ({
@@ -276,7 +304,14 @@ export function ReceiptForm({
   };
 
   const handleOcrExtracted = (result: OcrReceiptResult) => {
-    updateState(buildOcrPatch(result, masterData.payees, masterData.consumptionTaxes));
+    // OCRの結果は既定値を入れずにそのまま反映する（updateStateを通さない）
+    const patch = buildOcrPatch(
+      result,
+      masterData.payees,
+      masterData.consumptionTaxes,
+      currentUserId
+    );
+    setState((prev) => ({ ...prev, ...patch }));
     setToast({
       type: "success",
       message: "レシートを読み取りました。内容を確認してください。",
@@ -384,6 +419,7 @@ export function ReceiptForm({
         masterData={masterData}
         fieldErrors={fieldErrors}
         showPayerSelect={mode === "edit"}
+        currentUserId={currentUserId}
       />
 
       <ReceiptItemsSection

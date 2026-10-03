@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CategoryBreakdown, CostType } from "@/lib/receipts/breakdowns";
 import type { Counterpart, CounterpartKind, Tag } from "@/lib/receipts/labels";
+import { PAYEE_SELECT, toPayee, type Payee, type PayeeRow } from "@/lib/receipts/payees";
 
 // グループのカテゴリの内訳を取得する（非表示のものも含む。並び順→登録順）。
 // 登録画面の選択肢・入力チェック、設定画面の両方で使う。
@@ -98,4 +99,20 @@ export async function getTags(supabase: SupabaseClient, groupId: string): Promis
     throw error;
   }
   return (data ?? []).map((row) => ({ id: row.id, name: row.name, isHidden: row.is_hidden }));
+}
+
+// グループの支払い先を取得する（グループ全体・全員の自分用・非表示のものも含む。名前順。基本設計書 2.6節）。
+// 登録画面ではこのうちグループ全体と自分用だけを選択肢に出し（lib/receipts/payees.ts）、
+// 設定画面では相方用も閲覧のみで表示する。
+export async function getPayees(supabase: SupabaseClient, groupId: string): Promise<Payee[]> {
+  const { data, error } = await supabase
+    .from("payees")
+    .select(PAYEE_SELECT)
+    .eq("group_id", groupId)
+    .order("name")
+    .order("id");
+  if (error) {
+    throw error;
+  }
+  return ((data ?? []) as PayeeRow[]).map(toPayee);
 }

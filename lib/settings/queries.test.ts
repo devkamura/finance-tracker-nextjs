@@ -4,6 +4,7 @@ import {
   getCategoriesWithCostType,
   getCategoryBreakdowns,
   getCounterparts,
+  getPayees,
   getTags,
 } from "@/lib/settings/queries";
 
@@ -83,6 +84,66 @@ describe("settings/queries", () => {
     expect(await getTags(supabase, "group-1")).toEqual([
       { id: 5, name: "朝食", isHidden: false },
       { id: 6, name: "旧", isHidden: true },
+    ]);
+  });
+
+  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値・既定値のタグ）に変換する", async () => {
+    const supabase = fakeSupabase({
+      payees: [
+        {
+          id: 1,
+          name: "myTOKYOGAS",
+          owner_user_id: null,
+          is_hidden: false,
+          default_category_id: 4,
+          default_breakdown_id: null,
+          default_counterpart_id: 3,
+          default_owner_joint: true,
+          default_owner_user_id: null,
+          payee_default_tags: [{ tag_id: 7 }],
+        },
+        {
+          id: 2,
+          name: "〇〇薬局",
+          owner_user_id: "user-b",
+          is_hidden: true,
+          default_category_id: null,
+          default_breakdown_id: null,
+          default_counterpart_id: null,
+          default_owner_joint: false,
+          default_owner_user_id: "user-b",
+          payee_default_tags: [],
+        },
+      ],
+    });
+
+    expect(await getPayees(supabase, "group-1")).toEqual([
+      {
+        id: 1,
+        name: "myTOKYOGAS",
+        ownerUserId: null,
+        isHidden: false,
+        defaults: {
+          categoryId: "4",
+          breakdownId: "",
+          counterpartId: "3",
+          ownerUserId: "joint",
+          tagIds: ["7"],
+        },
+      },
+      {
+        id: 2,
+        name: "〇〇薬局",
+        ownerUserId: "user-b",
+        isHidden: true,
+        defaults: {
+          categoryId: "",
+          breakdownId: "",
+          counterpartId: "",
+          ownerUserId: "user-b",
+          tagIds: [],
+        },
+      },
     ]);
   });
 });

@@ -16,6 +16,12 @@ vi.mock("@/lib/settings/queries", () => ({
     .fn()
     .mockResolvedValue([{ id: 1, kind: "default", userId: null, name: "ふたり", isHidden: false }]),
   getTags: vi.fn().mockResolvedValue([{ id: 5, name: "朝食", isHidden: false }]),
+  // 支払い先：1＝グループ全体、2＝Bさん用、3＝非表示（分析拡充 F3）
+  getPayees: vi.fn().mockResolvedValue([
+    { id: 1, name: "セブンイレブン", ownerUserId: null, isHidden: false, defaults: {} },
+    { id: 2, name: "Bの薬局", ownerUserId: "user-b", isHidden: false, defaults: {} },
+    { id: 3, name: "閉店した店", ownerUserId: null, isHidden: true, defaults: {} },
+  ]),
 }));
 vi.mock("@/lib/supabase/group", () => ({
   getCurrentMembership: vi.fn(),
@@ -82,7 +88,6 @@ function buildFormData(
 
 type FakeSupabaseOptions = {
   isSettlementConfirmed?: boolean;
-  payeeName?: string;
   receiptInsertError?: unknown;
   detailsInsertError?: unknown;
   // n回目（0始まり）のreceipts INSERTだけを失敗させたい場合に指定する
@@ -92,7 +97,6 @@ type FakeSupabaseOptions = {
 function fakeSupabase(options: FakeSupabaseOptions = {}) {
   const {
     isSettlementConfirmed = false,
-    payeeName = "セブンイレブン",
     receiptInsertError = null,
     detailsInsertError = null,
     receiptInsertErrorAt,
@@ -106,18 +110,6 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
   const tagInserts: Record<string, unknown>[][] = [];
 
   const from = vi.fn((table: string) => {
-    if (table === "payees") {
-      return {
-        select: () => ({
-          eq: () => ({
-            single: vi.fn().mockResolvedValue({
-              data: { name: payeeName },
-              error: null,
-            }),
-          }),
-        }),
-      };
-    }
     if (table === "receipts") {
       return {
         insert: vi.fn((row: Record<string, unknown>) => {
@@ -475,5 +467,32 @@ describe("createReceipt", () => {
       errors: ["項目1: 相手が不正です。", "項目1: タグが不正です。"],
     });
     expect(supabase.receiptInserts).toHaveLength(0);
+  });
+
+  it("U-111: グループ全体の支払い先は、レシートに支払い先IDと名前を保存する", async () => {
+    const supabase = fakeSupabase();
+    mockedCreateClient.mockResolvedValue(supabase);
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+    const result = await createReceipt(buildFormData(buildState({ payeeSelect: "1" })));
+
+    expect(result.success).toBe(true);
+    expect(supabase.receiptInserts[0]).toMatchObject({
+      payee_id: 1,
+      payee_name: "セブンイレブン",
+    });
+  });
+
+  it("U-111: 相方用・非表示の支払い先は選べない", async () => {
+    for (const payeeSelect of ["2", "3", "999"]) {
+      const supabase = fakeSupabase();
+      mockedCreateClient.mockResolvedValue(supabase);
+      mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+      const result = await createReceipt(buildFormData(buildState({ payeeSelect })));
+
+      expect(result).toEqual({ success: false, errors: ["支払い先が見つかりません。"] });
+      expect(supabase.receiptInserts).toHaveLength(0);
+    }
   });
 });

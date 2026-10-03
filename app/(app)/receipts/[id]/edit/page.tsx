@@ -4,7 +4,12 @@ import { BackLink } from "@/components/navigation/BackLink";
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
 import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptForEdit } from "@/lib/receipts/queries";
-import { getCategoryBreakdowns, getCounterparts, getTags } from "@/lib/settings/queries";
+import {
+  getCategoryBreakdowns,
+  getCounterparts,
+  getPayees,
+  getTags,
+} from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,13 +31,13 @@ export default async function ReceiptEditPage({
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
-  const [editData, members, breakdowns, tags, masters] = await Promise.all([
+  const [editData, members, breakdowns, tags, payees, masters] = await Promise.all([
     getReceiptForEdit(supabase, membership!.groupId, id),
     getGroupMembers(supabase, membership!.groupId),
     getCategoryBreakdowns(supabase, membership!.groupId),
     getTags(supabase, membership!.groupId),
+    getPayees(supabase, membership!.groupId),
     Promise.all([
-      supabase.from("payees").select("id, name").order("id"),
       supabase.from("transaction_types").select("id, name").order("id"),
       supabase.from("consumption_taxes").select("id, name, multiplier").order("id"),
       supabase.from("categories").select("id, name").order("id"),
@@ -46,14 +51,12 @@ export default async function ReceiptEditPage({
   }
 
   const [
-    { data: payees, error: payeesError },
     { data: transactionTypes, error: transactionTypesError },
     { data: consumptionTaxes, error: consumptionTaxesError },
     { data: categories, error: categoriesError },
   ] = masters;
 
   const error =
-    payeesError ||
     transactionTypesError ||
     consumptionTaxesError ||
     categoriesError;
@@ -84,7 +87,7 @@ export default async function ReceiptEditPage({
         initialImageUrl={editData.receiptImageUrl}
         redirectHref={detailHref}
         masterData={{
-          payees: payees!,
+          payees,
           transactionTypes: transactionTypes!,
           consumptionTaxes: consumptionTaxes!,
           categories: categories!,
