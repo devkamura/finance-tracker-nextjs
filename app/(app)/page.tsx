@@ -1,4 +1,10 @@
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
+import {
+  getCategoryBreakdowns,
+  getCounterparts,
+  getPayees,
+  getTags,
+} from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,30 +17,29 @@ export default async function Home() {
   const membership = await getCurrentMembership(supabase, user!.id);
 
   const [
-    { data: payees, error: payeesError },
+    payees,
     { data: transactionTypes, error: transactionTypesError },
     { data: consumptionTaxes, error: consumptionTaxesError },
     { data: categories, error: categoriesError },
-    { data: purposes, error: purposesError },
-    { data: scenes, error: scenesError },
     members,
+    breakdowns,
+    tags,
   ] = await Promise.all([
-    supabase.from("payees").select("id, name").order("id"),
+    getPayees(supabase, membership!.groupId),
     supabase.from("transaction_types").select("id, name").order("id"),
     supabase.from("consumption_taxes").select("id, name, multiplier").order("id"),
     supabase.from("categories").select("id, name").order("id"),
-    supabase.from("purposes").select("id, name").order("id"),
-    supabase.from("scenes").select("id, name").order("id"),
     getGroupMembers(supabase, membership!.groupId),
+    getCategoryBreakdowns(supabase, membership!.groupId),
+    getTags(supabase, membership!.groupId),
   ]);
+  // メンバーの相手の名前はメンバーの表示名を使うため、メンバーの取得後に取得する
+  const counterparts = await getCounterparts(supabase, membership!.groupId, members);
 
   const error =
-    payeesError ||
     transactionTypesError ||
     consumptionTaxesError ||
-    categoriesError ||
-    purposesError ||
-    scenesError;
+    categoriesError;
   if (error) {
     throw error;
   }
@@ -45,12 +50,13 @@ export default async function Home() {
   return (
     <ReceiptForm
       masterData={{
-        payees: payees!,
+        payees,
         transactionTypes: transactionTypes!,
         consumptionTaxes: consumptionTaxes!,
         categories: categories!,
-        purposes: purposes!,
-        scenes: scenes!,
+        breakdowns,
+        counterparts,
+        tags,
         members,
       }}
       defaultTransactionTypeId={String(defaultTransactionType?.id ?? "")}

@@ -18,7 +18,7 @@ describe("レシート・精算のRLS/RPC", () => {
   let outsider: TestUser; // 別グループのユーザー
   let groupId: string;
   let categoryId: number;
-  let purposeId: number;
+  let counterpartId: number;
   let taxRate8: number;
   let transactionTypeExpenseId: number;
   let transactionTypeRefundId: number;
@@ -53,15 +53,15 @@ describe("レシート・精算のRLS/RPC", () => {
       p_name: "他グループ",
     });
 
-    const [{ data: categories }, { data: purposes }, { data: taxes }, { data: types }] =
+    const [{ data: categories }, { data: counterpart }, { data: taxes }, { data: types }] =
       await Promise.all([
         admin.from("categories").select("id").eq("name", "食費").single(),
-        admin.from("purposes").select("id").eq("name", "生活維持").single(),
+        admin.from("counterparts").select("id").eq("group_id", groupId).eq("name", "ふたり").single(),
         admin.from("consumption_taxes").select("id").eq("name", "8%").single(),
         admin.from("transaction_types").select("id, name"),
       ]);
     categoryId = categories!.id;
-    purposeId = purposes!.id;
+    counterpartId = counterpart!.id;
     taxRate8 = taxes!.id;
     transactionTypeExpenseId = types!.find((t) => t.name === "支出")!.id;
     transactionTypeRefundId = types!.find((t) => t.name === "返金")!.id;
@@ -76,13 +76,17 @@ describe("レシート・精算のRLS/RPC", () => {
   it("マスタデータが要件定義書どおりに整理されている", async () => {
     const { data: categories } = await admin.from("categories").select("name");
     const names = (categories ?? []).map((c) => c.name);
-    expect(names).toContain("交際費");
+    // 交際費は分析拡充で削除した（相手＝友人などで表す）
+    expect(names).not.toContain("交際費");
     expect(names).toContain("衣類・ファッション");
 
-    const { data: purposes } = await admin.from("purposes").select("name");
-    const purposeNames = (purposes ?? []).map((p) => p.name);
-    expect(purposeNames).toContain("友人");
-    expect(purposeNames).not.toContain("交際費");
+    // 目的は分析拡充 F2 で相手に置き換えた。グループ作成時に既定の相手が作られる
+    const { data: counterparts } = await admin
+      .from("counterparts")
+      .select("name")
+      .eq("group_id", groupId)
+      .eq("kind", "default");
+    expect((counterparts ?? []).map((c) => c.name).sort()).toEqual(["ふたり", "友人", "実家"].sort());
 
     const { data: taxes } = await admin.from("consumption_taxes").select("name");
     const taxNames = (taxes ?? []).map((t) => t.name);
@@ -122,7 +126,7 @@ describe("レシート・精算のRLS/RPC", () => {
           price: 1000,
           tax_type: "inclusive",
           category_id: categoryId,
-          purpose_id: purposeId,
+          counterpart_id: counterpartId,
           owner_user_id: null,
         },
         {
@@ -131,7 +135,7 @@ describe("レシート・精算のRLS/RPC", () => {
           price: 1000,
           tax_type: "inclusive",
           category_id: categoryId,
-          purpose_id: purposeId,
+          counterpart_id: counterpartId,
           owner_user_id: userB.id,
         },
       ])
@@ -288,7 +292,7 @@ describe("レシート・精算のRLS/RPC", () => {
         tax_type: "exclusive",
         tax_rate_id: null,
         category_id: categoryId,
-        purpose_id: purposeId,
+        counterpart_id: counterpartId,
       });
     expect(missingRateError).not.toBeNull();
 
@@ -299,7 +303,7 @@ describe("レシート・精算のRLS/RPC", () => {
       tax_type: "exclusive",
       tax_rate_id: taxRate8,
       category_id: categoryId,
-      purpose_id: purposeId,
+      counterpart_id: counterpartId,
     });
     expect(okError).toBeNull();
   });

@@ -11,6 +11,8 @@ import {
 
 import { Select } from "@/components/ui/Select";
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { visibleBreakdownsFor } from "@/lib/receipts/breakdowns";
+import { counterpartOptionLabel, selectableOptions } from "@/lib/receipts/labels";
 import type { ReceiptItemFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptItem } from "@/types/receipt";
 
@@ -30,8 +32,10 @@ type ReceiptItemCardProps = {
   fieldErrors?: ReceiptItemFieldErrors;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "purposes" | "scenes" | "members"
+    "consumptionTaxes" | "categories" | "breakdowns" | "counterparts" | "tags" | "members"
   >;
+  // ログイン中のユーザー。相手のプルダウンで「自分（A）」と表示するために使う。
+  currentUserId?: string;
 };
 
 export function ReceiptItemCard({
@@ -46,13 +50,30 @@ export function ReceiptItemCard({
   onRemove,
   fieldErrors,
   masterData,
+  currentUserId,
 }: ReceiptItemCardProps) {
-  const toggleScene = (sceneId: string) => {
-    const sceneIds = item.sceneIds.includes(sceneId)
-      ? item.sceneIds.filter((id) => id !== sceneId)
-      : [...item.sceneIds, sceneId];
-    onChange({ sceneIds });
+  const toggleTag = (tagId: string) => {
+    const tagIds = item.tagIds.includes(tagId)
+      ? item.tagIds.filter((id) => id !== tagId)
+      : [...item.tagIds, tagId];
+    onChange({ tagIds });
   };
+
+  // 相手・タグの選択肢：表示中のもの。編集時に非表示のものが選ばれていれば、その値も残して表示する。
+  const counterpartOptions = selectableOptions(masterData.counterparts, [item.counterpartId]);
+  const tagOptions = selectableOptions(masterData.tags, item.tagIds);
+
+  // 内訳の選択肢：表示中の内訳。編集時に非表示の内訳が選ばれていれば、その値も残して表示する。
+  const breakdownOptions = item.categoryId
+    ? masterData.breakdowns.filter(
+        (b) =>
+          String(b.categoryId) === item.categoryId &&
+          (!b.isHidden || String(b.id) === item.breakdownId)
+      )
+    : [];
+  const showBreakdown =
+    visibleBreakdownsFor(item.categoryId, masterData.breakdowns).length > 0 ||
+    breakdownOptions.length > 0;
 
   const truncatedName = item.name.slice(0, MAX_ITEM_NAME_LENGTH);
   const heading = truncatedName
@@ -209,16 +230,34 @@ export function ReceiptItemCard({
             ))}
           </Select>
 
+          {/* 内訳はカテゴリに内訳を設定しているときだけ表示する（必須。docs/分析拡充/基本設計書.md 3.1節） */}
+          {showBreakdown && (
+            <Select
+              label="内訳"
+              value={item.breakdownId}
+              onChange={(e) => onChange({ breakdownId: e.target.value })}
+              error={fieldErrors?.breakdownId}
+            >
+              <option value="">選択してください</option>
+              {breakdownOptions.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                  {b.isHidden ? "（非表示）" : ""}
+                </option>
+              ))}
+            </Select>
+          )}
+
           <Select
-            label="目的"
-            value={item.purposeId}
-            onChange={(e) => onChange({ purposeId: e.target.value })}
-            error={fieldErrors?.purposeId}
+            label="相手"
+            value={item.counterpartId}
+            onChange={(e) => onChange({ counterpartId: e.target.value })}
+            error={fieldErrors?.counterpartId}
           >
             <option value="">選択してください</option>
-            {masterData.purposes.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
+            {counterpartOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {counterpartOptionLabel(c, currentUserId)}
               </option>
             ))}
           </Select>
@@ -238,30 +277,35 @@ export function ReceiptItemCard({
             ))}
           </Select>
 
-          <div>
-            <span className="text-sm font-medium text-slate-700">
-              シーン（任意・複数選択可）
-            </span>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {masterData.scenes.map((scene) => {
-                const checked = item.sceneIds.includes(String(scene.id));
-                return (
-                  <button
-                    key={scene.id}
-                    type="button"
-                    onClick={() => toggleScene(String(scene.id))}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      checked
-                        ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                        : "border-slate-300 text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    {scene.name}
-                  </button>
-                );
-              })}
+          {/* タグは設定画面で1つ以上登録したときだけ表示する */}
+          {tagOptions.length > 0 && (
+            <div>
+              <span className="text-sm font-medium text-slate-700">
+                タグ（任意・複数選択可）
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tagOptions.map((tag) => {
+                  const checked = item.tagIds.includes(String(tag.id));
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      aria-pressed={checked}
+                      onClick={() => toggleTag(String(tag.id))}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        checked
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                          : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {tag.name}
+                      {tag.isHidden ? "（非表示）" : ""}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

@@ -13,14 +13,25 @@ import {
 import { ReceiptAccordionItem } from "@/components/receipt-list/ReceiptAccordionItem";
 import { ReceiptFilterBanner } from "@/components/receipt-list/ReceiptFilterBanner";
 import { MonthSelector } from "@/components/ui/MonthSelector";
+import {
+  costTypeMap,
+  DIMENSIONS,
+  type Dimension,
+  type DimensionMaster,
+} from "@/lib/analytics/dimensions";
 import { replaceUrlKeepingAppState } from "@/lib/navigation/history-state";
-import { parseDrilldownSource, parseListFilter, withQuery } from "@/lib/receipts/list-params";
+import {
+  parseDrilldownSource,
+  parseListFilter,
+  withQuery,
+} from "@/lib/receipts/list-params";
 import { buildReceiptListView, type ReceiptSort } from "@/lib/receipts/list-view";
 import type { ReceiptListItem } from "@/types/receipt";
 
 type ReceiptListViewProps = {
   receipts: ReceiptListItem[]; // その月のレシートすべて（絞り込み前）
-  categories: { id: number; name: string }[];
+  // 絞り込みの条件の名前・費用区分を求めるためのマスタ（カテゴリ・内訳・相手）
+  master: DimensionMaster;
   members: { userId: string; displayName: string }[];
   month: string; // "YYYY-MM"
   minMonth: string;
@@ -36,14 +47,16 @@ function urlParamsWithOpen(listParams: URLSearchParams, openReceiptId: string | 
 }
 
 // 絞り込み条件のURLパラメータ（解除するとまとめて外す）
-type FilterParams = { category?: string; scope?: string; joint?: string };
+type FilterParams = Partial<Record<Dimension | "scope" | "joint", string>>;
+
+const FILTER_PARAM_KEYS = [...DIMENSIONS, "scope", "joint"] as const;
 
 // レシート一覧の表示部分（詳細設計書 フェーズ3 5章）。
 // その月のレシートはサーバーから1回だけ受け取り、絞り込み・解除・並び替えは画面側だけで行う
 // （サーバー通信なし）。月の切り替えだけは別の月のデータが必要なため、サーバーから取得する。
 export function ReceiptListView({
   receipts,
-  categories,
+  master,
   members,
   month,
   minMonth,
@@ -60,12 +73,14 @@ export function ReceiptListView({
     searchParams.get("sort") === "asc" ? "asc" : "desc"
   );
   const [filterParams, setFilterParams] = useState<FilterParams | null>(() => {
-    const params = {
-      category: searchParams.get("category") ?? undefined,
-      scope: searchParams.get("scope") ?? undefined,
-      joint: searchParams.get("joint") ?? undefined,
-    };
-    return params.category || params.scope ? params : null;
+    const params: FilterParams = {};
+    for (const key of FILTER_PARAM_KEYS) {
+      const value = searchParams.get(key);
+      if (value) params[key] = value;
+    }
+    // 条件（カテゴリ〜相手）または表示対象があるときだけ絞り込み中とする
+    const filtering = DIMENSIONS.some((d) => params[d] !== undefined) || params.scope;
+    return filtering ? params : null;
   });
   // 移動元（分析画面）と戻り先の分析画面の状態（ret）は、絞り込みを解除しても残す
   // （「← 分析に戻る」を出し続け、詳細画面への行き来でも引き継ぐため）
@@ -73,12 +88,13 @@ export function ReceiptListView({
   const ret = searchParams.get("ret");
 
   const filter = useMemo(
-    () => (filterParams ? parseListFilter(filterParams, categories, members) : null),
-    [filterParams, categories, members]
+    () => (filterParams ? parseListFilter(filterParams, master, members) : null),
+    [filterParams, master, members]
   );
+  const costTypes = useMemo(() => costTypeMap(master.categories), [master.categories]);
   const view = useMemo(
-    () => buildReceiptListView(receipts, filter, sort),
-    [receipts, filter, sort]
+    () => buildReceiptListView(receipts, filter, sort, costTypes),
+    [receipts, filter, sort, costTypes]
   );
 
   // 月・並び順・絞り込み・移動元をまとめたURLパラメータ。
@@ -89,7 +105,7 @@ export function ReceiptListView({
     params.set("sort", sort);
     if (filterParams) {
       for (const [key, value] of Object.entries(filterParams)) {
-        if (value) params.set(key, value);
+        if (value !== undefined) params.set(key, value);
       }
     }
     if (from) params.set("from", from);
@@ -137,7 +153,7 @@ export function ReceiptListView({
 
       {filter && (
         <ReceiptFilterBanner
-          categoryName={filter.categoryName}
+          label={filter.label}
           scopeLabel={filter.scopeLabel}
           total={view.matchedTotal}
           onClear={() => setFilterParams(null)}
@@ -173,7 +189,7 @@ export function ReceiptListView({
               match={
                 filter && match
                   ? {
-                      label: filter.categoryName ?? "該当分",
+                      label: filter.label ?? "該当分",
                       amount: match.matchedAmount,
                       itemIds: match.matchedItemIds,
                     }

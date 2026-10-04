@@ -28,7 +28,7 @@ type ReceiptAccordionItemProps = {
   onOpenDetail?: () => void;
   // 分析画面からの絞り込み中のみ渡す。「うち〇〇円」の表示と、当てはまる明細の強調に使う。
   match?: {
-    label: string; // カテゴリ名、またはカテゴリ指定がないときは「該当分」
+    label: string; // 条件の表示名（「食費」など）、または条件がないときは「該当分」
     amount: number; // 当てはまる明細の按分後の合計
     itemIds: string[];
   };

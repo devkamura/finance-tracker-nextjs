@@ -15,8 +15,9 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxType: "exclusive",
     taxRateId: "1",
     categoryId: "2",
-    purposeId: "3",
-    sceneIds: ["4", "5"],
+    breakdownId: "",
+    counterpartId: "3",
+    tagIds: ["4", "5"],
     ownerUserId: OWNER_JOINT_VALUE,
     ...overrides,
   };
@@ -45,14 +46,14 @@ describe("buildPartnerItems", () => {
     });
   });
 
-  it("U-52: 元の明細（シーン配列含む）を書き換えない", () => {
+  it("U-52: 元の明細（タグ配列含む）を書き換えない", () => {
     const items = [buildItem({ ownerUserId: ME })];
 
     const result = buildPartnerItems(items, ME, PARTNER);
-    result[0].sceneIds.push("99");
+    result[0].tagIds.push("99");
 
     expect(items[0].ownerUserId).toBe(ME);
-    expect(items[0].sceneIds).toEqual(["4", "5"]);
+    expect(items[0].tagIds).toEqual(["4", "5"]);
   });
 });
 

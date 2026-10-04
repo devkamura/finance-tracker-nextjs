@@ -3,12 +3,14 @@
 // 一覧に出す「うち〇〇円」の合計がグラフの値と必ず一致するようにする。
 
 import { ownerWeight } from "@/lib/analytics/aggregate";
+import { matchesConditions, type Conditions, type CostTypeMap } from "@/lib/analytics/dimensions";
 import type { Scope } from "@/lib/analytics/types";
 import { allocateReceiptAmount } from "@/lib/settlement/calculate";
 import type { ReceiptListItem } from "@/types/receipt";
 
 export type DrilldownFilter = {
-  categoryId: number | null; // null＝全カテゴリ（総支出）
+  // カテゴリ・内訳・費用区分・支払い先・相手の条件（なし＝総支出。docs/分析拡充/詳細設計書.md F4 4章）
+  conditions: Conditions;
   scope: Scope;
 };
 
@@ -19,12 +21,17 @@ export type ReceiptMatch = {
 
 type MatchableReceipt = Pick<
   ReceiptListItem,
-  "amount" | "transactionTypeName" | "payerUserId" | "items"
+  "amount" | "transactionTypeName" | "payerUserId" | "payeeId" | "items"
 >;
 
 // レシート1枚について、条件に当てはまる明細と「うち」の金額を返す。
 // 当てはまる明細がなければ matchedItemIds は空になる（一覧には出さない）。
-export function matchReceipt(receipt: MatchableReceipt, filter: DrilldownFilter): ReceiptMatch {
+// 費用区分は分析と同じく、今のカテゴリの設定（costTypes）で判定する。
+export function matchReceipt(
+  receipt: MatchableReceipt,
+  filter: DrilldownFilter,
+  costTypes: CostTypeMap
+): ReceiptMatch {
   const items = receipt.items;
   if (items.length === 0) {
     return { matchedItemIds: [], matchedAmount: 0 };
@@ -46,7 +53,13 @@ export function matchReceipt(receipt: MatchableReceipt, filter: DrilldownFilter)
   const matchedItemIds: string[] = [];
   let matchedAmount = 0;
   items.forEach((item, index) => {
-    if (filter.categoryId !== null && item.categoryId !== filter.categoryId) return;
+    const values = {
+      categoryId: item.categoryId,
+      breakdownId: item.breakdownId,
+      counterpartId: item.counterpartId,
+      payeeId: receipt.payeeId,
+    };
+    if (!matchesConditions(values, filter.conditions, costTypes)) return;
     const weight = ownerWeight(item.ownerUserId, filter.scope);
     if (weight === 0) return;
     matchedItemIds.push(item.id);

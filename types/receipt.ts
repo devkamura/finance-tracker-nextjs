@@ -1,3 +1,7 @@
+import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
+import type { Counterpart, Tag } from "@/lib/receipts/labels";
+import type { Payee } from "@/lib/receipts/payees";
+
 export type TaxType = "inclusive" | "exclusive";
 
 export type ReceiptItem = {
@@ -7,8 +11,12 @@ export type ReceiptItem = {
   taxType: TaxType;
   taxRateId: string; // taxTypeが"exclusive"の場合のみ必須
   categoryId: string;
-  purposeId: string;
-  sceneIds: string[];
+  // 内訳。"" または実際の内訳ID（内訳を設定したカテゴリでは必須。docs/分析拡充/基本設計書.md 3.1節）
+  breakdownId: string;
+  // 相手（必須。docs/分析拡充/基本設計書.md 3.3節）
+  counterpartId: string;
+  // タグ（任意・複数）
+  tagIds: string[];
   // 帰属先。OWNER_JOINT_VALUE（共同）または実際のuser id
   ownerUserId: string;
 };
@@ -32,12 +40,17 @@ export type GroupMemberOption = {
 };
 
 export type MasterData = {
-  payees: { id: number; name: string }[];
+  // 支払い先（グループ全体・全員の自分用・非表示のものも含む。プルダウンには
+  // グループ全体と自分用だけを出し、編集時は保存済みの支払い先も表示するため）
+  payees: Payee[];
   transactionTypes: { id: number; name: string }[];
   consumptionTaxes: { id: number; name: string; multiplier: number }[];
   categories: { id: number; name: string }[];
-  purposes: { id: number; name: string }[];
-  scenes: { id: number; name: string }[];
+  // カテゴリの内訳（非表示のものも含む。編集時に既存の値を表示するため）
+  breakdowns: CategoryBreakdown[];
+  // 相手・タグ（非表示のものも含む。編集時に既存の値を表示するため）
+  counterparts: Counterpart[];
+  tags: Tag[];
   members: GroupMemberOption[];
 };
 
@@ -67,11 +80,15 @@ export type ReceiptDetailItemView = {
   taxRateMultiplier: number | null;
   categoryId: number;
   categoryName: string;
-  purposeName: string;
+  breakdownId: number | null;
+  breakdownName: string | null; // 内訳なしはnull
+  // 相手。一覧の絞り込み（相手で絞り込む）で使う（docs/分析拡充/詳細設計書.md F4 4章）
+  counterpartId: number;
+  counterpartName: string;
   ownerUserId: string | null;
   ownerDisplayName: string; // "共同" またはユーザー表示名
   ownerColor: string | null; // 共同の場合はnull
-  sceneNames: string[];
+  tagNames: string[];
 };
 
 export type ReceiptDetailView = {
@@ -97,6 +114,8 @@ export type ReceiptDetailView = {
 export type ReceiptListItem = {
   id: string;
   occurredAt: string;
+  // 登録済みの支払い先のID。null＝手入力（分析からの支払い先の絞り込みに使う）
+  payeeId: number | null;
   payeeName: string;
   amount: number;
   transactionTypeName: string;

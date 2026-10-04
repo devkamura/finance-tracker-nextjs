@@ -16,7 +16,7 @@ export default async function AnalyticsPage() {
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
-  const data = await getAnalyticsData(supabase, membership!.groupId);
+  const data = await getAnalyticsData(supabase, membership!.groupId, user!.id);
 
   return (
     <div className="flex flex-col gap-4">

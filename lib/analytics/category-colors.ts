@@ -31,3 +31,14 @@ export function categoryColor(
   }
   return CATEGORY_PALETTE[Math.max(index, 0) % CATEGORY_PALETTE.length];
 }
+
+// カテゴリ以外の項目（内訳・費用区分・支払い先・相手）の色（docs/分析拡充/詳細設計書.md F4 5章）。
+// 並び順の何番目かでパレットの色を割り当てる。隣り合う色（オレンジとアンバー等）が続くと
+// 見分けにくいため、パレットを5つ飛ばしで使う（12と5は互いに素のため、12色を1巡してから重なる）。
+export function paletteColor(index: number): string {
+  const safeIndex = Math.max(index, 0);
+  return CATEGORY_PALETTE[(safeIndex * 5) % CATEGORY_PALETTE.length];
+}
+
+// 「内訳なし」の色。どの内訳とも紛れないよう、パレットにない薄いグレーにする。
+export const NO_VALUE_COLOR = "#cbd5e1";

@@ -36,18 +36,105 @@ export type Database = {
     Tables: {
       categories: {
         Row: {
+          default_cost_type: string
           id: number
           name: string
         }
         Insert: {
+          default_cost_type?: string
           id?: never
           name: string
         }
         Update: {
+          default_cost_type?: string
           id?: never
           name?: string
         }
         Relationships: []
+      }
+      category_breakdowns: {
+        Row: {
+          category_id: number
+          created_at: string
+          group_id: string
+          id: number
+          is_hidden: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category_id: number
+          created_at?: string
+          group_id: string
+          id?: never
+          is_hidden?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category_id?: number
+          created_at?: string
+          group_id?: string
+          id?: never
+          is_hidden?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_breakdowns_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "category_breakdowns_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      category_settings: {
+        Row: {
+          category_id: number
+          cost_type: string
+          group_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: number
+          cost_type: string
+          group_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: number
+          cost_type?: string
+          group_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_settings_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "category_settings_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       consumption_taxes: {
         Row: {
@@ -66,6 +153,50 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      counterparts: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: number
+          is_hidden: boolean
+          kind: string
+          name: string | null
+          sort_order: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: never
+          is_hidden?: boolean
+          kind: string
+          name?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: never
+          is_hidden?: boolean
+          kind?: string
+          name?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counterparts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       group_members: {
         Row: {
@@ -129,23 +260,140 @@ export type Database = {
         }
         Relationships: []
       }
-      payees: {
+      payee_aliases: {
         Row: {
+          created_at: string
           group_id: string
           id: number
           name: string
+          payee_id: number
         }
         Insert: {
+          created_at?: string
           group_id: string
           id?: never
           name: string
+          payee_id: number
         }
         Update: {
+          created_at?: string
           group_id?: string
           id?: never
           name?: string
+          payee_id?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "payee_aliases_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payee_aliases_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "payees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payee_default_tags: {
+        Row: {
+          payee_id: number
+          tag_id: number
+        }
+        Insert: {
+          payee_id: number
+          tag_id: number
+        }
+        Update: {
+          payee_id?: number
+          tag_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payee_default_tags_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "payees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payee_default_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payees: {
+        Row: {
+          created_at: string
+          default_breakdown_id: number | null
+          default_category_id: number | null
+          default_counterpart_id: number | null
+          default_owner_joint: boolean
+          default_owner_user_id: string | null
+          group_id: string
+          id: number
+          is_hidden: boolean
+          name: string
+          owner_user_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_breakdown_id?: number | null
+          default_category_id?: number | null
+          default_counterpart_id?: number | null
+          default_owner_joint?: boolean
+          default_owner_user_id?: string | null
+          group_id: string
+          id?: never
+          is_hidden?: boolean
+          name: string
+          owner_user_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_breakdown_id?: number | null
+          default_category_id?: number | null
+          default_counterpart_id?: number | null
+          default_owner_joint?: boolean
+          default_owner_user_id?: string | null
+          group_id?: string
+          id?: never
+          is_hidden?: boolean
+          name?: string
+          owner_user_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payees_default_breakdown_id_fkey"
+            columns: ["default_breakdown_id"]
+            isOneToOne: false
+            referencedRelation: "category_breakdowns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payees_default_category_id_fkey"
+            columns: ["default_category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payees_default_counterpart_id_fkey"
+            columns: ["default_counterpart_id"]
+            isOneToOne: false
+            referencedRelation: "counterparts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payees_group_id_fkey"
             columns: ["group_id"]
@@ -179,92 +427,87 @@ export type Database = {
         }
         Relationships: []
       }
-      purposes: {
-        Row: {
-          id: number
-          name: string
-        }
-        Insert: {
-          id?: never
-          name: string
-        }
-        Update: {
-          id?: never
-          name?: string
-        }
-        Relationships: []
-      }
-      receipt_detail_scenes: {
+      receipt_detail_tags: {
         Row: {
           receipt_detail_id: string
-          scene_id: number
+          tag_id: number
         }
         Insert: {
           receipt_detail_id: string
-          scene_id: number
+          tag_id: number
         }
         Update: {
           receipt_detail_id?: string
-          scene_id?: number
+          tag_id?: number
         }
         Relationships: [
           {
-            foreignKeyName: "receipt_detail_scenes_receipt_detail_id_fkey"
+            foreignKeyName: "receipt_detail_tags_receipt_detail_id_fkey"
             columns: ["receipt_detail_id"]
             isOneToOne: false
             referencedRelation: "receipt_details"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "receipt_detail_scenes_scene_id_fkey"
-            columns: ["scene_id"]
+            foreignKeyName: "receipt_detail_tags_tag_id_fkey"
+            columns: ["tag_id"]
             isOneToOne: false
-            referencedRelation: "scenes"
+            referencedRelation: "tags"
             referencedColumns: ["id"]
           },
         ]
       }
       receipt_details: {
         Row: {
+          breakdown_id: number | null
           category_id: number
+          counterpart_id: number
           created_at: string
           id: string
           item_name: string
           owner_user_id: string | null
           price: number
-          purpose_id: number
           receipt_id: string
           tax_rate_id: number | null
           tax_type: string
           updated_at: string
         }
         Insert: {
+          breakdown_id?: number | null
           category_id: number
+          counterpart_id: number
           created_at?: string
           id?: string
           item_name: string
           owner_user_id?: string | null
           price: number
-          purpose_id: number
           receipt_id: string
           tax_rate_id?: number | null
           tax_type: string
           updated_at?: string
         }
         Update: {
+          breakdown_id?: number | null
           category_id?: number
+          counterpart_id?: number
           created_at?: string
           id?: string
           item_name?: string
           owner_user_id?: string | null
           price?: number
-          purpose_id?: number
           receipt_id?: string
           tax_rate_id?: number | null
           tax_type?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "receipt_details_breakdown_id_fkey"
+            columns: ["breakdown_id"]
+            isOneToOne: false
+            referencedRelation: "category_breakdowns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "receipt_details_category_id_fkey"
             columns: ["category_id"]
@@ -273,10 +516,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "receipt_details_purpose_id_fkey"
-            columns: ["purpose_id"]
+            foreignKeyName: "receipt_details_counterpart_id_fkey"
+            columns: ["counterpart_id"]
             isOneToOne: false
-            referencedRelation: "purposes"
+            referencedRelation: "counterparts"
             referencedColumns: ["id"]
           },
           {
@@ -365,21 +608,6 @@ export type Database = {
           },
         ]
       }
-      scenes: {
-        Row: {
-          id: number
-          name: string
-        }
-        Insert: {
-          id?: never
-          name: string
-        }
-        Update: {
-          id?: never
-          name?: string
-        }
-        Relationships: []
-      }
       settlement_periods: {
         Row: {
           confirmed_at: string
@@ -448,6 +676,44 @@ export type Database = {
           },
         ]
       }
+      tags: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: number
+          is_hidden: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: never
+          is_hidden?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: never
+          is_hidden?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tags_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transaction_types: {
         Row: {
           id: number
@@ -471,6 +737,10 @@ export type Database = {
       _link_group_membership: {
         Args: { p_email: string; p_user_id: string }
         Returns: undefined
+      }
+      add_payee_alias: {
+        Args: { p_name: string; p_payee_id: number }
+        Returns: Json
       }
       admin_manages_user: { Args: { p_user_id: string }; Returns: boolean }
       confirm_settlement: {
@@ -513,6 +783,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_default_counterparts: {
+        Args: { p_group_id: string }
+        Returns: undefined
+      }
       create_group_with_admin: {
         Args: { p_name: string }
         Returns: {
@@ -535,6 +809,7 @@ export type Database = {
       }
       link_pending_group_memberships: { Args: never; Returns: undefined }
       my_group_ids: { Args: never; Returns: string[] }
+      normalize_payee_name: { Args: { p_name: string }; Returns: string }
       reopen_settlement: {
         Args: { p_group_id: string; p_period_month: string }
         Returns: {
@@ -564,6 +839,7 @@ export type Database = {
         }
       }
       shares_group_with: { Args: { p_user_id: string }; Returns: boolean }
+      used_setting_ids: { Args: { p_group_id: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

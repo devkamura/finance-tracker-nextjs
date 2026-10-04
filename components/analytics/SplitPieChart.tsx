@@ -4,8 +4,6 @@ import { Pie, PieChart, ResponsiveContainer, Sector, Tooltip } from "recharts";
 import type { PieSectorShapeProps } from "recharts";
 
 import { formatYen, type PieSlice } from "@/lib/analytics/aggregate";
-import { categoryColor } from "@/lib/analytics/category-colors";
-import type { AnalyticsCategory } from "@/lib/analytics/types";
 
 // 選ばれた扇を外にずらして見せる幅（px）。outerRadius="85%" の余白に収まる大きさにする。
 const ACTIVE_SECTOR_OFFSET = 8;
@@ -22,20 +20,22 @@ function renderSector(props: PieSectorShapeProps) {
   );
 }
 
-type CategoryPieChartProps = {
+type SplitPieChartProps = {
   slices: PieSlice[];
-  categories: AnalyticsCategory[];
+  // 「分ける」項目の値の表示名と色（カテゴリ・内訳・費用区分・支払い先・相手で共通）
+  labelOf: (key: string) => string;
+  colorOf: (key: string) => string;
 };
 
-// カテゴリ別の構成比を表す円グラフ。扇はプラスのカテゴリだけ（マイナスは描画上0、
-// 基本設計書3.7節）。凡例は下の内訳表で代用し、扇のホバー／タップで名前・金額・％を出す。
-export function CategoryPieChart({ slices, categories }: CategoryPieChartProps) {
+// 「分ける」項目（カテゴリ・内訳など）ごとの構成比を表す円グラフ。扇はプラスの値だけ
+// （マイナスは描画上0、基本設計書3.7節）。凡例は下の表で代用し、扇のホバー／タップで名前・金額・％を出す。
+export function SplitPieChart({ slices, labelOf, colorOf }: SplitPieChartProps) {
   // Rechartsはデータの各要素のfillを扇の色として使う（非推奨のCellは使わない）
   const chartData = slices.map((slice) => ({
-    name: categories.find((c) => c.id === slice.categoryId)?.name ?? "不明",
+    name: labelOf(slice.key),
     amount: slice.amount,
     percent: slice.percent,
-    fill: categoryColor(slice.categoryId, categories),
+    fill: colorOf(slice.key),
   }));
 
   return (
