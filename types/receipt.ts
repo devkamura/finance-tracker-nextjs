@@ -82,6 +82,8 @@ export type ReceiptDetailItemView = {
   categoryName: string;
   breakdownId: number | null;
   breakdownName: string | null; // 内訳なしはnull
+  // 相手。一覧の絞り込み（相手で絞り込む）で使う（docs/分析拡充/詳細設計書.md F4 4章）
+  counterpartId: number;
   counterpartName: string;
   ownerUserId: string | null;
   ownerDisplayName: string; // "共同" またはユーザー表示名

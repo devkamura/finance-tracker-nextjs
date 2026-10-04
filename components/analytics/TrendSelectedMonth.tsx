@@ -34,7 +34,7 @@ export function TrendSelectedMonth({ point, monthLabel, href }: TrendSelectedMon
         </span>
       </p>
       {/* 本番では表示中のLinkを先読みするため、月を選ぶたびにサーバー通信が発生してしまう。
-          分析画面の操作中は通信しない要件のため、先読みを止める（CategoryBreakdownTableと同じ）。 */}
+          分析画面の操作中は通信しない要件のため、先読みを止める（SplitBreakdownTableと同じ）。 */}
       <Link
         href={href}
         prefetch={false}

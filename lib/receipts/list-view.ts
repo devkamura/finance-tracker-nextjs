@@ -4,6 +4,7 @@
 // 画面側だけで行う（サーバー通信なし）。将来の任意フィルタ（要件定義書32〜33章）も
 // ここに条件を足して対応する。
 
+import type { CostTypeMap } from "@/lib/analytics/dimensions";
 import { matchReceipt, type ReceiptMatch } from "@/lib/analytics/drilldown";
 import type { ReceiptListFilter } from "@/lib/receipts/list-params";
 import type { ReceiptListItem } from "@/types/receipt";
@@ -23,7 +24,8 @@ export type ReceiptListView = {
 export function buildReceiptListView(
   receipts: ReceiptListItem[],
   filter: ReceiptListFilter | null,
-  sort: ReceiptSort
+  sort: ReceiptSort,
+  costTypes: CostTypeMap
 ): ReceiptListView {
   const sorted = [...receipts].sort((a, b) => {
     const diff = Date.parse(a.occurredAt) - Date.parse(b.occurredAt);
@@ -36,7 +38,7 @@ export function buildReceiptListView(
 
   // 条件に当てはまる明細を1件以上含むレシートだけを残す
   const items = sorted
-    .map((receipt) => ({ receipt, match: matchReceipt(receipt, filter) }))
+    .map((receipt) => ({ receipt, match: matchReceipt(receipt, filter, costTypes) }))
     .filter((item) => item.match.matchedItemIds.length > 0);
   const matchedTotal = items.reduce((sum, item) => sum + item.match.matchedAmount, 0);
   return { items, matchedTotal };

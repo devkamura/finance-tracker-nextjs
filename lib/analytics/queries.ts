@@ -4,6 +4,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { lastTwelveMonths, monthKeyOf, monthRange, todayKey } from "@/lib/analytics/months";
 import type { AnalyticsData, AnalyticsRow } from "@/lib/analytics/types";
+import {
+  getCategoriesWithCostType,
+  getCategoryBreakdowns,
+  getCounterpartNames,
+} from "@/lib/settings/queries";
 import { allocateReceiptAmount } from "@/lib/settlement/calculate";
 import { getGroupMembers } from "@/lib/supabase/group";
 import { unwrapToOne } from "@/lib/supabase/unwrap";
@@ -16,6 +21,8 @@ type RawDetail = {
   price: number;
   tax_type: "inclusive" | "exclusive";
   category_id: number;
+  breakdown_id: number | null;
+  counterpart_id: number;
   owner_user_id: string | null;
   consumption_taxes: { multiplier: number } | { multiplier: number }[] | null;
 };
@@ -24,6 +31,7 @@ type RawReceipt = {
   id: string;
   occurred_at: string;
   amount: number;
+  payee_name: string;
   payer_user_id: string;
   transaction_types: { name: string } | { name: string }[] | null;
   receipt_details: RawDetail[] | null;
@@ -41,8 +49,9 @@ async function fetchAllReceipts(
     const { data, error } = await supabase
       .from("receipts")
       .select(
-        `id, occurred_at, amount, payer_user_id, transaction_types(name),
-         receipt_details(price, tax_type, category_id, owner_user_id, consumption_taxes(multiplier))`
+        `id, occurred_at, amount, payee_name, payer_user_id, transaction_types(name),
+         receipt_details(price, tax_type, category_id, breakdown_id, counterpart_id, owner_user_id,
+           consumption_taxes(multiplier))`
       )
       .eq("group_id", groupId)
       .gte("occurred_at", from.toISOString())
@@ -64,7 +73,8 @@ async function fetchAllReceipts(
 }
 
 // レシートを精算と同じロジックで明細に按分し、返金はマイナスにしたうえで
-// 「月×カテゴリ×帰属先」ごとに合計する（docs/支出分析機能/詳細設計書.md 4.2節）。
+// 「月×カテゴリ×内訳×相手×支払い先×帰属先」ごとに合計する
+// （docs/支出分析機能/詳細設計書.md 4.2節、docs/分析拡充/詳細設計書.md F4 2章）。
 export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
   const totals = new Map<string, AnalyticsRow>();
 
@@ -87,10 +97,21 @@ export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
     const month = monthKeyOf(new Date(receipt.occurred_at));
 
     details.forEach((detail, index) => {
-      const key = `${month}|${detail.category_id}|${detail.owner_user_id ?? ""}`;
+      // 支払い先名には区切りに使える文字も入りうるため、JSONにしてキーにする
+      const key = JSON.stringify([
+        month,
+        detail.category_id,
+        detail.breakdown_id,
+        detail.counterpart_id,
+        receipt.payee_name,
+        detail.owner_user_id,
+      ]);
       const row = totals.get(key) ?? {
         month,
         categoryId: detail.category_id,
+        breakdownId: detail.breakdown_id,
+        counterpartId: detail.counterpart_id,
+        payeeName: receipt.payee_name,
         ownerUserId: detail.owner_user_id,
         amount: 0,
       };
@@ -113,25 +134,32 @@ export async function getAnalyticsData(
   const months = lastTwelveMonths(today);
   const { from, to } = monthRange(months);
 
-  const [receipts, members, { data: categories, error: categoriesError }] =
-    await Promise.all([
-      fetchAllReceipts(supabase, groupId, from, to),
-      getGroupMembers(supabase, groupId),
-      supabase.from("categories").select("id, name").order("id"),
-    ]);
-  if (categoriesError) {
-    throw categoriesError;
-  }
+  const membersPromise = getGroupMembers(supabase, groupId);
+  const [receipts, members, categories, breakdowns, counterparts] = await Promise.all([
+    fetchAllReceipts(supabase, groupId, from, to),
+    membersPromise,
+    getCategoriesWithCostType(supabase, groupId),
+    getCategoryBreakdowns(supabase, groupId),
+    // 相手の名前はメンバーの表示名を使うため、メンバーを取得してから求める
+    membersPromise.then((m) => getCounterpartNames(supabase, groupId, m)),
+  ]);
+  const rows = buildAnalyticsRows(receipts);
 
   return {
     today,
     months,
-    categories: categories ?? [],
+    categories: categories.map((c) => ({ id: c.id, name: c.name, costType: c.costType })),
+    breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
+    counterparts,
+    // 支払い先は登録済みの一覧ではなく、集計に出てくる名前（相方用・手入力を含む）を選択肢にする
+    payeeNames: Array.from(new Set(rows.map((r) => r.payeeName))).sort((a, b) =>
+      a.localeCompare(b, "ja")
+    ),
     members: members.map((m) => ({
       userId: m.userId,
       displayName: m.displayName,
       color: m.color,
     })),
-    rows: buildAnalyticsRows(receipts),
+    rows,
   };
 }

@@ -4,10 +4,11 @@ import {
   buildPieData,
   buildTrendData,
   formatYen,
-  sumByCategory,
+  sumByDimension,
   sumByMonth,
 } from "@/lib/analytics/aggregate";
-import type { AnalyticsRow } from "@/lib/analytics/types";
+import { costTypeMap } from "@/lib/analytics/dimensions";
+import type { AnalyticsRow, Scope } from "@/lib/analytics/types";
 
 const USER_A = "user-a";
 const USER_B = "user-b";
@@ -20,7 +21,27 @@ const row = (
   ownerUserId: string | null,
   amount: number,
   month = "2026-09"
-): AnalyticsRow => ({ month, categoryId, ownerUserId, amount });
+): AnalyticsRow => ({
+  month,
+  categoryId,
+  breakdownId: null,
+  counterpartId: 1,
+  payeeName: "スーパー",
+  ownerUserId,
+  amount,
+});
+
+const costTypes = costTypeMap([
+  { id: FOOD, costType: "variable" },
+  { id: DAILY, costType: "variable" },
+  { id: CLOTHES, costType: "variable" },
+]);
+
+// カテゴリで分け、絞り込みなし（F4 より前のカテゴリ別集計と同じ）
+const sumByCategory = (target: AnalyticsRow[], scope: Scope, month: string) =>
+  sumByDimension(target, scope, month, "category", {}, costTypes);
+
+const key = (id: number) => String(id);
 
 // 共同の食費10,000円、Aの食費3,000円、Bの食費2,000円（基本設計書の例）
 const rows: AnalyticsRow[] = [
@@ -31,28 +52,28 @@ const rows: AnalyticsRow[] = [
   row(FOOD, null, 99999, "2026-08"), // 別の月
 ];
 
-describe("sumByCategory", () => {
+describe("sumByDimension（カテゴリで分ける）", () => {
   it("U-68: 全体はすべての帰属先を合計する", () => {
     expect(sumByCategory(rows, { kind: "all" }, "2026-09")).toEqual([
-      { categoryId: FOOD, amount: 15000 },
-      { categoryId: DAILY, amount: 500 },
+      { key: key(FOOD), amount: 15000 },
+      { key: key(DAILY), amount: 500 },
     ]);
   });
 
   it("U-68: ユーザー（共同オフ）は帰属先が本人の行だけを合計する", () => {
     expect(
       sumByCategory(rows, { kind: "user", userId: USER_B, includeJoint: false }, "2026-09")
-    ).toEqual([{ categoryId: FOOD, amount: 2000 }]);
+    ).toEqual([{ key: key(FOOD), amount: 2000 }]);
   });
 
   it("U-69: 共同オンでは共同の行を1/2で加算し、A＋Bが全体と一致する", () => {
     const a = sumByCategory(rows, { kind: "user", userId: USER_A, includeJoint: true }, "2026-09");
     const b = sumByCategory(rows, { kind: "user", userId: USER_B, includeJoint: true }, "2026-09");
     expect(a).toEqual([
-      { categoryId: FOOD, amount: 8000 },
-      { categoryId: DAILY, amount: 500 },
+      { key: key(FOOD), amount: 8000 },
+      { key: key(DAILY), amount: 500 },
     ]);
-    expect(b).toEqual([{ categoryId: FOOD, amount: 7000 }]);
+    expect(b).toEqual([{ key: key(FOOD), amount: 7000 }]);
   });
 
   it("U-69: 共同の奇数円で出る0.5円は丸めずにそのまま残る", () => {
@@ -67,28 +88,28 @@ describe("sumByCategory", () => {
 describe("buildPieData", () => {
   // 9月：食費30,000円−返金2,000円、日用品10,000円、衣類−8,000円（基本設計書3.7節の例）
   const sums = [
-    { categoryId: FOOD, amount: 28000 },
-    { categoryId: DAILY, amount: 10000 },
-    { categoryId: CLOTHES, amount: -8000 },
+    { key: key(FOOD), amount: 28000 },
+    { key: key(DAILY), amount: 10000 },
+    { key: key(CLOTHES), amount: -8000 },
   ];
 
   it("U-70: プラスのカテゴリだけが扇になり、％の分母はプラスのカテゴリの合計になる", () => {
     const pie = buildPieData(sums);
     expect(pie.slices).toEqual([
-      { categoryId: FOOD, amount: 28000, percent: 73.7 },
-      { categoryId: DAILY, amount: 10000, percent: 26.3 },
+      { key: key(FOOD), amount: 28000, percent: 73.7 },
+      { key: key(DAILY), amount: 10000, percent: 26.3 },
     ]);
     expect(pie.positiveTotal).toBe(38000);
   });
 
   it("U-71: マイナスのカテゴリは注意書き用に分かれ、合計は実際の金額になる", () => {
     const pie = buildPieData(sums);
-    expect(pie.negatives).toEqual([{ categoryId: CLOTHES, amount: -8000 }]);
+    expect(pie.negatives).toEqual([{ key: key(CLOTHES), amount: -8000 }]);
     expect(pie.total).toBe(30000);
   });
 
   it("U-71: マイナスがなければ注意書き用のリストは空で、分母と合計が一致する", () => {
-    const pie = buildPieData([{ categoryId: FOOD, amount: 1000 }]);
+    const pie = buildPieData([{ key: key(FOOD), amount: 1000 }]);
     expect(pie.negatives).toEqual([]);
     expect(pie.positiveTotal).toBe(pie.total);
   });
@@ -98,7 +119,7 @@ describe("buildPieData", () => {
     expect(pie).toEqual({
       slices: [],
       negatives: [],
-      zeroCategories: [],
+      zeroKeys: [],
       total: 0,
       positiveTotal: 0,
     });
@@ -106,10 +127,10 @@ describe("buildPieData", () => {
 
   it("合計がちょうど0円のカテゴリは表示用に分かれる", () => {
     const pie = buildPieData([
-      { categoryId: FOOD, amount: 1000 },
-      { categoryId: DAILY, amount: 0 },
+      { key: key(FOOD), amount: 1000 },
+      { key: key(DAILY), amount: 0 },
     ]);
-    expect(pie.zeroCategories).toEqual([{ categoryId: DAILY, amount: 0 }]);
+    expect(pie.zeroKeys).toEqual([{ key: key(DAILY), amount: 0 }]);
   });
 });
 
@@ -133,7 +154,7 @@ describe("sumByMonth", () => {
   ];
 
   it("U-76: 総支出は月ごとの合計を古い順に返し、データのない月は0円になる", () => {
-    expect(sumByMonth(trendRows, { kind: "all" }, months, null)).toEqual([
+    expect(sumByMonth(trendRows, { kind: "all" }, months, {}, costTypes)).toEqual([
       { month: "2026-07", amount: 1300 },
       { month: "2026-08", amount: 0 },
       { month: "2026-09", amount: 2501 },
@@ -141,7 +162,7 @@ describe("sumByMonth", () => {
   });
 
   it("U-77: カテゴリを指定すると、そのカテゴリだけが合計される", () => {
-    expect(sumByMonth(trendRows, { kind: "all" }, months, DAILY)).toEqual([
+    expect(sumByMonth(trendRows, { kind: "all" }, months, { category: key(DAILY) }, costTypes)).toEqual([
       { month: "2026-07", amount: 300 },
       { month: "2026-08", amount: 0 },
       { month: "2026-09", amount: 0 },
@@ -150,14 +171,14 @@ describe("sumByMonth", () => {
 
   it("U-78: ユーザーの表示対象では帰属先と共同の1/2が効く", () => {
     expect(
-      sumByMonth(trendRows, { kind: "user", userId: USER_B, includeJoint: false }, months, null)
+      sumByMonth(trendRows, { kind: "user", userId: USER_B, includeJoint: false }, months, {}, costTypes)
     ).toEqual([
       { month: "2026-07", amount: 0 },
       { month: "2026-08", amount: 0 },
       { month: "2026-09", amount: 2000 },
     ]);
     expect(
-      sumByMonth(trendRows, { kind: "user", userId: USER_B, includeJoint: true }, months, null)
+      sumByMonth(trendRows, { kind: "user", userId: USER_B, includeJoint: true }, months, {}, costTypes)
     ).toEqual([
       { month: "2026-07", amount: 500 },
       { month: "2026-08", amount: 0 },
@@ -186,5 +207,123 @@ describe("buildTrendData", () => {
     expect(points[1]).toEqual({ month: "2026-02", amount: -1000, barValue: 0, mom: null });
     expect(points[0].barValue).toBe(10000);
     expect(negatives).toEqual([{ month: "2026-02", amount: -1000 }]);
+  });
+});
+
+// 分析拡充 F4：「分ける」「絞り込み」（要件定義書 4.6節の例）
+describe("sumByDimension（分ける・絞り込み）", () => {
+  const UTILITY = 4; // 水道光熱費（固定費）
+  const MEDICAL = 5; // 医療費
+  const EATING_OUT = 11; // 食費 ＞ 外食
+  const COOKING = 12; // 食費 ＞ 自炊
+  const PAIR = 21; // ふたり
+  const FRIEND = 22; // 友人
+
+  const f4Row = (
+    categoryId: number,
+    breakdownId: number | null,
+    counterpartId: number,
+    payeeName: string,
+    ownerUserId: string | null,
+    amount: number
+  ): AnalyticsRow => ({
+    month: "2026-09",
+    categoryId,
+    breakdownId,
+    counterpartId,
+    payeeName,
+    ownerUserId,
+    amount,
+  });
+
+  const f4Rows: AnalyticsRow[] = [
+    f4Row(FOOD, EATING_OUT, FRIEND, "居酒屋", null, 3000),
+    f4Row(FOOD, COOKING, PAIR, "スーパー", null, 5000),
+    f4Row(FOOD, null, PAIR, "コンビニ", USER_A, 1000), // 内訳なし（F1 より前のレシート）
+    f4Row(UTILITY, null, PAIR, "myTOKYOGAS", null, 8000),
+    f4Row(MEDICAL, null, PAIR, "A病院", USER_A, 2000),
+    f4Row(MEDICAL, null, PAIR, "B薬局", USER_B, 500),
+  ];
+  const f4CostTypes = costTypeMap([
+    { id: FOOD, costType: "variable" },
+    { id: UTILITY, costType: "fixed" },
+    { id: MEDICAL, costType: "variable" },
+  ]);
+  const ALL: Scope = { kind: "all" };
+  const sum = (
+    dimension: Parameters<typeof sumByDimension>[3],
+    filter: Parameters<typeof sumByDimension>[4],
+    scope: Scope = ALL,
+    types = f4CostTypes
+  ) => sumByDimension(f4Rows, scope, "2026-09", dimension, filter, types);
+
+  it("U-112: 食費のうち内訳ごと（内訳なしも含む）。％の分母は絞り込み後の合計", () => {
+    const sums = sum("breakdown", { category: key(FOOD) });
+    expect(sums).toEqual([
+      { key: key(COOKING), amount: 5000 },
+      { key: key(EATING_OUT), amount: 3000 },
+      { key: "none", amount: 1000 },
+    ]);
+    const pie = buildPieData(sums);
+    expect(pie.positiveTotal).toBe(9000);
+    expect(pie.slices.map((s) => s.percent)).toEqual([55.6, 33.3, 11.1]);
+  });
+
+  it("U-112: 医療費のうち支払い先ごと", () => {
+    expect(sum("payee", { category: key(MEDICAL) })).toEqual([
+      { key: "A病院", amount: 2000 },
+      { key: "B薬局", amount: 500 },
+    ]);
+  });
+
+  it("U-112: 固定費と変動費、固定費のカテゴリ", () => {
+    expect(sum("costType", {})).toEqual([
+      { key: "variable", amount: 11500 },
+      { key: "fixed", amount: 8000 },
+    ]);
+    expect(sum("category", { costType: "fixed" })).toEqual([
+      { key: key(UTILITY), amount: 8000 },
+    ]);
+  });
+
+  it("U-112: 友人との支出のカテゴリ、食費のうち相手ごと", () => {
+    expect(sum("category", { counterpart: key(FRIEND) })).toEqual([
+      { key: key(FOOD), amount: 3000 },
+    ]);
+    expect(sum("counterpart", { category: key(FOOD) })).toEqual([
+      { key: key(PAIR), amount: 6000 },
+      { key: key(FRIEND), amount: 3000 },
+    ]);
+  });
+
+  it("U-112: 表示対象（A＋共同1/2）の重みは絞り込み・分けるでも同じ", () => {
+    expect(
+      sum("breakdown", { category: key(FOOD) }, { kind: "user", userId: USER_A, includeJoint: true })
+    ).toEqual([
+      { key: key(COOKING), amount: 2500 },
+      { key: key(EATING_OUT), amount: 1500 },
+      { key: "none", amount: 1000 },
+    ]);
+  });
+
+  it("U-113: 費用区分は今のカテゴリの設定で集計する（設定を変えると過去の月も新しい区分になる）", () => {
+    const allVariable = costTypeMap([
+      { id: FOOD, costType: "variable" },
+      { id: UTILITY, costType: "variable" },
+      { id: MEDICAL, costType: "variable" },
+    ]);
+    expect(sum("costType", {}, ALL, allVariable)).toEqual([{ key: "variable", amount: 19500 }]);
+  });
+
+  it("U-113: 推移グラフも同じ絞り込みで月ごとに合計する", () => {
+    expect(
+      sumByMonth(f4Rows, ALL, ["2026-08", "2026-09"], { costType: "fixed" }, f4CostTypes)
+    ).toEqual([
+      { month: "2026-08", amount: 0 },
+      { month: "2026-09", amount: 8000 },
+    ]);
+    expect(
+      sumByMonth(f4Rows, ALL, ["2026-09"], { payee: "A病院" }, f4CostTypes)
+    ).toEqual([{ month: "2026-09", amount: 2000 }]);
   });
 });

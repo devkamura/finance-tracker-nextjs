@@ -5,31 +5,30 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
 
 import { formatYen, type PieData } from "@/lib/analytics/aggregate";
-import { categoryColor } from "@/lib/analytics/category-colors";
-import type { AnalyticsCategory } from "@/lib/analytics/types";
 
-type CategoryBreakdownTableProps = {
+type SplitBreakdownTableProps = {
   pieData: PieData;
-  categories: AnalyticsCategory[];
-  // カテゴリごとの、絞り込んだレシート一覧へのURL
-  hrefFor: (categoryId: number) => string;
+  subject: string; // 「分ける」項目の名前（カテゴリ・内訳・費用区分・支払い先・相手）
+  labelOf: (key: string) => string;
+  colorOf: (key: string) => string;
+  // 値ごとの、絞り込んだレシート一覧へのURL
+  hrefFor: (key: string) => string;
 };
 
-// 円グラフの凡例を兼ねるカテゴリ別の内訳表。
-// プラスのカテゴリ（％付き）→ 0円 → マイナスのカテゴリ（％なし）の順に並べる。
+// 円グラフの凡例を兼ねる、「分ける」項目の値ごとの表。
+// プラスの値（％付き）→ 0円 → マイナスの値（％なし）の順に並べる。
 // 各行はレシート一覧へのリンク（詳細設計書 フェーズ3 3章）。円グラフの扇のタップは
-// 金額の表示だけにし、一覧への移動はこの表に統一する（扇のないマイナスのカテゴリもたどれる）。
-export function CategoryBreakdownTable({
+// 金額の表示だけにし、一覧への移動はこの表に統一する（扇のないマイナスの値もたどれる）。
+export function SplitBreakdownTable({
   pieData,
-  categories,
+  subject,
+  labelOf,
+  colorOf,
   hrefFor,
-}: CategoryBreakdownTableProps) {
-  const nameOf = (categoryId: number) =>
-    categories.find((c) => c.id === categoryId)?.name ?? "不明";
-
+}: SplitBreakdownTableProps) {
   const rows = [
     ...pieData.slices.map((s) => ({ ...s, percentLabel: `${s.percent.toFixed(1)}%` })),
-    ...[...pieData.zeroCategories, ...pieData.negatives].map((c) => ({
+    ...[...pieData.zeroKeys, ...pieData.negatives].map((c) => ({
       ...c,
       percentLabel: "―",
     })),
@@ -37,12 +36,14 @@ export function CategoryBreakdownTable({
 
   return (
     <div className="flex flex-col">
-      <p className="mb-1 text-xs text-slate-400">行をタップすると、そのカテゴリのレシートを見られます</p>
+      <p className="mb-1 text-xs text-slate-400">
+        行をタップすると、その{subject}のレシートを見られます
+      </p>
       <ul className="divide-y divide-slate-100 border-t border-slate-100">
         {rows.map((row) => (
-          <li key={row.categoryId}>
+          <li key={row.key}>
             <Link
-              href={hrefFor(row.categoryId)}
+              href={hrefFor(row.key)}
               // 本番では表示中のLinkを先読みするため、月や表示対象を切り替えるたびに
               // サーバー通信が発生してしまう。分析画面の操作中は通信しない要件のため、先読みを止める。
               prefetch={false}
@@ -52,13 +53,10 @@ export function CategoryBreakdownTable({
                 aria-hidden
                 className="h-3 w-3 shrink-0 rounded-full"
                 style={{
-                  backgroundColor:
-                    row.amount > 0 ? categoryColor(row.categoryId, categories) : "transparent",
+                  backgroundColor: row.amount > 0 ? colorOf(row.key) : "transparent",
                 }}
               />
-              <span className="min-w-0 flex-1 truncate text-slate-700">
-                {nameOf(row.categoryId)}
-              </span>
+              <span className="min-w-0 flex-1 truncate text-slate-700">{labelOf(row.key)}</span>
               <span className="w-14 text-right text-slate-500">{row.percentLabel}</span>
               <span
                 className={`w-24 text-right font-medium ${
