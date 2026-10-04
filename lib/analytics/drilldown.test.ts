@@ -51,11 +51,13 @@ function receipt(
   id: string,
   amount: number,
   items: ReceiptDetailItemView[],
-  refund = false
+  refund = false,
+  payeeId: number | null = null
 ): ReceiptListItem {
   return {
     id,
     occurredAt: "2026-07-10T03:00:00.000Z",
+    payeeId,
     payeeName: id,
     amount,
     transactionTypeName: refund ? "返金" : "支出",
@@ -71,13 +73,14 @@ function receipt(
 
 // 手動テスト仕様書の2026年7月（D-1〜D-4）と同じ構成
 const julyReceipts = [
-  receipt("D-1", 1001, [item("d1-food", FOOD, null, 1001)]),
+  receipt("D-1", 1001, [item("d1-food", FOOD, null, 1001)], false, 101),
   receipt("D-2", 1500, [
     item("d2-food", FOOD, null, 1000, { breakdownId: EATING_OUT, counterpartId: FRIEND }),
     item("d2-daily", DAILY, USER_B, 1000),
-  ]),
+  ], false, 102),
+  // D-3 は手入力の支払い先（登録外）
   receipt("D-3", 500, [item("d3-daily", DAILY, USER_A, 500)]),
-  receipt("D-4", 2000, [item("d4-food", FOOD, USER_B, 2000)]),
+  receipt("D-4", 2000, [item("d4-food", FOOD, USER_B, 2000)], false, 104),
 ];
 
 describe("matchReceipt", () => {
@@ -124,8 +127,9 @@ describe("matchReceipt", () => {
     expect(match({ category: String(FOOD), breakdown: "none" })).toEqual(["d1-food", "d4-food"]);
     // 費用区分はカテゴリの設定から求める（日用品＝固定費）
     expect(match({ costType: "fixed" })).toEqual(["d2-daily", "d3-daily"]);
-    // 支払い先はレシートの支払い先名で、レシートのすべての明細が当てはまる
-    expect(match({ payee: "D-2" })).toEqual(["d2-food", "d2-daily"]);
+    // 支払い先はレシートの支払い先（ID）で、レシートのすべての明細が当てはまる。手入力は登録外
+    expect(match({ payee: "102" })).toEqual(["d2-food", "d2-daily"]);
+    expect(match({ payee: "unregistered" })).toEqual(["d3-daily"]);
     expect(match({ counterpart: String(FRIEND) })).toEqual(["d2-food"]);
     // 絞り込み（カテゴリ＝食費）と円グラフの行（相手＝ふたり）の組み合わせ
     expect(match({ category: String(FOOD), counterpart: String(PAIR) })).toEqual([
@@ -140,7 +144,7 @@ describe("matchReceipt", () => {
       id: r.id,
       occurred_at: r.occurredAt,
       amount: r.amount,
-      payee_name: r.payeeName,
+      payee_id: r.payeeId,
       payer_user_id: r.payerUserId,
       transaction_types: { name: r.transactionTypeName },
       receipt_details: r.items.map((i) => ({

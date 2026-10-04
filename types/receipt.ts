@@ -114,6 +114,8 @@ export type ReceiptDetailView = {
 export type ReceiptListItem = {
   id: string;
   occurredAt: string;
+  // 登録済みの支払い先のID。null＝手入力（分析からの支払い先の絞り込みに使う）
+  payeeId: number | null;
   payeeName: string;
   amount: number;
   transactionTypeName: string;

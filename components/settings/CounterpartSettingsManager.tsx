@@ -17,13 +17,14 @@ const KIND_NOTES: Record<Counterpart["kind"], string | undefined> = {
   custom: undefined,
 };
 
-function toListItem(counterpart: Counterpart): NamedListItem {
+function toListItem(counterpart: Counterpart, used: boolean): NamedListItem {
   return {
     id: counterpart.id,
     name: counterpart.name,
     isHidden: counterpart.isHidden,
     editable: counterpart.kind === "custom",
     note: KIND_NOTES[counterpart.kind],
+    used,
   };
 }
 
@@ -31,9 +32,11 @@ function toListItem(counterpart: Counterpart): NamedListItem {
 // メンバー・既定の相手は表示・非表示だけ、任意の相手は追加・名前の変更・削除もできる。編集は管理者のみ。
 export function CounterpartSettingsManager({
   counterparts,
+  usedCounterpartIds,
   canEdit,
 }: {
   counterparts: Counterpart[];
+  usedCounterpartIds: number[]; // 登録済みのレシートで使われている相手（ゴミ箱を非活性にする）
   canEdit: boolean;
 }) {
   return (
@@ -50,7 +53,7 @@ export function CounterpartSettingsManager({
       <NamedItemListManager
         label="相手"
         placeholder="相手を追加（例：会社の同僚）"
-        initialItems={counterparts.map(toListItem)}
+        initialItems={counterparts.map((c) => toListItem(c, usedCounterpartIds.includes(c.id)))}
         canEdit={canEdit}
         onCreate={async (name) => {
           const result = await createCounterpart(name);

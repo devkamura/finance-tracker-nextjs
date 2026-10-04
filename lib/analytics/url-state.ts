@@ -32,7 +32,7 @@ export function filterConditions(filter: AnalyticsFilter | null): Conditions {
   return filter ? { [filter.dimension]: filter.key } : {};
 }
 
-type StateSource = Pick<AnalyticsData, "members" | "months" | "payeeNames"> & DimensionMaster;
+type StateSource = Pick<AnalyticsData, "members" | "months"> & DimensionMaster;
 
 // 絞り込みの値が選択肢にあるときだけ絞り込みにする（なければ絞り込みなし）
 function validFilter(

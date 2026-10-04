@@ -7,7 +7,9 @@ import {
   applyPayeeDefaults,
   describePayeeDefaults,
   EMPTY_PAYEE_DEFAULTS,
+  findPayeeByName,
   isSelectablePayee,
+  normalizePayeeName,
   payeeOptionGroups,
   payeeOptionLabel,
   toPayee,
@@ -77,6 +79,7 @@ function payee(overrides: Partial<Payee> = {}): Payee {
     ownerUserId: null,
     isHidden: false,
     defaults: EMPTY_PAYEE_DEFAULTS,
+    aliases: [],
     ...overrides,
   };
 }
@@ -226,6 +229,7 @@ describe("既定値の変換・表示・入力チェック", () => {
       default_owner_joint: true,
       default_owner_user_id: null,
       payee_default_tags: [{ tag_id: 7 }, { tag_id: 8 }],
+      payee_aliases: [],
     };
     const converted = toPayee(row);
     expect(converted.defaults).toEqual({
@@ -294,5 +298,42 @@ describe("既定値の変換・表示・入力チェック", () => {
       tagIds: ["9"],
     });
     expect(check(current, current)).toBeNull();
+  });
+});
+
+// 分析拡充 F5：支払い先の別名
+describe("findPayeeByName（店名に一致する支払い先）", () => {
+  const ok = payee({
+    id: 1,
+    name: "オーケー",
+    aliases: [
+      { id: 11, name: "オーケー長津田店" },
+      { id: 12, name: "オーケー青葉台店" },
+    ],
+  });
+  const hidden = payee({ id: 2, name: "閉店した店", isHidden: true, aliases: [{ id: 21, name: "閉店" }] });
+  const own = payee({ id: 3, name: "〇〇薬局", ownerUserId: USER_A, aliases: [{ id: 31, name: "〇〇薬局 駅前店" }] });
+  const partner = payee({ id: 4, name: "△△書店", ownerUserId: USER_B, aliases: [{ id: 41, name: "△△" }] });
+  const payees = [ok, hidden, own, partner];
+
+  it("U-126: 名前か別名が完全一致する支払い先を返す（前後の空白は無視する）", () => {
+    expect(findPayeeByName(payees, "オーケー長津田店", USER_A)).toBe(ok);
+    expect(findPayeeByName(payees, "オーケー", USER_A)).toBe(ok);
+    expect(findPayeeByName(payees, "　オーケー青葉台店 \t", USER_A)).toBe(ok);
+    // 自分用の別名も対象
+    expect(findPayeeByName(payees, "〇〇薬局 駅前店", USER_A)).toBe(own);
+  });
+
+  it("U-126: 部分一致・非表示・相方の自分用・空の店名は一致しない", () => {
+    expect(findPayeeByName(payees, "オーケー長津田", USER_A)).toBeNull();
+    expect(findPayeeByName(payees, "オーケー長津田店 2号", USER_A)).toBeNull();
+    expect(findPayeeByName(payees, "閉店", USER_A)).toBeNull();
+    expect(findPayeeByName(payees, "△△", USER_A)).toBeNull();
+    expect(findPayeeByName(payees, "", USER_A)).toBeNull();
+    expect(findPayeeByName(payees, "   ", USER_A)).toBeNull();
+  });
+
+  it("U-126: 店名の比較では前後の空白（半角・全角・タブ・改行）だけを除く", () => {
+    expect(normalizePayeeName("\u3000 オーケー 長津田\t\n ")).toBe("オーケー 長津田");
   });
 });

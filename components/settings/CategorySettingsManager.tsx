@@ -21,6 +21,8 @@ import type { CategoryWithCostType } from "@/lib/settings/queries";
 type CategorySettingsManagerProps = {
   categories: CategoryWithCostType[];
   initialBreakdowns: CategoryBreakdown[];
+  // 登録済みのレシートで使われている内訳（削除できないため、ゴミ箱を非活性にする）
+  usedBreakdownIds: number[];
   canEdit: boolean; // 管理者のみ編集できる
 };
 
@@ -30,6 +32,7 @@ type CategorySettingsManagerProps = {
 export function CategorySettingsManager({
   categories,
   initialBreakdowns,
+  usedBreakdownIds,
   canEdit,
 }: CategorySettingsManagerProps) {
   const [costTypes, setCostTypes] = useState(
@@ -39,19 +42,29 @@ export function CategorySettingsManager({
   const [newNames, setNewNames] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
-  // エラーは操作したカテゴリの下に表示する
-  const [error, setError] = useState<{ categoryId: number; message: string } | null>(null);
+  // エラーは操作した場所のすぐ下に出す（カテゴリの枠の下だと、内訳が多いと画面の外になるため）。
+  // target は "costType"（費用区分）・"add"（内訳の追加欄）・内訳のID（名前の変更・表示/非表示・削除）
+  type ErrorTarget = "costType" | "add" | number;
+  const [error, setError] = useState<
+    { categoryId: number; target: ErrorTarget; message: string } | null
+  >(null);
   const [isPending, startTransition] = useTransition();
 
-  const run = (categoryId: number, action: () => Promise<string | null>) => {
+  const run = (
+    categoryId: number,
+    target: ErrorTarget,
+    action: () => Promise<string | null>
+  ) => {
     startTransition(async () => {
       const message = await action();
-      setError(message ? { categoryId, message } : null);
+      setError(message ? { categoryId, target, message } : null);
     });
   };
+  const errorAt = (categoryId: number, target: ErrorTarget) =>
+    error?.categoryId === categoryId && error.target === target ? error.message : null;
 
   const changeCostType = (categoryId: number, costType: CostType) =>
-    run(categoryId, async () => {
+    run(categoryId, "costType", async () => {
       const result = await updateCategoryCostType(categoryId, costType);
       if (!result.success) return result.error;
       setCostTypes((prev) => new Map(prev).set(categoryId, costType));
@@ -59,7 +72,7 @@ export function CategorySettingsManager({
     });
 
   const addBreakdown = (categoryId: number) =>
-    run(categoryId, async () => {
+    run(categoryId, "add", async () => {
       const result = await createBreakdown(categoryId, newNames[categoryId] ?? "");
       if (!result.success) return result.error;
       setBreakdowns((prev) => [...prev, result.breakdown]);
@@ -68,7 +81,7 @@ export function CategorySettingsManager({
     });
 
   const saveName = (breakdown: CategoryBreakdown) =>
-    run(breakdown.categoryId, async () => {
+    run(breakdown.categoryId, breakdown.id, async () => {
       const result = await updateBreakdown(breakdown.id, { name: draft });
       if (!result.success) return result.error;
       setBreakdowns((prev) => prev.map((b) => (b.id === breakdown.id ? result.breakdown : b)));
@@ -77,7 +90,7 @@ export function CategorySettingsManager({
     });
 
   const toggleHidden = (breakdown: CategoryBreakdown) =>
-    run(breakdown.categoryId, async () => {
+    run(breakdown.categoryId, breakdown.id, async () => {
       const result = await updateBreakdown(breakdown.id, { isHidden: !breakdown.isHidden });
       if (!result.success) return result.error;
       setBreakdowns((prev) => prev.map((b) => (b.id === breakdown.id ? result.breakdown : b)));
@@ -85,7 +98,7 @@ export function CategorySettingsManager({
     });
 
   const remove = (breakdown: CategoryBreakdown) =>
-    run(breakdown.categoryId, async () => {
+    run(breakdown.categoryId, breakdown.id, async () => {
       const result = await deleteBreakdown(breakdown.id);
       if (!result.success) return result.error;
       setBreakdowns((prev) => prev.filter((b) => b.id !== breakdown.id));
@@ -130,89 +143,110 @@ export function CategorySettingsManager({
                 </select>
               </label>
             </div>
+            {errorAt(category.id, "costType") && (
+              <p className="text-sm text-red-600">{errorAt(category.id, "costType")}</p>
+            )}
 
             {items.length === 0 ? (
               <p className="text-xs text-slate-400">内訳なし</p>
             ) : (
               <ul className="flex flex-col divide-y divide-slate-100">
                 {items.map((breakdown) => (
-                  <li key={breakdown.id} className="flex items-center justify-between gap-2 py-1.5">
-                    {editingId === breakdown.id ? (
-                      <div className="flex flex-1 items-center gap-2">
-                        <input
-                          type="text"
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                          disabled={isPending}
-                          autoFocus
-                          aria-label="内訳名"
-                          className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => saveName(breakdown)}
-                          disabled={isPending}
-                          aria-label="保存"
-                          className="text-emerald-600 hover:text-emerald-800"
-                        >
-                          <FontAwesomeIcon icon={faCheck} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(null)}
-                          disabled={isPending}
-                          aria-label="キャンセル"
-                          className="text-slate-400 hover:text-slate-600"
-                        >
-                          <FontAwesomeIcon icon={faXmark} />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <span
-                          className={`text-sm ${breakdown.isHidden ? "text-slate-400 line-through" : "text-slate-800"}`}
-                        >
-                          {breakdown.name}
-                          {breakdown.isHidden && (
-                            <span className="ml-2 text-xs no-underline">（非表示）</span>
+                  <li key={breakdown.id} className="flex flex-col gap-1 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      {editingId === breakdown.id ? (
+                        <div className="flex flex-1 items-center gap-2">
+                          <input
+                            type="text"
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            disabled={isPending}
+                            autoFocus
+                            aria-label="内訳名"
+                            className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => saveName(breakdown)}
+                            disabled={isPending}
+                            aria-label="保存"
+                            className="text-emerald-600 hover:text-emerald-800"
+                          >
+                            <FontAwesomeIcon icon={faCheck} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            disabled={isPending}
+                            aria-label="キャンセル"
+                            className="text-slate-400 hover:text-slate-600"
+                          >
+                            <FontAwesomeIcon icon={faXmark} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span
+                            className={`text-sm ${breakdown.isHidden ? "text-slate-400 line-through" : "text-slate-800"}`}
+                          >
+                            {breakdown.name}
+                            {breakdown.isHidden && (
+                              <span className="ml-2 text-xs no-underline">（非表示）</span>
+                            )}
+                          </span>
+                          {canEdit && (
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingId(breakdown.id);
+                                  setDraft(breakdown.name);
+                                }}
+                                disabled={isPending}
+                                aria-label="名前を変更"
+                                className="text-slate-400 hover:text-slate-600"
+                              >
+                                <FontAwesomeIcon icon={faPen} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleHidden(breakdown)}
+                                disabled={isPending}
+                                aria-label={breakdown.isHidden ? "表示する" : "非表示にする"}
+                                title={breakdown.isHidden ? "表示する" : "非表示にする"}
+                                className="text-slate-400 hover:text-slate-600"
+                              >
+                                <FontAwesomeIcon icon={breakdown.isHidden ? faEye : faEyeSlash} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => remove(breakdown)}
+                                disabled={isPending || usedBreakdownIds.includes(breakdown.id)}
+                                aria-label={
+                                  usedBreakdownIds.includes(breakdown.id)
+                                    ? "削除（使用中のため削除できません）"
+                                    : "削除"
+                                }
+                                title={
+                                  usedBreakdownIds.includes(breakdown.id)
+                                    ? "登録済みのレシートで使われているため削除できません。非表示にしてください。"
+                                    : "削除"
+                                }
+                                className={
+                                  usedBreakdownIds.includes(breakdown.id)
+                                    ? "cursor-not-allowed text-slate-300"
+                                    : "text-red-400 hover:text-red-600"
+                                }
+                              >
+                                <FontAwesomeIcon icon={faTrash} />
+                              </button>
+                            </div>
                           )}
-                        </span>
-                        {canEdit && (
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingId(breakdown.id);
-                                setDraft(breakdown.name);
-                              }}
-                              disabled={isPending}
-                              aria-label="名前を変更"
-                              className="text-slate-400 hover:text-slate-600"
-                            >
-                              <FontAwesomeIcon icon={faPen} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleHidden(breakdown)}
-                              disabled={isPending}
-                              aria-label={breakdown.isHidden ? "表示する" : "非表示にする"}
-                              title={breakdown.isHidden ? "表示する" : "非表示にする"}
-                              className="text-slate-400 hover:text-slate-600"
-                            >
-                              <FontAwesomeIcon icon={breakdown.isHidden ? faEye : faEyeSlash} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => remove(breakdown)}
-                              disabled={isPending}
-                              aria-label="削除"
-                              className="text-red-400 hover:text-red-600"
-                            >
-                              <FontAwesomeIcon icon={faTrash} />
-                            </button>
-                          </div>
-                        )}
-                      </>
+                        </>
+                      )}
+                    </div>
+                    {errorAt(category.id, breakdown.id) && (
+                      <p className="text-sm text-red-600">{errorAt(category.id, breakdown.id)}</p>
                     )}
                   </li>
                 ))}
@@ -248,8 +282,8 @@ export function CategorySettingsManager({
               </form>
             )}
 
-            {error?.categoryId === category.id && (
-              <p className="text-sm text-red-600">{error.message}</p>
+            {errorAt(category.id, "add") && (
+              <p className="text-sm text-red-600">{errorAt(category.id, "add")}</p>
             )}
           </section>
         );

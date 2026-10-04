@@ -21,6 +21,12 @@ export const EMPTY_PAYEE_DEFAULTS: PayeeDefaults = {
   tagIds: [],
 };
 
+// 支払い先の別名（手入力・画像読み取りの店名を、この支払い先に寄せる。基本設計書 F5）
+export type PayeeAlias = {
+  id: number;
+  name: string;
+};
+
 export type Payee = {
   id: number;
   name: string;
@@ -29,6 +35,7 @@ export type Payee = {
   // 使われている支払い先は削除できないため、選択肢から外したいときは非表示にする
   isHidden: boolean;
   defaults: PayeeDefaults;
+  aliases: PayeeAlias[]; // 名前順
 };
 
 // DBの行（payees）を Payee に変換する。
@@ -43,10 +50,11 @@ export type PayeeRow = {
   default_owner_joint: boolean;
   default_owner_user_id: string | null;
   payee_default_tags: { tag_id: number }[];
+  payee_aliases: { id: number; name: string }[];
 };
 
 export const PAYEE_SELECT =
-  "id, name, owner_user_id, is_hidden, default_category_id, default_breakdown_id, default_counterpart_id, default_owner_joint, default_owner_user_id, payee_default_tags(tag_id)";
+  "id, name, owner_user_id, is_hidden, default_category_id, default_breakdown_id, default_counterpart_id, default_owner_joint, default_owner_user_id, payee_default_tags(tag_id), payee_aliases(id, name)";
 
 export function toPayee(row: PayeeRow): Payee {
   return {
@@ -63,7 +71,34 @@ export function toPayee(row: PayeeRow): Payee {
         : (row.default_owner_user_id ?? ""),
       tagIds: (row.payee_default_tags ?? []).map((t) => String(t.tag_id)),
     },
+    aliases: (row.payee_aliases ?? [])
+      .map((a) => ({ id: a.id, name: a.name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ja")),
   };
+}
+
+// 店名の比較用に、前後の空白（半角・全角）を除く。DBの normalize_payee_name と同じ規則。
+export function normalizePayeeName(name: string): string {
+  return name.trim();
+}
+
+// 店名（手入力・画像読み取り）に一致する支払い先を探す。名前か別名が完全一致（前後の空白は無視）する、
+// プルダウンに出す支払い先（グループ全体と自分用の、非表示でないもの）だけを対象にする。
+// 名前・別名はグループの中で重複できないため、一致するのは多くても1件。
+export function findPayeeByName(
+  payees: Payee[],
+  name: string,
+  currentUserId: string | undefined
+): Payee | null {
+  const normalized = normalizePayeeName(name);
+  if (!normalized) return null;
+  return (
+    payees.find(
+      (payee) =>
+        isSelectablePayee(payee, currentUserId) &&
+        (payee.name === normalized || payee.aliases.some((a) => a.name === normalized))
+    ) ?? null
+  );
 }
 
 // 既定値を DB の列に変換する（Server Action で保存するとき）。

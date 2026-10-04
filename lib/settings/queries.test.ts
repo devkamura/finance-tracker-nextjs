@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   getCategoriesWithCostType,
@@ -7,6 +7,7 @@ import {
   getCounterparts,
   getPayees,
   getTags,
+  getUsedSettingIds,
 } from "@/lib/settings/queries";
 
 // テーブルごとに返すデータを決めた、Supabaseクエリビルダーの最小限の再現
@@ -107,7 +108,7 @@ describe("settings/queries", () => {
     ]);
   });
 
-  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値・既定値のタグ）に変換する", async () => {
+  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値・既定値のタグ・別名）に変換する", async () => {
     const supabase = fakeSupabase({
       payees: [
         {
@@ -121,6 +122,10 @@ describe("settings/queries", () => {
           default_owner_joint: true,
           default_owner_user_id: null,
           payee_default_tags: [{ tag_id: 7 }],
+          payee_aliases: [
+            { id: 12, name: "東京ガス" },
+            { id: 11, name: "TOKYO GAS" },
+          ],
         },
         {
           id: 2,
@@ -133,6 +138,7 @@ describe("settings/queries", () => {
           default_owner_joint: false,
           default_owner_user_id: "user-b",
           payee_default_tags: [],
+          payee_aliases: [],
         },
       ],
     });
@@ -150,6 +156,11 @@ describe("settings/queries", () => {
           ownerUserId: "joint",
           tagIds: ["7"],
         },
+        // 別名は名前順
+        aliases: [
+          { id: 11, name: "TOKYO GAS" },
+          { id: 12, name: "東京ガス" },
+        ],
       },
       {
         id: 2,
@@ -163,7 +174,40 @@ describe("settings/queries", () => {
           ownerUserId: "user-b",
           tagIds: [],
         },
+        aliases: [],
       },
     ]);
+  });
+
+  it("U-131: 使われている支払い先・内訳・相手・タグのIDを DB の used_setting_ids から取得する", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: { payees: [1, 2], breakdowns: [11], counterparts: [3], tags: [] },
+      error: null,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = { rpc } as any;
+
+    expect(await getUsedSettingIds(supabase, "group-1")).toEqual({
+      payees: [1, 2],
+      breakdowns: [11],
+      counterparts: [3],
+      tags: [],
+    });
+    expect(rpc).toHaveBeenCalledWith("used_setting_ids", { p_group_id: "group-1" });
+
+    // 項目が欠けていても空の一覧として扱う。エラーはそのまま投げる
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const empty = { rpc: vi.fn().mockResolvedValue({ data: {}, error: null }) } as any;
+    expect(await getUsedSettingIds(empty, "group-1")).toEqual({
+      payees: [],
+      breakdowns: [],
+      counterparts: [],
+      tags: [],
+    });
+    const failed = {
+      rpc: vi.fn().mockResolvedValue({ data: null, error: new Error("rpc failed") }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    await expect(getUsedSettingIds(failed, "group-1")).rejects.toThrow("rpc failed");
   });
 });

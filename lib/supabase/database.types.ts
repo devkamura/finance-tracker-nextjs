@@ -260,6 +260,45 @@ export type Database = {
         }
         Relationships: []
       }
+      payee_aliases: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: number
+          name: string
+          payee_id: number
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: never
+          name: string
+          payee_id: number
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: never
+          name?: string
+          payee_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payee_aliases_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payee_aliases_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "payees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payee_default_tags: {
         Row: {
           payee_id: number
@@ -699,6 +738,10 @@ export type Database = {
         Args: { p_email: string; p_user_id: string }
         Returns: undefined
       }
+      add_payee_alias: {
+        Args: { p_name: string; p_payee_id: number }
+        Returns: Json
+      }
       admin_manages_user: { Args: { p_user_id: string }; Returns: boolean }
       confirm_settlement: {
         Args: {
@@ -766,6 +809,7 @@ export type Database = {
       }
       link_pending_group_memberships: { Args: never; Returns: undefined }
       my_group_ids: { Args: never; Returns: string[] }
+      normalize_payee_name: { Args: { p_name: string }; Returns: string }
       reopen_settlement: {
         Args: { p_group_id: string; p_period_month: string }
         Returns: {
@@ -795,6 +839,7 @@ export type Database = {
         }
       }
       shares_group_with: { Args: { p_user_id: string }; Returns: boolean }
+      used_setting_ids: { Args: { p_group_id: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

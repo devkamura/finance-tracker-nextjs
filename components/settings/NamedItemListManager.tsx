@@ -19,6 +19,8 @@ export type NamedListItem = {
   editable: boolean;
   // 名前の後ろに添える説明（例：「メンバー」「既定」）
   note?: string;
+  // 登録済みのレシートで使われているか。使われているものは削除できないため、ゴミ箱を非活性にする
+  used?: boolean;
 };
 
 // 操作の結果。成功時は更新後の項目（削除は null）を返す
@@ -52,20 +54,26 @@ export function NamedItemListManager({
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // エラーは操作した場所のすぐ下に出す（一覧の下だと画面の外になるため）。
+  // target は項目のID（名前の変更・表示/非表示・削除）か "add"（追加欄）
+  const [error, setError] = useState<{ target: number | "add"; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const run = (action: () => Promise<string | null>) => {
+  const run = (target: number | "add", action: () => Promise<string | null>) => {
     startTransition(async () => {
-      setError(await action());
+      const message = await action();
+      setError(message ? { target, message } : null);
     });
   };
 
+  // 名前の変更・表示/非表示では使われているかは変わらないため、元の値を引き継ぐ
   const replace = (updated: NamedListItem) =>
-    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    setItems((prev) =>
+      prev.map((i) => (i.id === updated.id ? { ...updated, used: i.used } : i))
+    );
 
   const add = () =>
-    run(async () => {
+    run("add", async () => {
       const result = await onCreate(newName);
       if (!result.success) return result.error;
       setItems((prev) => [...prev, result.item]);
@@ -74,7 +82,7 @@ export function NamedItemListManager({
     });
 
   const saveName = (item: NamedListItem) =>
-    run(async () => {
+    run(item.id, async () => {
       const result = await onUpdate(item, { name: draft });
       if (!result.success) return result.error;
       replace(result.item);
@@ -83,7 +91,7 @@ export function NamedItemListManager({
     });
 
   const toggleHidden = (item: NamedListItem) =>
-    run(async () => {
+    run(item.id, async () => {
       const result = await onUpdate(item, { isHidden: !item.isHidden });
       if (!result.success) return result.error;
       replace(result.item);
@@ -91,7 +99,7 @@ export function NamedItemListManager({
     });
 
   const remove = (item: NamedListItem) =>
-    run(async () => {
+    run(item.id, async () => {
       const result = await onDelete(item);
       if (!result.success) return result.error;
       setItems((prev) => prev.filter((i) => i.id !== item.id));
@@ -105,88 +113,98 @@ export function NamedItemListManager({
       ) : (
         <ul className="flex flex-col divide-y divide-slate-100">
           {items.map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-2 py-1.5">
-              {editingId === item.id ? (
-                <div className="flex flex-1 items-center gap-2">
-                  <input
-                    type="text"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    disabled={isPending}
-                    autoFocus
-                    aria-label={`${label}の名前`}
-                    className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => saveName(item)}
-                    disabled={isPending}
-                    aria-label="保存"
-                    className="text-emerald-600 hover:text-emerald-800"
-                  >
-                    <FontAwesomeIcon icon={faCheck} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(null)}
-                    disabled={isPending}
-                    aria-label="キャンセル"
-                    className="text-slate-400 hover:text-slate-600"
-                  >
-                    <FontAwesomeIcon icon={faXmark} />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span
-                    className={`text-sm ${item.isHidden ? "text-slate-400 line-through" : "text-slate-800"}`}
-                  >
-                    {item.name}
-                    {item.note && (
-                      <span className="ml-2 text-xs text-slate-400 no-underline">（{item.note}）</span>
-                    )}
-                    {item.isHidden && <span className="ml-2 text-xs no-underline">（非表示）</span>}
-                  </span>
-                  {canEdit && (
-                    <div className="flex items-center gap-3">
-                      {item.editable && (
+            <li key={item.id} className="flex flex-col gap-1 py-1.5">
+              <div className="flex items-center justify-between gap-2">
+                {editingId === item.id ? (
+                  <div className="flex flex-1 items-center gap-2">
+                    <input
+                      type="text"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      disabled={isPending}
+                      autoFocus
+                      aria-label={`${label}の名前`}
+                      className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveName(item)}
+                      disabled={isPending}
+                      aria-label="保存"
+                      className="text-emerald-600 hover:text-emerald-800"
+                    >
+                      <FontAwesomeIcon icon={faCheck} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      disabled={isPending}
+                      aria-label="キャンセル"
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <FontAwesomeIcon icon={faXmark} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span
+                      className={`text-sm ${item.isHidden ? "text-slate-400 line-through" : "text-slate-800"}`}
+                    >
+                      {item.name}
+                      {item.note && (
+                        <span className="ml-2 text-xs text-slate-400 no-underline">（{item.note}）</span>
+                      )}
+                      {item.isHidden && <span className="ml-2 text-xs no-underline">（非表示）</span>}
+                    </span>
+                    {canEdit && (
+                      <div className="flex items-center gap-3">
+                        {item.editable && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(item.id);
+                              setDraft(item.name);
+                            }}
+                            disabled={isPending}
+                            aria-label="名前を変更"
+                            className="text-slate-400 hover:text-slate-600"
+                          >
+                            <FontAwesomeIcon icon={faPen} />
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditingId(item.id);
-                            setDraft(item.name);
-                          }}
+                          onClick={() => toggleHidden(item)}
                           disabled={isPending}
-                          aria-label="名前を変更"
+                          aria-label={item.isHidden ? "表示する" : "非表示にする"}
+                          title={item.isHidden ? "表示する" : "非表示にする"}
                           className="text-slate-400 hover:text-slate-600"
                         >
-                          <FontAwesomeIcon icon={faPen} />
+                          <FontAwesomeIcon icon={item.isHidden ? faEye : faEyeSlash} />
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => toggleHidden(item)}
-                        disabled={isPending}
-                        aria-label={item.isHidden ? "表示する" : "非表示にする"}
-                        title={item.isHidden ? "表示する" : "非表示にする"}
-                        className="text-slate-400 hover:text-slate-600"
-                      >
-                        <FontAwesomeIcon icon={item.isHidden ? faEye : faEyeSlash} />
-                      </button>
-                      {item.editable && (
-                        <button
-                          type="button"
-                          onClick={() => remove(item)}
-                          disabled={isPending}
-                          aria-label="削除"
-                          className="text-red-400 hover:text-red-600"
-                        >
-                          <FontAwesomeIcon icon={faTrash} />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </>
+                        {item.editable && (
+                          <button
+                            type="button"
+                            onClick={() => remove(item)}
+                            disabled={isPending || item.used}
+                            aria-label={item.used ? "削除（使用中のため削除できません）" : "削除"}
+                            title={item.used ? "登録済みのレシートで使われているため削除できません。非表示にしてください。" : "削除"}
+                            className={
+                              item.used
+                                ? "cursor-not-allowed text-slate-300"
+                                : "text-red-400 hover:text-red-600"
+                            }
+                          >
+                            <FontAwesomeIcon icon={faTrash} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {error?.target === item.id && (
+                <p className="text-sm text-red-600">{error.message}</p>
               )}
             </li>
           ))}
@@ -220,7 +238,7 @@ export function NamedItemListManager({
         </form>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error?.target === "add" && <p className="text-sm text-red-600">{error.message}</p>}
     </section>
   );
 }

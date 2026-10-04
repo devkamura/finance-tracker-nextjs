@@ -122,19 +122,21 @@ describe("支出分析のデータ取得", () => {
 
   afterAll(async () => {
     await admin.from("receipts").delete().in("group_id", [groupId, otherGroupId]);
+    await admin.from("payees").delete().in("group_id", [groupId, otherGroupId]);
     await deleteTestUser(admin, userA.id);
     await deleteTestUser(admin, outsider.id);
   });
 
-  // insertReceipts で登録した明細の、内訳・相手・支払い先（分析拡充 F4）
+  // insertReceipts で登録した明細の、内訳・相手・支払い先（分析拡充 F4）。
+  // 支払い先は手入力（登録済みの支払い先に紐づいていない）のため null（分析拡充 F5）
   const detailKeys = {
     breakdownId: null,
     counterpartId: expect.any(Number),
-    payeeName: "分析テスト",
+    payeeId: null,
   };
 
   it("I-28: 取得上限（1,000件）を超える1,001件のレシートがすべて集計される", async () => {
-    const data = await getAnalyticsData(userA.client, groupId, NOW);
+    const data = await getAnalyticsData(userA.client, groupId, userA.id, NOW);
     const food = data.rows.filter((r) => r.month === "2026-09" && r.categoryId === foodId);
     expect(food).toEqual([
       { ...detailKeys, month: "2026-09", categoryId: foodId, ownerUserId: null, amount: 100100 },
@@ -143,17 +145,17 @@ describe("支出分析のデータ取得", () => {
 
   it("I-29: 他グループのレシートは含まれない（RLS）", async () => {
     // 自グループの集計に他グループの5,000円が混ざらない
-    const data = await getAnalyticsData(userA.client, groupId, NOW);
+    const data = await getAnalyticsData(userA.client, groupId, userA.id, NOW);
     const total = data.rows.reduce((sum, r) => sum + r.amount, 0);
     expect(total).toBe(100100 + 10 + 100);
 
     // 他グループのIDを指定しても、RLSにより1件も取得できない
-    const crossGroup = await getAnalyticsData(userA.client, otherGroupId, NOW);
+    const crossGroup = await getAnalyticsData(userA.client, otherGroupId, userA.id, NOW);
     expect(crossGroup.rows).toEqual([]);
   });
 
   it("I-30: 12ヶ月より前・翌月以降のレシートは含まれず、境界の月は含まれる", async () => {
-    const data = await getAnalyticsData(userA.client, groupId, NOW);
+    const data = await getAnalyticsData(userA.client, groupId, userA.id, NOW);
     const daily = data.rows
       .filter((r) => r.categoryId === dailyId)
       .sort((a, b) => a.month.localeCompare(b.month));
@@ -194,10 +196,18 @@ describe("支出分析のデータ取得", () => {
       .eq("group_id", otherGroupId);
     const friend = counterparts!.find((c) => c.name === "友人")!;
 
+    const { data: payee, error: payeeError } = await outsider.client
+      .from("payees")
+      .insert({ group_id: otherGroupId, name: "居酒屋" })
+      .select("id")
+      .single();
+    expect(payeeError).toBeNull();
+
     const receiptId = crypto.randomUUID();
     const { error: receiptError } = await admin.from("receipts").insert({
       id: receiptId,
       group_id: otherGroupId,
+      payee_id: payee!.id,
       payee_name: "居酒屋",
       transaction_type_id: expenseTypeId,
       occurred_at: "2026-08-20T19:00:00+09:00",
@@ -218,7 +228,7 @@ describe("支出分析のデータ取得", () => {
     });
     expect(detailError).toBeNull();
 
-    const data = await getAnalyticsData(outsider.client, otherGroupId, NOW);
+    const data = await getAnalyticsData(outsider.client, otherGroupId, outsider.id, NOW);
 
     expect(data.rows.filter((r) => r.month === "2026-08")).toEqual([
       {
@@ -226,7 +236,7 @@ describe("支出分析のデータ取得", () => {
         categoryId: foodId,
         breakdownId: breakdown!.id,
         counterpartId: friend.id,
-        payeeName: "居酒屋",
+        payeeId: payee!.id,
         ownerUserId: outsider.id,
         amount: 3000,
       },
@@ -238,6 +248,9 @@ describe("支出分析のデータ取得", () => {
       expect.arrayContaining(["ふたり", "友人", "実家"])
     );
     expect(data.counterparts.length).toBe(4);
-    expect(data.payeeNames).toEqual(["分析テスト", "居酒屋"].sort((a, b) => a.localeCompare(b, "ja")));
+    // 支払い先の選択肢は登録済みの支払い先（F5）
+    expect(data.payees).toEqual([
+      { id: payee!.id, name: "居酒屋", section: "shared", sectionLabel: "グループ全体" },
+    ]);
   });
 });

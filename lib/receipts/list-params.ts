@@ -11,6 +11,7 @@ import {
   type Dimension,
   type DimensionMaster,
 } from "@/lib/analytics/dimensions";
+import { UNREGISTERED_PAYEE_KEY } from "@/lib/analytics/payees";
 import type { Scope } from "@/lib/analytics/types";
 
 // 一覧の状態として引き継ぐパラメータ（openは行を開く一時的な指定のため含めない）。
@@ -50,18 +51,12 @@ function firstValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-// 空の値も条件として引き継ぐパラメータ。支払い先は、手入力で空のまま保存されたレシート
-// （「支払い先なし」）で絞り込むとき空になる。
-export function keepsEmptyValue(key: string): boolean {
-  return key === "payee";
-}
-
 // searchParamsから、一覧の状態として引き継ぐパラメータだけを取り出す。
 export function pickListParams(searchParams: RawSearchParams): URLSearchParams {
   const params = new URLSearchParams();
   for (const key of LIST_PARAM_KEYS) {
     const value = firstValue(searchParams[key]);
-    if (value || (value === "" && keepsEmptyValue(key))) params.set(key, value);
+    if (value) params.set(key, value);
   }
   return params;
 }
@@ -117,8 +112,8 @@ export type ReceiptListFilter = {
   scopeLabel: string; // 「全体」「A」「A＋共同1/2」
 };
 
-// URLの条件の値が正しいか。存在しないカテゴリ・内訳・相手、不正な費用区分は無視する。
-// 支払い先は、名前で集計するため登録済みかどうかは問わない（相方用・手入力の名前も絞り込める）。
+// URLの条件の値が正しいか。存在しないカテゴリ・内訳・相手・支払い先、不正な費用区分は無視する。
+// 支払い先は登録済みの支払い先のID（相方の自分用・非表示を含む）か、登録外（手入力）。
 function isValidConditionValue(
   dimension: Dimension,
   value: string,
@@ -132,7 +127,7 @@ function isValidConditionValue(
     case "costType":
       return value === "fixed" || value === "variable";
     case "payee":
-      return true;
+      return value === UNREGISTERED_PAYEE_KEY || master.payees.some((p) => String(p.id) === value);
     case "counterpart":
       return master.counterparts.some((c) => String(c.id) === value);
   }
@@ -153,7 +148,7 @@ export function parseListFilter(
   const conditions: Conditions = {};
   for (const dimension of DIMENSIONS) {
     const value = get(dimension);
-    if (value === undefined || (value === "" && !keepsEmptyValue(dimension))) continue;
+    if (!value) continue;
     if (isValidConditionValue(dimension, value, master)) conditions[dimension] = value;
   }
   const member = members.find((m) => m.userId === get("scope")) ?? null;

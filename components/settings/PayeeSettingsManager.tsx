@@ -8,10 +8,17 @@ import {
   faPen,
   faPlus,
   faTrash,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { Select } from "@/components/ui/Select";
-import { createPayee, deletePayee, updatePayee } from "@/lib/actions/settings/payees";
+import {
+  addPayeeAlias,
+  createPayee,
+  deletePayee,
+  deletePayeeAlias,
+  updatePayee,
+} from "@/lib/actions/settings/payees";
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import { autoBreakdownIdFor, type CategoryBreakdown } from "@/lib/receipts/breakdowns";
 import {
@@ -24,12 +31,15 @@ import {
   describePayeeDefaults,
   EMPTY_PAYEE_DEFAULTS,
   type Payee,
+  type PayeeAlias,
   type PayeeDefaults,
 } from "@/lib/receipts/payees";
 import type { GroupMemberOption } from "@/types/receipt";
 
 type PayeeSettingsManagerProps = {
   initialPayees: Payee[];
+  // 登録済みのレシートで使われている支払い先（削除できないため、ゴミ箱を非活性にする）
+  usedPayeeIds: number[];
   categories: { id: number; name: string }[];
   breakdowns: CategoryBreakdown[];
   counterparts: Counterpart[];
@@ -46,10 +56,12 @@ type ListKey = "shared" | string;
 type Draft = { id: number | null; name: string; defaults: PayeeDefaults };
 
 // 設定 ＞ 支払い先（docs/分析拡充/基本設計書.md 2.6節）。
-// グループ全体／自分用／相方用（閲覧のみ）に分けて表示し、名前と既定値（カテゴリ・内訳・相手・帰属先）を設定する。
+// グループ全体／自分用／相方用（閲覧のみ）に分けて表示し、名前と既定値（カテゴリ・内訳・相手・帰属先）、
+// 別名（手入力・画像読み取りの店名をこの支払い先に寄せる。要件定義書 4.7節）を設定する。
 // グループ全体は管理者のみ、自分用は本人のみ編集できる。
 export function PayeeSettingsManager({
   initialPayees,
+  usedPayeeIds,
   categories,
   breakdowns,
   counterparts,
@@ -59,9 +71,15 @@ export function PayeeSettingsManager({
   isAdmin,
 }: PayeeSettingsManagerProps) {
   const [payees, setPayees] = useState(initialPayees);
+  // 別名の追加で過去のレシートが紐づくと使用中になるため、画面の中でも持つ
+  const [usedIds, setUsedIds] = useState(() => new Set(usedPayeeIds));
   const [listKey, setListKey] = useState<ListKey>("shared");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // エラーを出す支払い先（一覧の行の操作＝非表示・削除のとき）。null なら編集欄の中か一覧の下に出す
+  const [errorPayeeId, setErrorPayeeId] = useState<number | null>(null);
+  // 別名を追加したときの結果（過去のレシートを何件切り替えたか）
+  const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const partners = members.filter((m) => m.userId !== currentUserId);
@@ -78,17 +96,68 @@ export function PayeeSettingsManager({
   const sortByName = (list: Payee[]) =>
     [...list].sort((a, b) => a.name.localeCompare(b.name, "ja"));
 
-  const run = (action: () => Promise<string | null>) => {
+  // targetPayeeId を渡すと、エラーをその支払い先の行のすぐ下に出す（一覧の下だと画面の外になるため）
+  const run = (action: () => Promise<string | null>, targetPayeeId: number | null = null) => {
+    setNotice(null);
+    setErrorPayeeId(targetPayeeId);
     startTransition(async () => {
       setError(await action());
     });
+  };
+
+  // 編集欄を閉じる（キャンセル）。編集欄の中に出していたメッセージも消す
+  const closeEditor = () => {
+    setDraft(null);
+    setError(null);
+    setErrorPayeeId(null);
+    setNotice(null);
   };
 
   const switchList = (key: ListKey) => {
     setListKey(key);
     setDraft(null);
     setError(null);
+    setErrorPayeeId(null);
+    setNotice(null);
   };
+
+  const sortAliases = (list: PayeeAlias[]) =>
+    [...list].sort((a, b) => a.name.localeCompare(b.name, "ja"));
+
+  // 別名の追加・削除は、支払い先の「保存」を待たずにその場で反映する
+  // （追加と同時に過去のレシートを切り替えるため）
+  const addAlias = (payee: Payee, name: string, onAdded: () => void) =>
+    run(async () => {
+      const result = await addPayeeAlias(payee.id, name);
+      if (!result.success) return result.error;
+      setPayees((prev) =>
+        prev.map((p) =>
+          p.id === payee.id ? { ...p, aliases: sortAliases([...p.aliases, result.alias]) } : p
+        )
+      );
+      if (result.converted > 0) {
+        setUsedIds((prev) => new Set(prev).add(payee.id));
+      }
+      setNotice(
+        result.converted > 0
+          ? `別名「${result.alias.name}」を登録し、過去のレシート${result.converted}件を「${payee.name}」に切り替えました。`
+          : `別名「${result.alias.name}」を登録しました。`
+      );
+      onAdded();
+      return null;
+    });
+
+  const removeAlias = (payee: Payee, alias: PayeeAlias) =>
+    run(async () => {
+      const result = await deletePayeeAlias(payee.id, alias.id);
+      if (!result.success) return result.error;
+      setPayees((prev) =>
+        prev.map((p) =>
+          p.id === payee.id ? { ...p, aliases: p.aliases.filter((a) => a.id !== alias.id) } : p
+        )
+      );
+      return null;
+    });
 
   const save = () =>
     run(async () => {
@@ -115,7 +184,7 @@ export function PayeeSettingsManager({
       if (!result.success) return result.error;
       setPayees((prev) => prev.map((p) => (p.id === payee.id ? result.payee : p)));
       return null;
-    });
+    }, payee.id);
 
   const remove = (payee: Payee) =>
     run(async () => {
@@ -123,7 +192,7 @@ export function PayeeSettingsManager({
       if (!result.success) return result.error;
       setPayees((prev) => prev.filter((p) => p.id !== payee.id));
       return null;
-    });
+    }, payee.id);
 
   const context = { categories, breakdowns, counterparts, tags, members };
 
@@ -158,6 +227,7 @@ export function PayeeSettingsManager({
       <p className="text-xs text-slate-500">
         レシート登録画面のプルダウンには「グループ全体」と「自分用」の支払い先が出ます。
         既定値を設定すると、登録画面で支払い先を選んだときに、すべての明細に入ります。非表示にした支払い先はプルダウンに出ません。
+        別名を登録すると、手入力・画像読み取りの店名が別名と同じときに、この支払い先として保存されます（登録済みのレシートも切り替わります）。
       </p>
 
       <section className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4">
@@ -172,59 +242,83 @@ export function PayeeSettingsManager({
                     draft={draft}
                     onChange={setDraft}
                     onSave={save}
-                    onCancel={() => setDraft(null)}
+                    onCancel={closeEditor}
                     isPending={isPending}
                     currentUserId={currentUserId}
+                    error={error}
+                    notice={notice}
+                    aliases={payee.aliases}
+                    onAddAlias={(name, onAdded) => addAlias(payee, name, onAdded)}
+                    onDeleteAlias={(alias) => removeAlias(payee, alias)}
                     {...context}
                   />
                 </li>
               ) : (
-                <li key={payee.id} className="flex items-center justify-between gap-2 py-1.5">
-                  <div className="flex min-w-0 flex-col">
-                    <span
-                      className={`text-sm ${payee.isHidden ? "text-slate-400 line-through" : "text-slate-800"}`}
-                    >
-                      {payee.name}
-                      {payee.isHidden && <span className="ml-2 text-xs no-underline">（非表示）</span>}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      既定値：{describePayeeDefaults(payee.defaults, context)}
-                    </span>
-                  </div>
-                  {canEdit && (
-                    <div className="flex shrink-0 items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraft({ id: payee.id, name: payee.name, defaults: payee.defaults });
-                          setError(null);
-                        }}
-                        disabled={isPending}
-                        aria-label="編集"
-                        className="text-slate-400 hover:text-slate-600"
+                <li key={payee.id} className="flex flex-col gap-1 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-col">
+                      <span
+                        className={`text-sm ${payee.isHidden ? "text-slate-400 line-through" : "text-slate-800"}`}
                       >
-                        <FontAwesomeIcon icon={faPen} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleHidden(payee)}
-                        disabled={isPending}
-                        aria-label={payee.isHidden ? "表示する" : "非表示にする"}
-                        title={payee.isHidden ? "表示する" : "非表示にする"}
-                        className="text-slate-400 hover:text-slate-600"
-                      >
-                        <FontAwesomeIcon icon={payee.isHidden ? faEye : faEyeSlash} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => remove(payee)}
-                        disabled={isPending}
-                        aria-label="削除"
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <FontAwesomeIcon icon={faTrash} />
-                      </button>
+                        {payee.name}
+                        {payee.isHidden && <span className="ml-2 text-xs no-underline">（非表示）</span>}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        既定値：{describePayeeDefaults(payee.defaults, context)}
+                      </span>
+                      {payee.aliases.length > 0 && (
+                        <span className="text-xs text-slate-500">
+                          別名：{payee.aliases.map((a) => a.name).join("、")}
+                        </span>
+                      )}
                     </div>
+                    {canEdit && (
+                      <div className="flex shrink-0 items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraft({ id: payee.id, name: payee.name, defaults: payee.defaults });
+                            setError(null);
+                            setErrorPayeeId(null);
+                            setNotice(null);
+                          }}
+                          disabled={isPending}
+                          aria-label="編集"
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <FontAwesomeIcon icon={faPen} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleHidden(payee)}
+                          disabled={isPending}
+                          aria-label={payee.isHidden ? "表示する" : "非表示にする"}
+                          title={payee.isHidden ? "表示する" : "非表示にする"}
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <FontAwesomeIcon icon={payee.isHidden ? faEye : faEyeSlash} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => remove(payee)}
+                          disabled={isPending || usedIds.has(payee.id)}
+                          aria-label={
+                            usedIds.has(payee.id) ? "削除（使用中のため削除できません）" : "削除"
+                          }
+                          title={usedIds.has(payee.id) ? "登録済みのレシートで使われているため削除できません。非表示にしてください。" : "削除"}
+                          className={
+                            usedIds.has(payee.id)
+                              ? "cursor-not-allowed text-slate-300"
+                              : "text-red-400 hover:text-red-600"
+                          }
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {errorPayeeId === payee.id && error && (
+                    <p className="text-sm text-red-600">{error}</p>
                   )}
                 </li>
               )
@@ -238,9 +332,11 @@ export function PayeeSettingsManager({
               draft={draft}
               onChange={setDraft}
               onSave={save}
-              onCancel={() => setDraft(null)}
+              onCancel={closeEditor}
               isPending={isPending}
               currentUserId={currentUserId}
+              error={error}
+              notice={notice}
               {...context}
             />
           ) : (
@@ -249,6 +345,8 @@ export function PayeeSettingsManager({
               onClick={() => {
                 setDraft({ id: null, name: "", defaults: EMPTY_PAYEE_DEFAULTS });
                 setError(null);
+                setErrorPayeeId(null);
+                setNotice(null);
               }}
               disabled={isPending}
               className="flex items-center gap-1 self-start rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -258,7 +356,11 @@ export function PayeeSettingsManager({
             </button>
           ))}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {/* 編集欄が開いているときは、操作している場所で見えるよう編集欄の中に出す */}
+        {draft === null && errorPayeeId === null && error && (
+          <p className="text-sm text-red-600">{error}</p>
+        )}
+        {draft === null && notice && <p className="text-sm text-emerald-700">{notice}</p>}
       </section>
     </div>
   );
@@ -271,11 +373,18 @@ type PayeeEditorProps = {
   onCancel: () => void;
   isPending: boolean;
   currentUserId: string;
+  // 保存・別名の操作の結果（一覧の下だと画面の外になることがあるため、編集欄の中に出す）
+  error: string | null;
+  notice: string | null;
   categories: { id: number; name: string }[];
   breakdowns: CategoryBreakdown[];
   counterparts: Counterpart[];
   tags: Tag[];
   members: GroupMemberOption[];
+  // 別名（編集のときだけ。追加のときは、支払い先を保存してから編集で登録する）
+  aliases?: PayeeAlias[];
+  onAddAlias?: (name: string, onAdded: () => void) => void;
+  onDeleteAlias?: (alias: PayeeAlias) => void;
 };
 
 // 支払い先の名前と既定値の入力欄（追加・編集で共通）
@@ -286,13 +395,23 @@ function PayeeEditor({
   onCancel,
   isPending,
   currentUserId,
+  error,
+  notice,
   categories,
   breakdowns,
   counterparts,
   tags,
   members,
+  aliases,
+  onAddAlias,
+  onDeleteAlias,
 }: PayeeEditorProps) {
   const { defaults } = draft;
+  const [aliasInput, setAliasInput] = useState("");
+  const submitAlias = () => {
+    if (!onAddAlias || !aliasInput.trim()) return;
+    onAddAlias(aliasInput, () => setAliasInput(""));
+  };
   const setDefaults = (patch: Partial<PayeeDefaults>) =>
     onChange({ ...draft, defaults: { ...defaults, ...patch } });
 
@@ -428,6 +547,67 @@ function PayeeEditor({
           </div>
         </div>
       )}
+
+      {aliases && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">
+            別名（任意。手入力・画像読み取りの店名がこれと同じとき、この支払い先として保存します）
+          </span>
+          {aliases.length > 0 && (
+            <ul className="flex flex-wrap gap-2">
+              {aliases.map((alias) => (
+                <li
+                  key={alias.id}
+                  className="flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700"
+                >
+                  {alias.name}
+                  <button
+                    type="button"
+                    onClick={() => onDeleteAlias?.(alias)}
+                    disabled={isPending}
+                    aria-label={`別名「${alias.name}」を削除`}
+                    className="text-slate-400 hover:text-red-600"
+                  >
+                    <FontAwesomeIcon icon={faXmark} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={aliasInput}
+              onChange={(e) => setAliasInput(e.target.value)}
+              onKeyDown={(e) => {
+                // 支払い先のフォームの送信（保存）にならないよう、Enter は別名の追加にする
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  submitAlias();
+                }
+              }}
+              disabled={isPending}
+              placeholder="別名を入力"
+              aria-label="追加する別名"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="button"
+              onClick={submitAlias}
+              disabled={isPending || !aliasInput.trim()}
+              className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              別名を追加
+            </button>
+          </div>
+          <span className="text-xs text-slate-500">
+            別名を追加すると、店名が別名と同じ登録済みのレシートも、すぐにこの支払い先に切り替わります（精算確定済みの月を含む。明細の内容は変わりません）。
+          </span>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {notice && <p className="text-sm text-emerald-700">{notice}</p>}
 
       <div className="flex justify-end gap-2">
         <button

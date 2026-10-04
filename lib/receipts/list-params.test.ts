@@ -16,6 +16,7 @@ const master = {
   ],
   breakdowns: [{ id: 11, categoryId: 1, name: "外食" }],
   counterparts: [{ id: 22, name: "友人" }],
+  payees: [{ id: 41, name: "A病院", section: "shared" as const, sectionLabel: "グループ全体" }],
 };
 const members = [
   { userId: "user-a", displayName: "A" },
@@ -136,22 +137,26 @@ describe("list-params", () => {
     expect(parse({ category: "1", breakdown: "none" })?.label).toBe("食費 ＞ 内訳なし");
     expect(parse({ costType: "fixed", category: "2" })?.label).toBe("固定費・日用品");
     expect(parse({ category: "1", counterpart: "22" })?.label).toBe("食費・相手：友人");
-    // 支払い先は登録済みかどうかを問わず、名前で絞り込む。空の名前は「支払い先なし」
-    expect(parse({ payee: "A病院" })).toMatchObject({
-      conditions: { payee: "A病院" },
+    // 支払い先は登録済みの支払い先のIDか、登録外（手入力）で絞り込む
+    expect(parse({ payee: "41" })).toMatchObject({
+      conditions: { payee: "41" },
       label: "A病院",
     });
-    expect(parse({ payee: "" })).toMatchObject({
-      conditions: { payee: "" },
-      label: "支払い先なし",
+    expect(parse({ payee: "unregistered" })).toMatchObject({
+      conditions: { payee: "unregistered" },
+      label: "登録外（手入力）",
     });
-    // 不正な内訳・費用区分・相手は無視する
-    expect(parse({ breakdown: "999", costType: "xxx", counterpart: "999" })).toMatchObject({
+    // 不正な内訳・費用区分・相手・支払い先（存在しないID、F5 より前の支払い先名・空）は無視する
+    expect(
+      parse({ breakdown: "999", costType: "xxx", counterpart: "999", payee: "999" })
+    ).toMatchObject({
       conditions: {},
       label: null,
     });
+    expect(parse({ payee: "A病院" })?.conditions).toEqual({});
+    expect(parse({ payee: "" })?.conditions).toEqual({});
     // 条件だけ（scopeなし）でも絞り込み中とする
-    expect(parseListFilter({ payee: "A病院" }, master, members)?.scope).toEqual({ kind: "all" });
+    expect(parseListFilter({ payee: "41" }, master, members)?.scope).toEqual({ kind: "all" });
   });
 
   it("U-119: 条件は一覧・詳細へ引き継ぎ、分析から一覧へのURLにすべての条件を付ける", () => {
@@ -163,17 +168,17 @@ describe("list-params", () => {
       counterpart: "22",
       category: "",
     });
-    // 空の値は、支払い先（支払い先なし）だけ引き継ぐ
-    expect(params.toString()).toBe("month=2026-07&breakdown=none&costType=fixed&payee=&counterpart=22");
+    // 空の値は引き継がない
+    expect(params.toString()).toBe("month=2026-07&breakdown=none&costType=fixed&counterpart=22");
     expect(
       buildFilteredListHref({
         month: "2026-07",
-        conditions: { counterpart: "22", payee: "A病院", costType: "fixed" },
+        conditions: { counterpart: "22", payee: "unregistered", costType: "fixed" },
         scope: { kind: "all" },
         from: "analytics",
       })
     ).toBe(
-      "/receipts?month=2026-07&costType=fixed&payee=A%E7%97%85%E9%99%A2&counterpart=22&scope=all&from=analytics"
+      "/receipts?month=2026-07&costType=fixed&payee=unregistered&counterpart=22&scope=all&from=analytics"
     );
   });
 });

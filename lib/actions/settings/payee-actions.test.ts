@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createPayee, deletePayee, updatePayee } from "@/lib/actions/settings/payees";
+import {
+  addPayeeAlias,
+  createPayee,
+  deletePayee,
+  deletePayeeAlias,
+  updatePayee,
+} from "@/lib/actions/settings/payees";
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
 import { EMPTY_PAYEE_DEFAULTS } from "@/lib/receipts/payees";
 import { requireGroupMembership } from "@/lib/settings/admin";
@@ -57,6 +63,7 @@ function row(overrides: Record<string, unknown> = {}) {
 function fakeSupabase(results: {
   existing?: unknown;
   write?: { data: unknown; error: unknown };
+  rpc?: { data: unknown; error: unknown };
 }) {
   const calls: { method: string; args: unknown[] }[] = [];
   const chain: Record<string, unknown> = {};
@@ -70,7 +77,7 @@ function fakeSupabase(results: {
   chain.maybeSingle = () =>
     Promise.resolve(isWrite() ? results.write : { data: results.existing ?? null, error: null });
   chain.single = () => Promise.resolve(results.write);
-  const client = { from: vi.fn(() => chain) };
+  const client = { from: vi.fn(() => chain), rpc: vi.fn(() => Promise.resolve(results.rpc)) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { client: client as any, calls };
 }
@@ -322,5 +329,122 @@ describe("支払い先の設定（Server Action）", () => {
     const expected = { success: false, error: "支払い先が見つかりません。" };
     expect(await updatePayee(999, { isHidden: true })).toEqual(expected);
     expect(await deletePayee(999)).toEqual(expected);
+  });
+
+  // 分析拡充 F5：支払い先の別名
+  it("U-128: 別名を追加すると、DBの add_payee_alias で過去のレシートも切り替え、件数を返す", async () => {
+    const { client } = fakeSupabase({
+      existing: row({ owner_user_id: null }),
+      rpc: { data: { id: 5, name: "オーケー長津田店", converted: 15 }, error: null },
+    });
+    signIn(client, USER_A, true);
+
+    const result = await addPayeeAlias(10, " オーケー長津田店 ");
+
+    expect(result).toEqual({
+      success: true,
+      alias: { id: 5, name: "オーケー長津田店" },
+      converted: 15,
+    });
+    expect(client.rpc).toHaveBeenCalledWith("add_payee_alias", {
+      p_payee_id: 10,
+      p_name: "オーケー長津田店",
+    });
+  });
+
+  it("U-128: 空の別名・編集できない支払い先・存在しない支払い先には追加しない", async () => {
+    expect(await addPayeeAlias(10, "　")).toEqual({
+      success: false,
+      error: "別名を入力してください。",
+    });
+
+    const shared = fakeSupabase({ existing: row({ owner_user_id: null }) });
+    signIn(shared.client, USER_B, false);
+    expect(await addPayeeAlias(10, "別名")).toEqual({
+      success: false,
+      error: "グループ全体の支払い先は管理者のみ編集できます。",
+    });
+    expect(shared.client.rpc).not.toHaveBeenCalled();
+
+    const partner = fakeSupabase({ existing: row({ owner_user_id: USER_B }) });
+    signIn(partner.client, USER_A, true);
+    expect(await addPayeeAlias(10, "別名")).toEqual({
+      success: false,
+      error: "他のメンバーの支払い先は編集できません。",
+    });
+    expect(await deletePayeeAlias(10, 5)).toEqual({
+      success: false,
+      error: "他のメンバーの支払い先は編集できません。",
+    });
+
+    const missing = fakeSupabase({ existing: null });
+    signIn(missing.client, USER_A, true);
+    expect(await addPayeeAlias(10, "別名")).toEqual({
+      success: false,
+      error: "支払い先が見つかりません。",
+    });
+  });
+
+  it("U-128: 重複する別名・支払い先の名前と同じ別名はエラーメッセージを返す", async () => {
+    const duplicate = fakeSupabase({
+      existing: row({ owner_user_id: USER_B }),
+      rpc: {
+        data: null,
+        error: { code: "23505", message: 'duplicate key value violates unique constraint "payee_aliases_group_name_uniq"' },
+      },
+    });
+    signIn(duplicate.client, USER_B, false);
+    expect(await addPayeeAlias(10, "オーケー長津田店")).toEqual({
+      success: false,
+      error: "この別名は既に登録されています。",
+    });
+
+    const sameAsPayee = fakeSupabase({
+      existing: row({ owner_user_id: USER_B }),
+      rpc: { data: null, error: { code: "23505", message: "payee alias conflicts with a payee name" } },
+    });
+    signIn(sameAsPayee.client, USER_B, false);
+    expect(await addPayeeAlias(10, "myTOKYOGAS")).toEqual({
+      success: false,
+      error: "同じ名前の支払い先があるため、別名にできません。",
+    });
+
+    // 支払い先の名前を、別名として登録済みの名前にはできない
+    const rename = fakeSupabase({
+      existing: row(),
+      write: { data: null, error: { code: "23505", message: "payee name conflicts with an alias" } },
+    });
+    signIn(rename.client, USER_A, true);
+    expect(await updatePayee(10, { name: "オーケー長津田店" })).toEqual({
+      success: false,
+      error: "同じ名前の別名が登録されています。",
+    });
+  });
+
+  it("U-128: 別名を削除できる（存在しない別名はエラー）", async () => {
+    const deleted = fakeSupabase({
+      existing: row({ owner_user_id: USER_B }),
+      write: { data: { id: 5 }, error: null },
+    });
+    signIn(deleted.client, USER_B, false);
+    expect(await deletePayeeAlias(10, 5)).toEqual({ success: true });
+    expect(deleted.client.from).toHaveBeenCalledWith("payee_aliases");
+    expect(deleted.calls).toEqual(
+      expect.arrayContaining([
+        { method: "delete", args: [] },
+        { method: "eq", args: ["id", 5] },
+        { method: "eq", args: ["payee_id", 10] },
+      ])
+    );
+
+    const missing = fakeSupabase({
+      existing: row({ owner_user_id: USER_B }),
+      write: { data: null, error: null },
+    });
+    signIn(missing.client, USER_B, false);
+    expect(await deletePayeeAlias(10, 999)).toEqual({
+      success: false,
+      error: "別名が見つかりません。",
+    });
   });
 });

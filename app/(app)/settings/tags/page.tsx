@@ -1,5 +1,5 @@
 import { TagSettingsManager } from "@/components/settings/TagSettingsManager";
-import { getTags } from "@/lib/settings/queries";
+import { getTags, getUsedSettingIds } from "@/lib/settings/queries";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,7 +13,10 @@ export default async function TagSettingsPage() {
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
-  const tags = await getTags(supabase, membership!.groupId);
+  const [tags, used] = await Promise.all([
+    getTags(supabase, membership!.groupId),
+    getUsedSettingIds(supabase, membership!.groupId),
+  ]);
 
-  return <TagSettingsManager tags={tags} />;
+  return <TagSettingsManager tags={tags} usedTagIds={used.tags} />;
 }
