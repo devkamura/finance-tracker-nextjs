@@ -143,3 +143,29 @@ export async function getPayees(supabase: SupabaseClient, groupId: string): Prom
   }
   return ((data ?? []) as PayeeRow[]).map(toPayee);
 }
+
+// 登録済みのレシートで使われている支払い先・内訳・相手・タグのID。
+// 使われているものは削除できないため、設定画面でゴミ箱を非活性にする（DBの used_setting_ids）。
+export type UsedSettingIds = {
+  payees: number[];
+  breakdowns: number[];
+  counterparts: number[];
+  tags: number[];
+};
+
+export async function getUsedSettingIds(
+  supabase: SupabaseClient,
+  groupId: string
+): Promise<UsedSettingIds> {
+  const { data, error } = await supabase.rpc("used_setting_ids", { p_group_id: groupId });
+  if (error) {
+    throw error;
+  }
+  const ids = (data ?? {}) as Partial<UsedSettingIds>;
+  return {
+    payees: ids.payees ?? [],
+    breakdowns: ids.breakdowns ?? [],
+    counterparts: ids.counterparts ?? [],
+    tags: ids.tags ?? [],
+  };
+}

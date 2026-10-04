@@ -7,13 +7,19 @@ import {
 import { createTag, deleteTag, updateTag } from "@/lib/actions/settings/tags";
 import type { Tag } from "@/lib/receipts/labels";
 
-function toListItem(tag: Tag): NamedListItem {
-  return { id: tag.id, name: tag.name, isHidden: tag.isHidden, editable: true };
+function toListItem(tag: Tag, used = false): NamedListItem {
+  return { id: tag.id, name: tag.name, isHidden: tag.isHidden, editable: true, used };
 }
 
 // 設定 ＞ タグ（docs/分析拡充/基本設計書.md 2.5節）。追加・名前の変更・表示/非表示・削除。
 // タグは集計に使わないため、グループのメンバー全員が編集できる（基本設計書 Q2）。
-export function TagSettingsManager({ tags }: { tags: Tag[] }) {
+export function TagSettingsManager({
+  tags,
+  usedTagIds,
+}: {
+  tags: Tag[];
+  usedTagIds: number[]; // 登録済みのレシートで使われているタグ（ゴミ箱を非活性にする）
+}) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
@@ -23,7 +29,7 @@ export function TagSettingsManager({ tags }: { tags: Tag[] }) {
       <NamedItemListManager
         label="タグ"
         placeholder="タグを追加（例：朝食）"
-        initialItems={tags.map(toListItem)}
+        initialItems={tags.map((tag) => toListItem(tag, usedTagIds.includes(tag.id)))}
         canEdit
         onCreate={async (name) => {
           const result = await createTag(name);

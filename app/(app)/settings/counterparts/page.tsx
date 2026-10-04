@@ -1,5 +1,5 @@
 import { CounterpartSettingsManager } from "@/components/settings/CounterpartSettingsManager";
-import { getCounterparts } from "@/lib/settings/queries";
+import { getCounterparts, getUsedSettingIds } from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,12 +13,16 @@ export default async function CounterpartSettingsPage() {
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
-  const members = await getGroupMembers(supabase, membership!.groupId);
+  const [members, used] = await Promise.all([
+    getGroupMembers(supabase, membership!.groupId),
+    getUsedSettingIds(supabase, membership!.groupId),
+  ]);
   const counterparts = await getCounterparts(supabase, membership!.groupId, members);
 
   return (
     <CounterpartSettingsManager
       counterparts={counterparts}
+      usedCounterpartIds={used.counterparts}
       canEdit={membership!.role === "admin"}
     />
   );

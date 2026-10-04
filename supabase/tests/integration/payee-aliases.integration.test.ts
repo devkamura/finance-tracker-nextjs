@@ -128,6 +128,8 @@ describe("支払い先の別名", () => {
     await admin.from("receipts").delete().in("group_id", [groupId, otherGroupId]);
     await admin.from("settlement_periods").delete().in("group_id", [groupId, otherGroupId]);
     await admin.from("payees").delete().in("group_id", [groupId, otherGroupId]);
+    await admin.from("tags").delete().in("group_id", [groupId, otherGroupId]);
+    await admin.from("category_breakdowns").delete().in("group_id", [groupId, otherGroupId]);
     await deleteTestUser(admin, owner.id);
     await deleteTestUser(admin, member.id);
     await deleteTestUser(admin, outsider.id);
@@ -332,4 +334,70 @@ describe("支払い先の別名", () => {
     expect(await receiptPayee(mine)).toEqual({ payee_id: memberPayeeId, payee_name: "〇〇薬局" });
     expect(await receiptPayee(partners)).toEqual({ payee_id: null, payee_name: "〇〇ドラッグ" });
   });
+
+  it("I-52: used_setting_ids は、グループのレシートで使われている支払い先・内訳・相手・タグだけを返し、他グループには返さない", async () => {
+    const { data: breakdown, error: breakdownError } = await owner.client
+      .from("category_breakdowns")
+      .insert({ group_id: groupId, category_id: foodId, name: "使用中テスト" })
+      .select("id")
+      .single();
+    expect(breakdownError).toBeNull();
+    const { data: unusedBreakdown } = await owner.client
+      .from("category_breakdowns")
+      .insert({ group_id: groupId, category_id: foodId, name: "未使用テスト" })
+      .select("id")
+      .single();
+    const { data: tag } = await owner.client
+      .from("tags")
+      .insert({ group_id: groupId, name: "使用中タグ" })
+      .select("id")
+      .single();
+    const { data: unusedTag } = await owner.client
+      .from("tags")
+      .insert({ group_id: groupId, name: "未使用タグ" })
+      .select("id")
+      .single();
+    const { data: unusedPayee } = await owner.client
+      .from("payees")
+      .insert({ group_id: groupId, name: "未使用の支払い先" })
+      .select("id")
+      .single();
+
+    // 支払い先「オーケー」・内訳「使用中テスト」・相手「ふたり」・タグ「使用中タグ」を使う明細
+    const receiptId = await insertReceipt({ payeeName: "オーケー", payeeId: okId });
+    const { data: detail, error: detailError } = await admin
+      .from("receipt_details")
+      .insert({
+        receipt_id: receiptId,
+        item_name: "パン",
+        price: 1000,
+        tax_type: "inclusive",
+        category_id: foodId,
+        breakdown_id: breakdown!.id,
+        counterpart_id: futariId,
+        owner_user_id: owner.id,
+      })
+      .select("id")
+      .single();
+    expect(detailError).toBeNull();
+    await admin.from("receipt_detail_tags").insert({ receipt_detail_id: detail!.id, tag_id: tag!.id });
+
+    const { data, error } = await member.client.rpc("used_setting_ids", { p_group_id: groupId });
+    expect(error).toBeNull();
+    const used = data as { payees: number[]; breakdowns: number[]; counterparts: number[]; tags: number[] };
+    expect(used.payees).toContain(okId);
+    expect(used.payees).not.toContain(unusedPayee!.id);
+    expect(used.breakdowns).toContain(breakdown!.id);
+    expect(used.breakdowns).not.toContain(unusedBreakdown!.id);
+    expect(used.counterparts).toContain(futariId);
+    expect(used.tags).toEqual([tag!.id]);
+    expect(used.tags).not.toContain(unusedTag!.id);
+
+    // 他グループのユーザーには、RLS により何も返らない
+    const { data: outsiderData } = await outsider.client.rpc("used_setting_ids", {
+      p_group_id: groupId,
+    });
+    expect(outsiderData).toEqual({ payees: [], breakdowns: [], counterparts: [], tags: [] });
+  });
 });
+

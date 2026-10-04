@@ -5,6 +5,7 @@ import {
   getCounterparts,
   getPayees,
   getTags,
+  getUsedSettingIds,
 } from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
@@ -20,12 +21,13 @@ export default async function PayeeSettingsPage() {
   const membership = await getCurrentMembership(supabase, user!.id);
   const groupId = membership!.groupId;
 
-  const [payees, categories, breakdowns, tags, members] = await Promise.all([
+  const [payees, categories, breakdowns, tags, members, used] = await Promise.all([
     getPayees(supabase, groupId),
     getCategoriesWithCostType(supabase, groupId),
     getCategoryBreakdowns(supabase, groupId),
     getTags(supabase, groupId),
     getGroupMembers(supabase, groupId),
+    getUsedSettingIds(supabase, groupId),
   ]);
   // メンバーの相手の名前はメンバーの表示名を使うため、メンバーの取得後に取得する
   const counterparts = await getCounterparts(supabase, groupId, members);
@@ -33,6 +35,7 @@ export default async function PayeeSettingsPage() {
   return (
     <PayeeSettingsManager
       initialPayees={payees}
+      usedPayeeIds={used.payees}
       categories={categories}
       breakdowns={breakdowns}
       counterparts={counterparts}

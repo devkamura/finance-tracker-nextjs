@@ -839,6 +839,7 @@ export type Database = {
         }
       }
       shares_group_with: { Args: { p_user_id: string }; Returns: boolean }
+      used_setting_ids: { Args: { p_group_id: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

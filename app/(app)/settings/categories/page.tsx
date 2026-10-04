@@ -1,5 +1,9 @@
 import { CategorySettingsManager } from "@/components/settings/CategorySettingsManager";
-import { getCategoriesWithCostType, getCategoryBreakdowns } from "@/lib/settings/queries";
+import {
+  getCategoriesWithCostType,
+  getCategoryBreakdowns,
+  getUsedSettingIds,
+} from "@/lib/settings/queries";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,15 +17,17 @@ export default async function CategorySettingsPage() {
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
-  const [categories, breakdowns] = await Promise.all([
+  const [categories, breakdowns, used] = await Promise.all([
     getCategoriesWithCostType(supabase, membership!.groupId),
     getCategoryBreakdowns(supabase, membership!.groupId),
+    getUsedSettingIds(supabase, membership!.groupId),
   ]);
 
   return (
     <CategorySettingsManager
       categories={categories}
       initialBreakdowns={breakdowns}
+      usedBreakdownIds={used.breakdowns}
       canEdit={membership!.role === "admin"}
     />
   );
