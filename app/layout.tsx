@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Noto_Sans_JP } from "next/font/google";
+// アイコンの CSS を最初から読み込む（読み込み直後にアイコンが大きく表示されるのを防ぐ）。
+// アプリの CSS（globals.css）で上書きできるよう、先に読み込む
+import "@/lib/fontawesome";
 import "./globals.css";
 
 const notoSansJp = Noto_Sans_JP({
