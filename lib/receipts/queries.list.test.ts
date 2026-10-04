@@ -164,14 +164,25 @@ describe("listReceipts", () => {
           {
             ...detail,
             id: "d1",
+            counterpart_id: 22,
             counterparts: { kind: "default", user_id: null, name: "友人" },
             receipt_detail_tags: [
               { tags: { name: "夕食", sort_order: 3 } },
               { tags: { name: "朝食", sort_order: 1 } },
             ],
           },
-          { ...detail, id: "d2", counterparts: { kind: "member", user_id: USER_A, name: null } },
-          { ...detail, id: "d3", counterparts: { kind: "member", user_id: "gone", name: null } },
+          {
+            ...detail,
+            id: "d2",
+            counterpart_id: 23,
+            counterparts: { kind: "member", user_id: USER_A, name: null },
+          },
+          {
+            ...detail,
+            id: "d3",
+            counterpart_id: 24,
+            counterparts: { kind: "member", user_id: "gone", name: null },
+          },
         ],
       }),
     ]);
@@ -186,5 +197,7 @@ describe("listReceipts", () => {
       ["あきら", []],
       ["unknown", []],
     ]);
+    // 一覧の相手での絞り込み（分析拡充 F4）に使う相手のID
+    expect(receipt.items.map((i) => i.counterpartId)).toEqual([22, 23, 24]);
   });
 });

@@ -6,13 +6,14 @@ import { faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
 import { formatYen } from "@/lib/analytics/aggregate";
 
 type NegativeAmountNoticeProps = {
-  subject: "カテゴリ" | "月"; // 円グラフはカテゴリ、推移グラフは月がマイナスになる
+  // マイナスになったもの。円グラフは「分ける」項目（カテゴリ・内訳など）、推移グラフは月
+  subject: string;
   negatives: { name: string; amount: number }[];
   // 円グラフの％の説明（円グラフを描いているときのみ渡す）
   ratio?: { positiveTotal: number; total: number };
 };
 
-// 返金が支出を上回りマイナスになったカテゴリ・月があるときの注意書き（基本設計書3.7節、必須）。
+// 返金が支出を上回りマイナスになった値（カテゴリ・内訳など）・月があるときの注意書き（基本設計書3.7節、必須）。
 // マイナスがなければ何も表示しない。
 export function NegativeAmountNotice({ subject, negatives, ratio }: NegativeAmountNoticeProps) {
   if (negatives.length === 0) {
@@ -33,7 +34,7 @@ export function NegativeAmountNotice({ subject, negatives, ratio }: NegativeAmou
         </p>
         {ratio && (
           <p>
-            割合は、マイナスのカテゴリを除いた合計（{formatYen(ratio.positiveTotal)}
+            割合は、マイナスの{subject}を除いた合計（{formatYen(ratio.positiveTotal)}
             ）に対する値です。実際の合計は{formatYen(ratio.total)}です。
           </p>
         )}

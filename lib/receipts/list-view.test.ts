@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import { costTypeMap } from "@/lib/analytics/dimensions";
 import { buildReceiptListView } from "@/lib/receipts/list-view";
 import type { ReceiptDetailItemView, ReceiptListItem } from "@/types/receipt";
 
 const FOOD = 1;
 const DAILY = 2;
+const costTypes = costTypeMap([
+  { id: FOOD, costType: "variable" },
+  { id: DAILY, costType: "variable" },
+]);
 
 function item(id: string, categoryId: number, price: number): ReceiptDetailItemView {
   return {
@@ -18,6 +23,7 @@ function item(id: string, categoryId: number, price: number): ReceiptDetailItemV
     breakdownId: null,
     breakdownName: null,
     categoryName: categoryId === FOOD ? "食費" : "日用品",
+    counterpartId: 21,
     counterpartName: "ふたり",
     ownerUserId: null,
     ownerDisplayName: "共同",
@@ -51,12 +57,12 @@ const receipts = [
 
 describe("buildReceiptListView", () => {
   it("U-89: 絞り込みなしでは全件を並び順どおりに返す（新しい順／古い順）", () => {
-    expect(buildReceiptListView(receipts, null, "desc").items.map((i) => i.receipt.id)).toEqual([
+    expect(buildReceiptListView(receipts, null, "desc", costTypes).items.map((i) => i.receipt.id)).toEqual([
       "new",
       "mid",
       "old",
     ]);
-    const asc = buildReceiptListView(receipts, null, "asc");
+    const asc = buildReceiptListView(receipts, null, "asc", costTypes);
     expect(asc.items.map((i) => i.receipt.id)).toEqual(["old", "mid", "new"]);
     expect(asc.items.every((i) => i.match === null)).toBe(true);
   });
@@ -64,8 +70,9 @@ describe("buildReceiptListView", () => {
   it("U-89: 絞り込み中は当てはまるレシートだけを並び順どおりに返し、「うち」の合計を出す", () => {
     const view = buildReceiptListView(
       receipts,
-      { categoryId: FOOD, categoryName: "食費", scope: { kind: "all" }, scopeLabel: "全体" },
-      "asc"
+      { conditions: { category: String(FOOD) }, label: "食費", scope: { kind: "all" }, scopeLabel: "全体" },
+      "asc",
+      costTypes
     );
     expect(view.items.map((i) => [i.receipt.id, i.match?.matchedAmount])).toEqual([
       ["old", 1000],
@@ -76,7 +83,7 @@ describe("buildReceiptListView", () => {
 
   it("U-89: 元の配列は並べ替えない（画面側で解除・並び替えを繰り返しても元データが変わらない）", () => {
     const before = receipts.map((r) => r.id);
-    buildReceiptListView(receipts, null, "asc");
+    buildReceiptListView(receipts, null, "asc", costTypes);
     expect(receipts.map((r) => r.id)).toEqual(before);
   });
 });

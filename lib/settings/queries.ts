@@ -87,6 +87,33 @@ export async function getCounterparts(
   });
 }
 
+// 分析・レシート一覧の絞り込みで表示する相手の名前（docs/分析拡充/詳細設計書.md F4 2章）。
+// 非表示の相手に加え、グループから外れたメンバーの相手も、既存の明細の集計に出てくるため含める
+// （名前は一覧・詳細の表示と同じく unknown）。並び順→登録順。
+export async function getCounterpartNames(
+  supabase: SupabaseClient,
+  groupId: string,
+  members: { userId: string; displayName: string }[]
+): Promise<{ id: number; name: string }[]> {
+  const { data, error } = await supabase
+    .from("counterparts")
+    .select("id, kind, user_id, name")
+    .eq("group_id", groupId)
+    .order("sort_order")
+    .order("id");
+  if (error) {
+    throw error;
+  }
+  const memberNames = new Map(members.map((m) => [m.userId, m.displayName]));
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name:
+      row.kind === "member"
+        ? (memberNames.get(row.user_id ?? "") ?? "unknown")
+        : (row.name ?? ""),
+  }));
+}
+
 // グループのタグを取得する（非表示のものも含む。並び順→登録順。基本設計書 2.5節）
 export async function getTags(supabase: SupabaseClient, groupId: string): Promise<Tag[]> {
   const { data, error } = await supabase

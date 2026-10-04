@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getCategoriesWithCostType,
   getCategoryBreakdowns,
+  getCounterpartNames,
   getCounterparts,
   getPayees,
   getTags,
@@ -71,6 +72,25 @@ describe("settings/queries", () => {
       { id: 1, kind: "member", userId: "user-a", name: "あきら", isHidden: false },
       { id: 3, kind: "default", userId: null, name: "ふたり", isHidden: false },
       { id: 4, kind: "custom", userId: null, name: "同僚", isHidden: true },
+    ]);
+  });
+
+  it("U-121: 分析・一覧の相手の名前は、非表示とグループから外れたメンバー（unknown）も含める", async () => {
+    const supabase = fakeSupabase({
+      counterparts: [
+        { id: 1, kind: "member", user_id: "user-a", name: null },
+        { id: 2, kind: "member", user_id: "gone", name: null },
+        { id: 3, kind: "default", user_id: null, name: "ふたり" },
+        { id: 4, kind: "custom", user_id: null, name: "同僚" },
+      ],
+    });
+    expect(
+      await getCounterpartNames(supabase, "group-1", [{ userId: "user-a", displayName: "あきら" }])
+    ).toEqual([
+      { id: 1, name: "あきら" },
+      { id: 2, name: "unknown" },
+      { id: 3, name: "ふたり" },
+      { id: 4, name: "同僚" },
     ]);
   });
 

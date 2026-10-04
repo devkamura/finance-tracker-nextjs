@@ -1,9 +1,17 @@
-// 支出分析の集計ロジック（docs/支出分析機能/詳細設計書.md 5章）。
+// 支出分析の集計ロジック（docs/支出分析機能/詳細設計書.md 5章、docs/分析拡充/詳細設計書.md F4 3章）。
 // サーバー通信なしで画面操作に即応するため、クライアント側で呼ぶ純粋関数として実装する。
 
+import {
+  dimensionKey,
+  matchesConditions,
+  type Conditions,
+  type CostTypeMap,
+  type Dimension,
+} from "@/lib/analytics/dimensions";
 import type { AnalyticsRow, Scope } from "@/lib/analytics/types";
 
-export type CategorySum = { categoryId: number; amount: number };
+// 「分ける」項目の値（カテゴリID・内訳ID・費用区分・支払い先名・相手ID）ごとの合計
+export type KeySum = { key: string; amount: number };
 
 // 帰属先に応じた重み。表示対象に当てはまらない帰属先は0。
 // 共同トグルがオンのとき、共同（ownerUserId=null）は1/2を計上する（基本設計書3.2節）。
@@ -20,39 +28,46 @@ function weightFor(row: AnalyticsRow, scope: Scope): number {
   return ownerWeight(row.ownerUserId, scope);
 }
 
-// 指定した月・表示対象の、カテゴリごとの合計を金額の大きい順に返す。
-// 該当する行が1件もないカテゴリは含めない（行はあるが合計0円のカテゴリは含める）。
-export function sumByCategory(
+// 指定した月・表示対象で、絞り込みの条件に当てはまる行を「分ける」項目の値ごとに合計し、
+// 金額の大きい順に返す（docs/分析拡充/詳細設計書.md F4 3章）。
+// 該当する行が1件もない値は含めない（行はあるが合計0円の値は含める）。
+export function sumByDimension(
   rows: AnalyticsRow[],
   scope: Scope,
-  month: string
-): CategorySum[] {
-  const sums = new Map<number, number>();
+  month: string,
+  dimension: Dimension,
+  filter: Conditions,
+  costTypes: CostTypeMap
+): KeySum[] {
+  const sums = new Map<string, number>();
   for (const row of rows) {
     if (row.month !== month) continue;
     const weight = weightFor(row, scope);
     if (weight === 0) continue;
-    sums.set(row.categoryId, (sums.get(row.categoryId) ?? 0) + row.amount * weight);
+    if (!matchesConditions(row, filter, costTypes)) continue;
+    const key = dimensionKey(row, dimension, costTypes);
+    sums.set(key, (sums.get(key) ?? 0) + row.amount * weight);
   }
-  return Array.from(sums, ([categoryId, amount]) => ({ categoryId, amount })).sort(
-    (a, b) => b.amount - a.amount || a.categoryId - b.categoryId
+  return Array.from(sums, ([key, amount]) => ({ key, amount })).sort(
+    (a, b) => b.amount - a.amount || a.key.localeCompare(b.key, "ja", { numeric: true })
   );
 }
 
 export type MonthSum = { month: string; amount: number };
 
 // 12ヶ月それぞれの合計を古い順に返す（データのない月は0円）。
-// categoryIdがnullなら総支出（全カテゴリ）、数値ならそのカテゴリだけを合計する。
-// 表示対象の重み（共同オンなら共同は1/2）はカテゴリ別集計と同じ。
+// 絞り込みの条件がなければ総支出、あれば条件に当てはまる行だけを合計する。
+// 表示対象の重み（共同オンなら共同は1/2）は円グラフの集計と同じ。
 export function sumByMonth(
   rows: AnalyticsRow[],
   scope: Scope,
   months: string[],
-  categoryId: number | null
+  filter: Conditions,
+  costTypes: CostTypeMap
 ): MonthSum[] {
   const sums = new Map<string, number>(months.map((m) => [m, 0]));
   for (const row of rows) {
-    if (categoryId !== null && row.categoryId !== categoryId) continue;
+    if (!matchesConditions(row, filter, costTypes)) continue;
     const current = sums.get(row.month);
     if (current === undefined) continue; // 対象の12ヶ月以外
     sums.set(row.month, current + row.amount * weightFor(row, scope));
@@ -85,20 +100,21 @@ export function buildTrendData(series: MonthSum[]): TrendData {
   return { points, negatives: series.filter((p) => p.amount < 0) };
 }
 
-export type PieSlice = CategorySum & { percent: number };
+export type PieSlice = KeySum & { percent: number };
 
 export type PieData = {
-  slices: PieSlice[]; // 金額がプラスのカテゴリ（円グラフの扇）
-  negatives: CategorySum[]; // 返金が支出を上回りマイナスになったカテゴリ（注意書き用）
-  zeroCategories: CategorySum[]; // 合計がちょうど0円のカテゴリ（表にのみ表示）
+  slices: PieSlice[]; // 金額がプラスの値（円グラフの扇）
+  negatives: KeySum[]; // 返金が支出を上回りマイナスになった値（注意書き用）
+  zeroKeys: KeySum[]; // 合計がちょうど0円の値（表にのみ表示）
   total: number; // 実際の合計（マイナスも含む）
-  positiveTotal: number; // ％の分母（プラスのカテゴリの合計）
+  positiveTotal: number; // ％の分母（プラスの値の合計）
 };
 
 // 円グラフ用のデータを作る（基本設計書3.7節）。
-// マイナスのカテゴリは描画上0として扇から外し、％はプラスのカテゴリの合計を分母にする。
+// マイナスの値は描画上0として扇から外し、％はプラスの値の合計を分母にする。
 // 金額（total）は実際の値のまま返す。
-export function buildPieData(categorySums: CategorySum[]): PieData {
+// 絞り込み中は、絞り込み後の合計が分母になる（内訳で分けるときは「内訳なし」も含む。要件定義書 4.6節）。
+export function buildPieData(categorySums: KeySum[]): PieData {
   const positives = categorySums.filter((c) => c.amount > 0);
   const positiveTotal = positives.reduce((sum, c) => sum + c.amount, 0);
   return {
@@ -107,7 +123,7 @@ export function buildPieData(categorySums: CategorySum[]): PieData {
       percent: Math.round((c.amount / positiveTotal) * 1000) / 10,
     })),
     negatives: categorySums.filter((c) => c.amount < 0),
-    zeroCategories: categorySums.filter((c) => c.amount === 0),
+    zeroKeys: categorySums.filter((c) => c.amount === 0),
     total: categorySums.reduce((sum, c) => sum + c.amount, 0),
     positiveTotal,
   };

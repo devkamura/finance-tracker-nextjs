@@ -126,11 +126,18 @@ describe("支出分析のデータ取得", () => {
     await deleteTestUser(admin, outsider.id);
   });
 
+  // insertReceipts で登録した明細の、内訳・相手・支払い先（分析拡充 F4）
+  const detailKeys = {
+    breakdownId: null,
+    counterpartId: expect.any(Number),
+    payeeName: "分析テスト",
+  };
+
   it("I-28: 取得上限（1,000件）を超える1,001件のレシートがすべて集計される", async () => {
     const data = await getAnalyticsData(userA.client, groupId, NOW);
     const food = data.rows.filter((r) => r.month === "2026-09" && r.categoryId === foodId);
     expect(food).toEqual([
-      { month: "2026-09", categoryId: foodId, ownerUserId: null, amount: 100100 },
+      { ...detailKeys, month: "2026-09", categoryId: foodId, ownerUserId: null, amount: 100100 },
     ]);
   });
 
@@ -151,8 +158,8 @@ describe("支出分析のデータ取得", () => {
       .filter((r) => r.categoryId === dailyId)
       .sort((a, b) => a.month.localeCompare(b.month));
     expect(daily).toEqual([
-      { month: "2025-11", categoryId: dailyId, ownerUserId: null, amount: 10 },
-      { month: "2026-10", categoryId: dailyId, ownerUserId: null, amount: 100 },
+      { ...detailKeys, month: "2025-11", categoryId: dailyId, ownerUserId: null, amount: 10 },
+      { ...detailKeys, month: "2026-10", categoryId: dailyId, ownerUserId: null, amount: 100 },
     ]);
     expect(data.months[0]).toBe("2025-11");
     expect(data.months[11]).toBe("2026-10");
@@ -167,5 +174,70 @@ describe("支出分析のデータ取得", () => {
       const { error } = await admin.from("profiles").update({ color }).eq("id", userA.id);
       expect(error).not.toBeNull();
     }
+  });
+
+  it("I-47: 内訳・相手・支払い先ごとに集約し、グループの費用区分・内訳・相手の名前を返す（分析拡充 F4）", async () => {
+    // 他のテストの合計に影響しないよう、他グループ（outsiderが管理者）で確認する
+    const { error: costError } = await outsider.client
+      .from("category_settings")
+      .upsert({ group_id: otherGroupId, category_id: foodId, cost_type: "fixed" });
+    expect(costError).toBeNull();
+    const { data: breakdown, error: breakdownError } = await outsider.client
+      .from("category_breakdowns")
+      .insert({ group_id: otherGroupId, category_id: foodId, name: "外食", sort_order: 1 })
+      .select("id")
+      .single();
+    expect(breakdownError).toBeNull();
+    const { data: counterparts } = await outsider.client
+      .from("counterparts")
+      .select("id, name")
+      .eq("group_id", otherGroupId);
+    const friend = counterparts!.find((c) => c.name === "友人")!;
+
+    const receiptId = crypto.randomUUID();
+    const { error: receiptError } = await admin.from("receipts").insert({
+      id: receiptId,
+      group_id: otherGroupId,
+      payee_name: "居酒屋",
+      transaction_type_id: expenseTypeId,
+      occurred_at: "2026-08-20T19:00:00+09:00",
+      payer_user_id: outsider.id,
+      created_by: outsider.id,
+      amount: 3000,
+    });
+    expect(receiptError).toBeNull();
+    const { error: detailError } = await admin.from("receipt_details").insert({
+      receipt_id: receiptId,
+      item_name: "飲み会",
+      price: 3000,
+      tax_type: "inclusive",
+      category_id: foodId,
+      breakdown_id: breakdown!.id,
+      counterpart_id: friend.id,
+      owner_user_id: outsider.id,
+    });
+    expect(detailError).toBeNull();
+
+    const data = await getAnalyticsData(outsider.client, otherGroupId, NOW);
+
+    expect(data.rows.filter((r) => r.month === "2026-08")).toEqual([
+      {
+        month: "2026-08",
+        categoryId: foodId,
+        breakdownId: breakdown!.id,
+        counterpartId: friend.id,
+        payeeName: "居酒屋",
+        ownerUserId: outsider.id,
+        amount: 3000,
+      },
+    ]);
+    expect(data.categories.find((c) => c.id === foodId)?.costType).toBe("fixed");
+    expect(data.breakdowns).toEqual([{ id: breakdown!.id, categoryId: foodId, name: "外食" }]);
+    // 既定の相手とメンバー（表示名）の相手が入る
+    expect(data.counterparts.map((c) => c.name)).toEqual(
+      expect.arrayContaining(["ふたり", "友人", "実家"])
+    );
+    expect(data.counterparts.length).toBe(4);
+    expect(data.payeeNames).toEqual(["分析テスト", "居酒屋"].sort((a, b) => a.localeCompare(b, "ja")));
   });
 });

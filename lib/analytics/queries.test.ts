@@ -5,9 +5,19 @@ import {
   buildAnalyticsRows,
   getAnalyticsData,
 } from "@/lib/analytics/queries";
+import {
+  getCategoriesWithCostType,
+  getCategoryBreakdowns,
+  getCounterpartNames,
+} from "@/lib/settings/queries";
 import { getGroupMembers } from "@/lib/supabase/group";
 
 vi.mock("@/lib/supabase/group", () => ({ getGroupMembers: vi.fn() }));
+vi.mock("@/lib/settings/queries", () => ({
+  getCategoriesWithCostType: vi.fn(),
+  getCategoryBreakdowns: vi.fn(),
+  getCounterpartNames: vi.fn(),
+}));
 
 const mockedGetGroupMembers = vi.mocked(getGroupMembers);
 
@@ -16,9 +26,13 @@ const USER_B = "user-b";
 const FOOD = 1;
 const DAILY = 2;
 
+const PAIR = 21; // 相手「ふたり」
+
 type DetailInput = {
   price: number;
   category_id?: number;
+  breakdown_id?: number | null;
+  counterpart_id?: number;
   owner_user_id?: string | null;
   tax_type?: "inclusive" | "exclusive";
   multiplier?: number;
@@ -29,6 +43,7 @@ function buildReceipt(
     id?: string;
     occurred_at?: string;
     amount?: number;
+    payee_name?: string;
     refund?: boolean;
     details?: DetailInput[];
   } = {}
@@ -37,12 +52,15 @@ function buildReceipt(
     id: overrides.id ?? "receipt-1",
     occurred_at: overrides.occurred_at ?? new Date(2026, 8, 10, 12, 0).toISOString(),
     amount: overrides.amount ?? 1000,
+    payee_name: overrides.payee_name ?? "スーパー",
     payer_user_id: USER_A,
     transaction_types: { name: overrides.refund ? "返金" : "支出" },
     receipt_details: (overrides.details ?? [{ price: 1000 }]).map((d) => ({
       price: d.price,
       tax_type: d.tax_type ?? "inclusive",
       category_id: d.category_id ?? FOOD,
+      breakdown_id: d.breakdown_id ?? null,
+      counterpart_id: d.counterpart_id ?? PAIR,
       owner_user_id: d.owner_user_id === undefined ? null : d.owner_user_id,
       consumption_taxes: d.multiplier ? { multiplier: d.multiplier } : null,
     })),
@@ -73,23 +91,15 @@ function fakeSupabase(pages: unknown[][]) {
       return Promise.resolve({ data, error: null });
     },
   };
-  const categoriesChain = {
-    select: () => categoriesChain,
-    order: () =>
-      Promise.resolve({
-        data: [
-          { id: FOOD, name: "食費" },
-          { id: DAILY, name: "日用品" },
-        ],
-        error: null,
-      }),
-  };
   const client = {
-    from: (table: string) => (table === "receipts" ? receiptsChain : categoriesChain),
+    from: () => receiptsChain,
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { client: client as any, calls };
 }
+
+// 内訳なし・相手「ふたり」・支払い先「スーパー」の行（buildReceiptの既定値）
+const base = { breakdownId: null, counterpartId: PAIR, payeeName: "スーパー" };
 
 describe("buildAnalyticsRows", () => {
   it("U-63: 明細合計と支払額が違う場合、精算と同じく支払額を明細の比率で按分する", () => {
@@ -104,8 +114,8 @@ describe("buildAnalyticsRows", () => {
     ]);
     expect(rows).toEqual(
       expect.arrayContaining([
-        { month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: 750 },
-        { month: "2026-09", categoryId: DAILY, ownerUserId: USER_B, amount: 750 },
+        { ...base, month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: 750 },
+        { ...base, month: "2026-09", categoryId: DAILY, ownerUserId: USER_B, amount: 750 },
       ])
     );
   });
@@ -124,12 +134,28 @@ describe("buildAnalyticsRows", () => {
     expect(rows.find((r) => r.categoryId === DAILY)?.amount).toBe(1000);
   });
 
+  it("U-124: 税別の明細を税込に直した合計と支払額が違うときも、按分した金額をカテゴリごとに合計する", () => {
+    // docs/分析拡充/テストデータ.md の No.13（明細ごとの合計 1,520、支払額 1,521）
+    const rows = buildAnalyticsRows([
+      buildReceipt({
+        amount: 1521,
+        details: [
+          { price: 145, tax_type: "exclusive", multiplier: 1.08, category_id: FOOD },
+          { price: 245, tax_type: "exclusive", multiplier: 1.08, category_id: FOOD },
+          { price: 1000, tax_type: "exclusive", multiplier: 1.1, category_id: DAILY },
+        ],
+      }),
+    ]);
+    expect(rows.find((r) => r.categoryId === FOOD)?.amount).toBe(156 + 264);
+    expect(rows.find((r) => r.categoryId === DAILY)?.amount).toBe(1101);
+  });
+
   it("U-64: 返金レシートは按分結果がマイナスになる", () => {
     const rows = buildAnalyticsRows([
       buildReceipt({ amount: 8000, refund: true, details: [{ price: 8000 }] }),
     ]);
     expect(rows).toEqual([
-      { month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: -8000 },
+      { ...base, month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: -8000 },
     ]);
   });
 
@@ -148,9 +174,33 @@ describe("buildAnalyticsRows", () => {
     expect(rows).toHaveLength(3);
     expect(rows).toEqual(
       expect.arrayContaining([
-        { month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: 2000 },
-        { month: "2026-09", categoryId: FOOD, ownerUserId: USER_A, amount: 500 },
-        { month: "2026-10", categoryId: FOOD, ownerUserId: null, amount: 300 },
+        { ...base, month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: 2000 },
+        { ...base, month: "2026-09", categoryId: FOOD, ownerUserId: USER_A, amount: 500 },
+        { ...base, month: "2026-10", categoryId: FOOD, ownerUserId: null, amount: 300 },
+      ])
+    );
+  });
+
+  it("U-116: 内訳・相手・支払い先が違う明細は別の行になり、同じものは1行に合計される", () => {
+    const rows = buildAnalyticsRows([
+      buildReceipt({
+        id: "r1",
+        amount: 3000,
+        payee_name: "居酒屋",
+        details: [
+          { price: 1000, breakdown_id: 11, counterpart_id: 22 },
+          { price: 2000, breakdown_id: 11, counterpart_id: 22 },
+        ],
+      }),
+      buildReceipt({ id: "r2", amount: 500, payee_name: "居酒屋", details: [{ price: 500 }] }),
+      buildReceipt({ id: "r3", amount: 700, payee_name: "スーパー", details: [{ price: 700 }] }),
+    ]);
+    expect(rows).toHaveLength(3);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { ...base, breakdownId: 11, counterpartId: 22, payeeName: "居酒屋", month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: 3000 },
+        { ...base, payeeName: "居酒屋", month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: 500 },
+        { ...base, month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: 700 },
       ])
     );
   });
@@ -167,6 +217,14 @@ describe("getAnalyticsData", () => {
       { userId: USER_A, role: "admin", displayName: "あきら", color: "blue" },
       { userId: USER_B, role: "member", displayName: "みき", color: "red" },
     ]);
+    vi.mocked(getCategoriesWithCostType).mockResolvedValue([
+      { id: FOOD, name: "食費", costType: "variable" },
+      { id: DAILY, name: "日用品", costType: "fixed" },
+    ]);
+    vi.mocked(getCategoryBreakdowns).mockResolvedValue([
+      { id: 11, categoryId: FOOD, name: "外食", isHidden: true },
+    ]);
+    vi.mocked(getCounterpartNames).mockResolvedValue([{ id: PAIR, name: "ふたり" }]);
   });
 
   it("U-66: 1ページ目が上限件数なら次のページを取得し、上限未満のページで止める", async () => {
@@ -183,7 +241,7 @@ describe("getAnalyticsData", () => {
       [ANALYTICS_PAGE_SIZE, ANALYTICS_PAGE_SIZE * 2 - 1],
     ]);
     expect(data.rows).toEqual([
-      { month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: ANALYTICS_PAGE_SIZE + 1 },
+      { ...base, month: "2026-09", categoryId: FOOD, ownerUserId: null, amount: ANALYTICS_PAGE_SIZE + 1 },
     ]);
   });
 
@@ -197,10 +255,35 @@ describe("getAnalyticsData", () => {
     expect(data.today).toBe("2026-10-03");
     expect(data.months[0]).toBe("2025-11");
     expect(data.months[11]).toBe("2026-10");
-    expect(data.categories.map((c) => c.name)).toEqual(["食費", "日用品"]);
+    expect(data.categories).toEqual([
+      { id: FOOD, name: "食費", costType: "variable" },
+      { id: DAILY, name: "日用品", costType: "fixed" },
+    ]);
     expect(data.members).toEqual([
       { userId: USER_A, displayName: "あきら", color: "blue" },
       { userId: USER_B, displayName: "みき", color: "red" },
     ]);
+  });
+
+  it("U-117: 内訳（非表示も含む）・相手・集計に出てくる支払い先名（重複なし・名前順）を返す", async () => {
+    const { client } = fakeSupabase([
+      [
+        buildReceipt({ id: "r1", payee_name: "B薬局" }),
+        buildReceipt({ id: "r2", payee_name: "A病院" }),
+        buildReceipt({ id: "r3", payee_name: "B薬局" }),
+      ],
+    ]);
+
+    const data = await getAnalyticsData(client, "group-1", new Date(2026, 9, 3));
+
+    expect(data.breakdowns).toEqual([{ id: 11, categoryId: FOOD, name: "外食" }]);
+    expect(data.counterparts).toEqual([{ id: PAIR, name: "ふたり" }]);
+    expect(data.payeeNames).toEqual(["A病院", "B薬局"]);
+    // 相手の名前は、取得したメンバーの表示名を使って求める
+    expect(vi.mocked(getCounterpartNames)).toHaveBeenCalledWith(
+      client,
+      "group-1",
+      expect.arrayContaining([expect.objectContaining({ userId: USER_A, displayName: "あきら" })])
+    );
   });
 });

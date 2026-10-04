@@ -90,6 +90,7 @@ type RawReceiptDetail = {
   owner_user_id: string | null;
   category_id: number;
   breakdown_id: number | null;
+  counterpart_id: number;
   category_breakdowns: { name: string } | { name: string }[] | null;
   consumption_taxes:
     | { name: string; multiplier: number }
@@ -120,7 +121,7 @@ const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_name, amount, payer_
    is_duplicated, created_by,
    transaction_types(name),
    receipt_details(
-     id, item_name, price, tax_type, owner_user_id, category_id, breakdown_id,
+     id, item_name, price, tax_type, owner_user_id, category_id, breakdown_id, counterpart_id,
      consumption_taxes(name, multiplier), categories(name), category_breakdowns(name),
      counterparts(kind, user_id, name),
      receipt_detail_tags(tags(name, sort_order))
@@ -141,6 +142,7 @@ function mapReceiptDetailItems(
     breakdownId: detail.breakdown_id,
     breakdownName: unwrapToOne(detail.category_breakdowns)?.name ?? null,
     categoryName: unwrapToOne(detail.categories)?.name ?? "",
+    counterpartId: detail.counterpart_id,
     counterpartName: counterpartDisplayName(unwrapToOne(detail.counterparts), memberInfo),
     ownerUserId: detail.owner_user_id,
     ownerDisplayName:
