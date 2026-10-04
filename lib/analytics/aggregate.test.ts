@@ -26,7 +26,7 @@ const row = (
   categoryId,
   breakdownId: null,
   counterpartId: 1,
-  payeeName: "スーパー",
+  payeeId: 1,
   ownerUserId,
   amount,
 });
@@ -218,12 +218,18 @@ describe("sumByDimension（分ける・絞り込み）", () => {
   const COOKING = 12; // 食費 ＞ 自炊
   const PAIR = 21; // ふたり
   const FRIEND = 22; // 友人
+  // 支払い先（登録済みのID）。B薬局は手入力（登録外）
+  const IZAKAYA = 31;
+  const SUPER = 32;
+  const CONVENIENCE = 33;
+  const TOKYOGAS = 34;
+  const HOSPITAL_A = 35;
 
   const f4Row = (
     categoryId: number,
     breakdownId: number | null,
     counterpartId: number,
-    payeeName: string,
+    payeeId: number | null,
     ownerUserId: string | null,
     amount: number
   ): AnalyticsRow => ({
@@ -231,18 +237,18 @@ describe("sumByDimension（分ける・絞り込み）", () => {
     categoryId,
     breakdownId,
     counterpartId,
-    payeeName,
+    payeeId,
     ownerUserId,
     amount,
   });
 
   const f4Rows: AnalyticsRow[] = [
-    f4Row(FOOD, EATING_OUT, FRIEND, "居酒屋", null, 3000),
-    f4Row(FOOD, COOKING, PAIR, "スーパー", null, 5000),
-    f4Row(FOOD, null, PAIR, "コンビニ", USER_A, 1000), // 内訳なし（F1 より前のレシート）
-    f4Row(UTILITY, null, PAIR, "myTOKYOGAS", null, 8000),
-    f4Row(MEDICAL, null, PAIR, "A病院", USER_A, 2000),
-    f4Row(MEDICAL, null, PAIR, "B薬局", USER_B, 500),
+    f4Row(FOOD, EATING_OUT, FRIEND, IZAKAYA, null, 3000),
+    f4Row(FOOD, COOKING, PAIR, SUPER, null, 5000),
+    f4Row(FOOD, null, PAIR, CONVENIENCE, USER_A, 1000), // 内訳なし（F1 より前のレシート）
+    f4Row(UTILITY, null, PAIR, TOKYOGAS, null, 8000),
+    f4Row(MEDICAL, null, PAIR, HOSPITAL_A, USER_A, 2000),
+    f4Row(MEDICAL, null, PAIR, null, USER_B, 500), // B薬局（手入力）
   ];
   const f4CostTypes = costTypeMap([
     { id: FOOD, costType: "variable" },
@@ -269,10 +275,10 @@ describe("sumByDimension（分ける・絞り込み）", () => {
     expect(pie.slices.map((s) => s.percent)).toEqual([55.6, 33.3, 11.1]);
   });
 
-  it("U-112: 医療費のうち支払い先ごと", () => {
+  it("U-112: 医療費のうち支払い先ごと（手入力の支払い先は登録外にまとめる）", () => {
     expect(sum("payee", { category: key(MEDICAL) })).toEqual([
-      { key: "A病院", amount: 2000 },
-      { key: "B薬局", amount: 500 },
+      { key: key(HOSPITAL_A), amount: 2000 },
+      { key: "unregistered", amount: 500 },
     ]);
   });
 
@@ -323,7 +329,7 @@ describe("sumByDimension（分ける・絞り込み）", () => {
       { month: "2026-09", amount: 8000 },
     ]);
     expect(
-      sumByMonth(f4Rows, ALL, ["2026-09"], { payee: "A病院" }, f4CostTypes)
+      sumByMonth(f4Rows, ALL, ["2026-09"], { payee: key(HOSPITAL_A) }, f4CostTypes)
     ).toEqual([{ month: "2026-09", amount: 2000 }]);
   });
 });

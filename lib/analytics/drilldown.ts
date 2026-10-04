@@ -21,7 +21,7 @@ export type ReceiptMatch = {
 
 type MatchableReceipt = Pick<
   ReceiptListItem,
-  "amount" | "transactionTypeName" | "payerUserId" | "payeeName" | "items"
+  "amount" | "transactionTypeName" | "payerUserId" | "payeeId" | "items"
 >;
 
 // レシート1枚について、条件に当てはまる明細と「うち」の金額を返す。
@@ -57,7 +57,7 @@ export function matchReceipt(
       categoryId: item.categoryId,
       breakdownId: item.breakdownId,
       counterpartId: item.counterpartId,
-      payeeName: receipt.payeeName,
+      payeeId: receipt.payeeId,
     };
     if (!matchesConditions(values, filter.conditions, costTypes)) return;
     const weight = ownerWeight(item.ownerUserId, filter.scope);

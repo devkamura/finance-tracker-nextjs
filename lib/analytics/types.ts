@@ -3,6 +3,7 @@
 // （集計結果は同じで、データ量を抑えるため。docs/分析拡充/詳細設計書.md F4 2章）。
 // 費用区分はカテゴリから求めるため行には持たない（基本設計書 3.2節）。
 
+import type { AnalyticsPayee } from "@/lib/analytics/payees";
 import type { CostType } from "@/lib/receipts/breakdowns";
 
 export type AnalyticsRow = {
@@ -10,7 +11,7 @@ export type AnalyticsRow = {
   categoryId: number;
   breakdownId: number | null; // null＝内訳なし
   counterpartId: number;
-  payeeName: string; // レシートに保存された支払い先名（相方用・手入力も名前で集計する）
+  payeeId: number | null; // 登録済みの支払い先のID。null＝登録外（手入力。要件定義書 4.7節）
   ownerUserId: string | null; // null＝共同
   amount: number; // 按分・返金の符号反転済みの合計（円、整数）
 };
@@ -48,7 +49,7 @@ export type AnalyticsData = {
   categories: AnalyticsCategory[];
   breakdowns: AnalyticsBreakdown[];
   counterparts: AnalyticsCounterpart[];
-  payeeNames: string[]; // 12ヶ月の行に出てくる支払い先名（名前順）
+  payees: AnalyticsPayee[]; // 支払い先の選択肢（見出しの順。lib/analytics/payees.ts）
   members: AnalyticsMember[];
   rows: AnalyticsRow[];
 };

@@ -7,6 +7,12 @@ import {
   NO_VALUE_COLOR,
   paletteColor,
 } from "@/lib/analytics/category-colors";
+import {
+  payeeKeyOf,
+  UNREGISTERED_PAYEE_KEY,
+  UNREGISTERED_PAYEE_LABEL,
+  type AnalyticsPayee,
+} from "@/lib/analytics/payees";
 import type {
   AnalyticsBreakdown,
   AnalyticsCategory,
@@ -36,7 +42,8 @@ export function isDimension(value: unknown): value is Dimension {
 }
 
 // 項目ごとの値の条件。値はすべて文字列で持つ（URLにそのまま載せるため）。
-// カテゴリ・内訳・相手はID、費用区分は fixed／variable、支払い先は支払い先名。
+// カテゴリ・内訳・相手はID、費用区分は fixed／variable、
+// 支払い先は登録済みの支払い先のID（紐づいていないレシートは UNREGISTERED_PAYEE_KEY）。
 export type Conditions = Partial<Record<Dimension, string>>;
 
 // 明細1件（分析の集約行・一覧の明細）の、項目の値
@@ -44,7 +51,7 @@ export type DimensionValues = {
   categoryId: number;
   breakdownId: number | null;
   counterpartId: number;
-  payeeName: string;
+  payeeId: number | null; // null＝登録外（手入力）
 };
 
 // 名前・色を決めるためのマスタ
@@ -52,6 +59,7 @@ export type DimensionMaster = {
   categories: AnalyticsCategory[];
   breakdowns: AnalyticsBreakdown[];
   counterparts: AnalyticsCounterpart[];
+  payees: AnalyticsPayee[]; // 見出しの順（グループ全体 → 自分用 → 相方の自分用）
 };
 
 export type CostTypeMap = Map<number, CostType>;
@@ -76,7 +84,7 @@ export function dimensionKey(
       // 設定の取得漏れなどで費用区分が分からないカテゴリは、カテゴリの初期値の多い変動費として扱う
       return costTypes.get(values.categoryId) ?? "variable";
     case "payee":
-      return values.payeeName;
+      return payeeKeyOf(values.payeeId);
     case "counterpart":
       return String(values.counterpartId);
   }
@@ -98,9 +106,10 @@ function categoryName(categoryId: number, master: DimensionMaster): string {
   return master.categories.find((c) => c.id === categoryId)?.name ?? "不明";
 }
 
-// 支払い先名の表示。手入力で空のまま保存されたレシートは「支払い先なし」とする。
-function payeeLabel(name: string): string {
-  return name === "" ? "支払い先なし" : name;
+// 支払い先の表示名。紐づいていないレシートは「登録外（手入力）」にまとめる。
+function payeeLabel(key: string, master: DimensionMaster): string {
+  if (key === UNREGISTERED_PAYEE_KEY) return UNREGISTERED_PAYEE_LABEL;
+  return master.payees.find((p) => String(p.id) === key)?.name ?? "不明";
 }
 
 // 値の表示名。内訳は、カテゴリで絞り込んでいないとどのカテゴリの内訳か分からないため、
@@ -125,7 +134,7 @@ export function keyLabel(
     case "costType":
       return COST_TYPE_LABELS[key as CostType] ?? "不明";
     case "payee":
-      return payeeLabel(key);
+      return payeeLabel(key, master);
     case "counterpart":
       return master.counterparts.find((c) => String(c.id) === key)?.name ?? "不明";
   }
@@ -137,7 +146,7 @@ export function keyLabel(
 export function keyColor(
   dimension: Dimension,
   key: string,
-  master: DimensionMaster & { payeeNames: string[] }
+  master: DimensionMaster
 ): string {
   switch (dimension) {
     case "category":
@@ -151,19 +160,23 @@ export function keyColor(
     case "costType":
       return paletteColor(COST_TYPES.indexOf(key as CostType));
     case "payee":
-      return paletteColor(master.payeeNames.indexOf(key));
+      // 登録外は内訳なしと同じグレー。登録済みは選択肢の並び順で決める
+      return key === UNREGISTERED_PAYEE_KEY
+        ? NO_VALUE_COLOR
+        : paletteColor(master.payees.findIndex((p) => String(p.id) === key));
     case "counterpart":
       return paletteColor(master.counterparts.findIndex((c) => String(c.id) === key));
   }
 }
 
-export type DimensionOption = { key: string; label: string };
+// group は選択肢の見出し（支払い先の「グループ全体」「自分用」など）。見出しのない選択肢は undefined。
+export type DimensionOption = { key: string; label: string; group?: string };
 
 // 絞り込みの値の選択肢。内訳はカテゴリの順（カテゴリID順 → 内訳の並び順）で、最後に「内訳なし」。
-// 支払い先は、12ヶ月の集計に出てくる支払い先名（相方用・手入力を含む）。
+// 支払い先は、見出し（グループ全体 → 自分用 → 相方の自分用）ごとの登録済みの支払い先と、最後に「登録外（手入力）」。
 export function dimensionOptions(
   dimension: Dimension,
-  master: DimensionMaster & { payeeNames: string[] }
+  master: DimensionMaster
 ): DimensionOption[] {
   switch (dimension) {
     case "category":
@@ -180,7 +193,10 @@ export function dimensionOptions(
     case "costType":
       return COST_TYPES.map((t) => ({ key: t, label: COST_TYPE_LABELS[t] }));
     case "payee":
-      return master.payeeNames.map((name) => ({ key: name, label: payeeLabel(name) }));
+      return [
+        ...master.payees.map((p) => ({ key: String(p.id), label: p.name, group: p.sectionLabel })),
+        { key: UNREGISTERED_PAYEE_KEY, label: UNREGISTERED_PAYEE_LABEL },
+      ];
     case "counterpart":
       return master.counterparts.map((c) => ({ key: String(c.id), label: c.name }));
   }

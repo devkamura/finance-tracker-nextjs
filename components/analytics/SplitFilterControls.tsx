@@ -1,5 +1,7 @@
 "use client";
 
+import { Fragment } from "react";
+
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   DIMENSION_LABELS,
@@ -8,11 +10,12 @@ import {
   isDimension,
   type Dimension,
   type DimensionMaster,
+  type DimensionOption,
 } from "@/lib/analytics/dimensions";
 import type { AnalyticsFilter } from "@/lib/analytics/url-state";
 
 type SplitFilterControlsProps = {
-  master: DimensionMaster & { payeeNames: string[] };
+  master: DimensionMaster;
   // 円グラフの「分ける」。推移グラフでは使わないため null（欄を出さない）
   split: Dimension | null;
   onChangeSplit: (split: Dimension) => void;
@@ -21,6 +24,22 @@ type SplitFilterControlsProps = {
 };
 
 const NONE_VALUE = "none";
+
+// 選択肢を、続けて並ぶ同じ見出しごとにまとめる（見出しのない選択肢はそのまま並べる）
+function groupOptions(
+  options: DimensionOption[]
+): { group: string | undefined; options: DimensionOption[] }[] {
+  const blocks: { group: string | undefined; options: DimensionOption[] }[] = [];
+  for (const option of options) {
+    const last = blocks[blocks.length - 1];
+    if (last && last.group === option.group) {
+      last.options.push(option);
+    } else {
+      blocks.push({ group: option.group, options: [option] });
+    }
+  }
+  return blocks;
+}
 
 // 項目名の横の「i」で開く説明。どの支出を対象にするか（絞り込み）→ それを何ごとに区切るか（分ける）の
 // 順に読めるよう、画面でも絞り込みを上に置く。
@@ -34,8 +53,8 @@ const selectClass =
 
 // 分析画面の「絞り込み」「分ける」（docs/分析拡充/基本設計書.md 2.9節、詳細設計書 F4 5章）。
 // 絞り込みは項目（カテゴリ・内訳など）を選んでから、その値（食費など）を選ぶ。
-// 項目を選んだときは、選択肢の先頭の値で絞り込む。選択肢のない項目（12ヶ月に支払い先が
-// 1件もないときの支払い先など）は選べないようにする。
+// 項目を選んだときは、選択肢の先頭の値で絞り込む。選択肢のない項目は選べないようにする。
+// 支払い先の値は、見出し（グループ全体・自分用・相方の自分用）ごとにまとめて出す。
 export function SplitFilterControls({
   master,
   split,
@@ -82,11 +101,25 @@ export function SplitFilterControls({
             aria-label={`絞り込む${DIMENSION_LABELS[filter.dimension]}`}
             className={`min-w-0 flex-1 ${selectClass}`}
           >
-            {filterOptions.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
+            {groupOptions(filterOptions).map((block, index) =>
+              block.group === undefined ? (
+                <Fragment key={`plain-${index}`}>
+                  {block.options.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Fragment>
+              ) : (
+                <optgroup key={block.group} label={block.group}>
+                  {block.options.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </optgroup>
+              )
+            )}
           </select>
         )}
       </div>

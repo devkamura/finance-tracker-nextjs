@@ -36,6 +36,7 @@ function receipt(id: string, occurredAt: string, items: ReceiptDetailItemView[])
   return {
     id,
     occurredAt,
+    payeeId: null,
     payeeName: id,
     amount: items.reduce((sum, i) => sum + i.price, 0),
     transactionTypeName: "支出",

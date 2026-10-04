@@ -117,7 +117,7 @@ function counterpartDisplayName(
   return counterpart.name ?? "";
 }
 
-const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_name, amount, payer_user_id, receipt_image_path,
+const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_id, payee_name, amount, payer_user_id, receipt_image_path,
    is_duplicated, created_by,
    transaction_types(name),
    receipt_details(
@@ -192,6 +192,7 @@ export async function listReceipts(
     data.map(async (row) => ({
       id: row.id,
       occurredAt: row.occurred_at,
+      payeeId: row.payee_id,
       payeeName: row.payee_name,
       amount: row.amount,
       transactionTypeName: unwrapToOne(row.transaction_types)?.name ?? "",

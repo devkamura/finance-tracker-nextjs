@@ -107,7 +107,7 @@ describe("settings/queries", () => {
     ]);
   });
 
-  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値・既定値のタグ）に変換する", async () => {
+  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値・既定値のタグ・別名）に変換する", async () => {
     const supabase = fakeSupabase({
       payees: [
         {
@@ -121,6 +121,10 @@ describe("settings/queries", () => {
           default_owner_joint: true,
           default_owner_user_id: null,
           payee_default_tags: [{ tag_id: 7 }],
+          payee_aliases: [
+            { id: 12, name: "東京ガス" },
+            { id: 11, name: "TOKYO GAS" },
+          ],
         },
         {
           id: 2,
@@ -133,6 +137,7 @@ describe("settings/queries", () => {
           default_owner_joint: false,
           default_owner_user_id: "user-b",
           payee_default_tags: [],
+          payee_aliases: [],
         },
       ],
     });
@@ -150,6 +155,11 @@ describe("settings/queries", () => {
           ownerUserId: "joint",
           tagIds: ["7"],
         },
+        // 別名は名前順
+        aliases: [
+          { id: 11, name: "TOKYO GAS" },
+          { id: 12, name: "東京ガス" },
+        ],
       },
       {
         id: 2,
@@ -163,6 +173,7 @@ describe("settings/queries", () => {
           ownerUserId: "user-b",
           tagIds: [],
         },
+        aliases: [],
       },
     ]);
   });

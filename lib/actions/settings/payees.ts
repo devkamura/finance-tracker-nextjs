@@ -15,6 +15,7 @@ import {
   toPayeeDefaultColumns,
   validatePayeeDefaults,
   type Payee,
+  type PayeeAlias,
   type PayeeDefaults,
   type PayeeRow,
 } from "@/lib/receipts/payees";
@@ -41,6 +42,9 @@ function duplicateNameError(error: { message?: string }): string {
   }
   if (error.message?.includes("conflicts with an own payee")) {
     return "メンバーの自分用に同じ名前の支払い先があります。";
+  }
+  if (error.message?.includes("payee name conflicts with an alias")) {
+    return "同じ名前の別名が登録されています。";
   }
   return DUPLICATE_NAME;
 }
@@ -285,6 +289,105 @@ export async function deletePayee(id: number): Promise<DeletePayeeResult> {
   }
   if (!data) {
     return { success: false, error: "権限がありません。" };
+  }
+  return { success: true };
+}
+
+export type AddPayeeAliasResult =
+  | { success: true; alias: PayeeAlias; converted: number }
+  | { success: false; error: string };
+
+// 対象の支払い先がグループにあり、編集できるか（グループ全体は管理者、自分用は本人）確かめる。
+async function editablePayee(
+  context: MembershipContext,
+  payeeId: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: existing } = await context.supabase
+    .from("payees")
+    .select("id, owner_user_id")
+    .eq("id", payeeId)
+    .eq("group_id", context.groupId)
+    .maybeSingle();
+  if (!existing) {
+    return { ok: false, error: "支払い先が見つかりません。" };
+  }
+  const permissionError = editPermissionError(context, existing.owner_user_id);
+  return permissionError ? { ok: false, error: permissionError } : { ok: true };
+}
+
+// 別名を追加する（docs/分析拡充/要件定義書.md 4.7節）。追加と同時に、店名が別名と一致する過去のレシートを
+// この支払い先に切り替える（DBの add_payee_alias。切り替えた件数を返す）。
+export async function addPayeeAlias(
+  payeeId: number,
+  name: string
+): Promise<AddPayeeAliasResult> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { success: false, error: "別名を入力してください。" };
+  }
+
+  const auth = await requireGroupMembership();
+  if (!auth.ok) {
+    return { success: false, error: auth.error };
+  }
+  const context = auth.context;
+  const editable = await editablePayee(context, payeeId);
+  if (!editable.ok) {
+    return { success: false, error: editable.error };
+  }
+
+  const { data, error } = await context.supabase.rpc("add_payee_alias", {
+    p_payee_id: payeeId,
+    p_name: trimmed,
+  });
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        success: false,
+        error: error.message?.includes("conflicts with a payee name")
+          ? "同じ名前の支払い先があるため、別名にできません。"
+          : "この別名は既に登録されています。",
+      };
+    }
+    console.error("Failed to add payee alias", error);
+    return { success: false, error: "別名の登録に失敗しました。" };
+  }
+  const result = data as { id: number; name: string; converted: number };
+  return {
+    success: true,
+    alias: { id: result.id, name: result.name },
+    converted: result.converted,
+  };
+}
+
+// 別名を削除する。切り替え済みのレシートは元に戻さない。
+export async function deletePayeeAlias(
+  payeeId: number,
+  aliasId: number
+): Promise<DeletePayeeResult> {
+  const auth = await requireGroupMembership();
+  if (!auth.ok) {
+    return { success: false, error: auth.error };
+  }
+  const context = auth.context;
+  const editable = await editablePayee(context, payeeId);
+  if (!editable.ok) {
+    return { success: false, error: editable.error };
+  }
+
+  const { data, error } = await context.supabase
+    .from("payee_aliases")
+    .delete()
+    .eq("id", aliasId)
+    .eq("payee_id", payeeId)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("Failed to delete payee alias", error);
+    return { success: false, error: "別名の削除に失敗しました。" };
+  }
+  if (!data) {
+    return { success: false, error: "別名が見つかりません。" };
   }
   return { success: true };
 }

@@ -8,7 +8,10 @@ const data = {
   categories: [{ id: 1, name: "食費", costType: "variable" as const }],
   breakdowns: [{ id: 11, categoryId: 1, name: "外食" }],
   counterparts: [{ id: 21, name: "ふたり" }],
-  payeeNames: ["A病院", "スーパー"],
+  payees: [
+    { id: 41, name: "A病院", section: "shared" as const, sectionLabel: "グループ全体" },
+    { id: 42, name: "スーパー", section: "own" as const, sectionLabel: "自分用" },
+  ],
 };
 
 const fromQuery = (query: string) => {
@@ -52,21 +55,27 @@ describe("url-state", () => {
     ).toEqual(initial);
   });
 
-  it("U-118: 絞り込みの値は選択肢にあるものだけを読む（内訳なし・支払い先名・費用区分）", () => {
+  it("U-118: 絞り込みの値は選択肢にあるものだけを読む（内訳なし・支払い先・登録外・費用区分）", () => {
     expect(fromQuery("filter=breakdown&filterValue=none").filter).toEqual({
       dimension: "breakdown",
       key: "none",
     });
-    expect(fromQuery("filter=payee&filterValue=A%E7%97%85%E9%99%A2").filter).toEqual({
+    expect(fromQuery("filter=payee&filterValue=41").filter).toEqual({
       dimension: "payee",
-      key: "A病院",
+      key: "41",
+    });
+    expect(fromQuery("filter=payee&filterValue=unregistered").filter).toEqual({
+      dimension: "payee",
+      key: "unregistered",
     });
     expect(fromQuery("filter=costType&filterValue=fixed").filter).toEqual({
       dimension: "costType",
       key: "fixed",
     });
     // 存在しない値・値なし・「なし」は絞り込みなし
-    expect(fromQuery("filter=payee&filterValue=知らない店").filter).toBeNull();
+    expect(fromQuery("filter=payee&filterValue=999").filter).toBeNull();
+    // F5 より前の URL（支払い先名）は、選択肢にないため絞り込みなし
+    expect(fromQuery("filter=payee&filterValue=A%E7%97%85%E9%99%A2").filter).toBeNull();
     expect(fromQuery("filter=counterpart").filter).toBeNull();
     expect(fromQuery("filter=none&filterValue=1").filter).toBeNull();
     // 絞り込みなしで書き出すと filter=none になる

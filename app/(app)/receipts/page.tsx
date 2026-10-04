@@ -16,10 +16,12 @@ import {
   retentionMonthRange,
   toMonthParam,
 } from "@/lib/receipts/queries";
+import { buildAnalyticsPayees } from "@/lib/analytics/payees";
 import {
   getCategoriesWithCostType,
   getCategoryBreakdowns,
   getCounterpartNames,
+  getPayees,
 } from "@/lib/settings/queries";
 import { isMonthConfirmed } from "@/lib/settlement/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
@@ -49,7 +51,8 @@ export default async function ReceiptsPage({
   const period = monthPeriod(targetDate);
   const groupId = membership!.groupId;
   const membersPromise = getGroupMembers(supabase, groupId);
-  const [receipts, confirmed, members, categories, breakdowns, counterparts] = await Promise.all([
+  const [receipts, confirmed, members, categories, breakdowns, counterparts, payees] =
+    await Promise.all([
     listReceipts(supabase, groupId, period),
     isMonthConfirmed(supabase, groupId, targetDate),
     membersPromise,
@@ -57,6 +60,7 @@ export default async function ReceiptsPage({
     getCategoriesWithCostType(supabase, groupId),
     getCategoryBreakdowns(supabase, groupId),
     membersPromise.then((m) => getCounterpartNames(supabase, groupId, m)),
+    getPayees(supabase, groupId),
   ]);
   const { min, max } = retentionMonthRange();
 
@@ -87,6 +91,8 @@ export default async function ReceiptsPage({
           categories,
           breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
           counterparts,
+          // 支払い先の条件は、分析画面から渡される値（相方の自分用・非表示を含む）をすべて受け付ける
+          payees: buildAnalyticsPayees(payees, user!.id, members, () => true),
         }}
         members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
         month={month}

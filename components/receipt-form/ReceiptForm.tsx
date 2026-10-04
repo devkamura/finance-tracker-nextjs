@@ -20,7 +20,7 @@ import { findPartner } from "@/lib/receipts/duplicate";
 import {
   applyPayeeDefaults,
   EMPTY_PAYEE_DEFAULTS,
-  isSelectablePayee,
+  findPayeeByName,
 } from "@/lib/receipts/payees";
 import {
   validateReceiptForm,
@@ -103,11 +103,11 @@ export function buildOcrItem(
 }
 
 // OCR読み取り結果を既存フォームの状態にマッピングする。
-// カテゴリー・相手・帰属先はマスタ選択式でOCRからは判定できないため既定値のままとし、
-// 支払い先名はプルダウンに出す支払い先（グループ全体・自分用）と名称が一致すれば
+// 支払い先名はプルダウンに出す支払い先（グループ全体・自分用）の名前か別名と一致すれば
 // プルダウン選択、一致しなければ手入力欄に反映する。
-// OCRで支払い先が入った場合の既定値の自動入力は対象外（要件定義書 4.3節）。
-function buildOcrPatch(
+// 支払い先を選んだときの既定値（カテゴリ・内訳・相手・帰属先・タグ）は、呼び出し側
+// （handleOcrExtracted）で明細に入れる（docs/分析拡充/要件定義書.md 4.7節）。
+export function buildOcrPatch(
   result: OcrReceiptResult,
   payees: MasterData["payees"],
   consumptionTaxes: MasterData["consumptionTaxes"],
@@ -122,9 +122,7 @@ function buildOcrPatch(
     patch.amount = String(result.totalPrice);
   }
   if (result.payeeName) {
-    const matched = payees.find(
-      (payee) => payee.name === result.payeeName && isSelectablePayee(payee, currentUserId)
-    );
+    const matched = findPayeeByName(payees, result.payeeName, currentUserId);
     if (matched) {
       patch.payeeSelect = String(matched.id);
       patch.payeeInputText = "";
@@ -140,6 +138,22 @@ function buildOcrPatch(
   }
 
   return patch;
+}
+
+// OCRの読み取り結果をフォームの状態に反映する。登録済みの支払い先が選ばれたら、プルダウンで選んだときと
+// 同じく既定値ですべての明細を上書きする（読み取った明細があればその明細に、なければ入力中の明細に入れる。
+// 要件定義書 4.7節）。手入力欄に入った場合（一致する支払い先なし）は既定値を入れない。
+export function applyOcrPatch(
+  prev: ReceiptFormState,
+  patch: Partial<ReceiptFormState>,
+  withPayeeDefaults: (item: ReceiptItem, payeeSelect: string) => ReceiptItem
+): ReceiptFormState {
+  const next = { ...prev, ...patch };
+  const payeeSelect = patch.payeeSelect;
+  if (payeeSelect && payeeSelect !== SELECT_NONE_VALUE) {
+    next.items = next.items.map((item) => withPayeeDefaults(item, payeeSelect));
+  }
+  return next;
 }
 
 function createInitialState(defaultTransactionTypeId: string): ReceiptFormState {
@@ -304,14 +318,13 @@ export function ReceiptForm({
   };
 
   const handleOcrExtracted = (result: OcrReceiptResult) => {
-    // OCRの結果は既定値を入れずにそのまま反映する（updateStateを通さない）
     const patch = buildOcrPatch(
       result,
       masterData.payees,
       masterData.consumptionTaxes,
       currentUserId
     );
-    setState((prev) => ({ ...prev, ...patch }));
+    setState((prev) => applyOcrPatch(prev, patch, withPayeeDefaults));
     setToast({
       type: "success",
       message: "レシートを読み取りました。内容を確認してください。",

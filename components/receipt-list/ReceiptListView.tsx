@@ -21,7 +21,6 @@ import {
 } from "@/lib/analytics/dimensions";
 import { replaceUrlKeepingAppState } from "@/lib/navigation/history-state";
 import {
-  keepsEmptyValue,
   parseDrilldownSource,
   parseListFilter,
   withQuery,
@@ -77,7 +76,7 @@ export function ReceiptListView({
     const params: FilterParams = {};
     for (const key of FILTER_PARAM_KEYS) {
       const value = searchParams.get(key);
-      if (value || (value === "" && keepsEmptyValue(key))) params[key] = value;
+      if (value) params[key] = value;
     }
     // 条件（カテゴリ〜相手）または表示対象があるときだけ絞り込み中とする
     const filtering = DIMENSIONS.some((d) => params[d] !== undefined) || params.scope;
