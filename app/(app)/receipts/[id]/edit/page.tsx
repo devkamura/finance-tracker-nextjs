@@ -1,8 +1,15 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BackLink } from "@/components/navigation/BackLink";
 import { ReceiptForm } from "@/components/receipt-form/ReceiptForm";
+import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptForEdit } from "@/lib/receipts/queries";
+import {
+  getCategoryBreakdowns,
+  getCounterparts,
+  getPayees,
+  getTags,
+} from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,14 +18,11 @@ export default async function ReceiptEditPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; sort?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const { month, sort } = await searchParams;
-  const detailParams = new URLSearchParams();
-  if (month) detailParams.set("month", month);
-  if (sort) detailParams.set("sort", sort);
-  const detailHref = `/receipts/${id}${detailParams.toString() ? `?${detailParams.toString()}` : ""}`;
+  // 一覧の月・並び順・絞り込みを詳細画面へ引き継ぐ（lib/receipts/list-params.ts）
+  const detailHref = withQuery(`/receipts/${id}`, pickListParams(await searchParams));
 
   const supabase = await createClient();
   // ログイン必須・グループ所属必須はapp/(app)/layout.tsxで既に保証されている。
@@ -27,39 +31,35 @@ export default async function ReceiptEditPage({
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
-  const [editData, members, masters] = await Promise.all([
+  const [editData, members, breakdowns, tags, payees, masters] = await Promise.all([
     getReceiptForEdit(supabase, membership!.groupId, id),
     getGroupMembers(supabase, membership!.groupId),
+    getCategoryBreakdowns(supabase, membership!.groupId),
+    getTags(supabase, membership!.groupId),
+    getPayees(supabase, membership!.groupId),
     Promise.all([
-      supabase.from("payees").select("id, name").order("id"),
       supabase.from("transaction_types").select("id, name").order("id"),
       supabase.from("consumption_taxes").select("id, name, multiplier").order("id"),
       supabase.from("categories").select("id, name").order("id"),
-      supabase.from("purposes").select("id, name").order("id"),
-      supabase.from("scenes").select("id, name").order("id"),
     ]),
   ]);
+  // メンバーの相手の名前はメンバーの表示名を使うため、メンバーの取得後に取得する
+  const counterparts = await getCounterparts(supabase, membership!.groupId, members);
 
   if (!editData) {
     notFound();
   }
 
   const [
-    { data: payees, error: payeesError },
     { data: transactionTypes, error: transactionTypesError },
     { data: consumptionTaxes, error: consumptionTaxesError },
     { data: categories, error: categoriesError },
-    { data: purposes, error: purposesError },
-    { data: scenes, error: scenesError },
   ] = masters;
 
   const error =
-    payeesError ||
     transactionTypesError ||
     consumptionTaxesError ||
-    categoriesError ||
-    purposesError ||
-    scenesError;
+    categoriesError;
   if (error) {
     throw error;
   }
@@ -67,12 +67,7 @@ export default async function ReceiptEditPage({
   if (editData.isLocked) {
     return (
       <div className="flex flex-col gap-4">
-        <Link
-          href={detailHref}
-          className="text-sm text-slate-500 hover:text-slate-700"
-        >
-          ← レシート詳細に戻る
-        </Link>
+        <BackLink href={detailHref}>← レシート詳細に戻る</BackLink>
         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
           この月の精算は確定済みのため編集できません。管理者に再オープンを依頼してください。
         </p>
@@ -82,12 +77,8 @@ export default async function ReceiptEditPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href={detailHref}
-        className="text-sm text-slate-500 hover:text-slate-700"
-      >
-        ← レシート詳細に戻る
-      </Link>
+      {/* 詳細画面から来たときは1つ前に戻る（共通の戻るボタン） */}
+      <BackLink href={detailHref}>← レシート詳細に戻る</BackLink>
       <h1 className="text-xl font-bold text-slate-900">レシートを編集</h1>
       <ReceiptForm
         mode="edit"
@@ -96,15 +87,17 @@ export default async function ReceiptEditPage({
         initialImageUrl={editData.receiptImageUrl}
         redirectHref={detailHref}
         masterData={{
-          payees: payees!,
+          payees,
           transactionTypes: transactionTypes!,
           consumptionTaxes: consumptionTaxes!,
           categories: categories!,
-          purposes: purposes!,
-          scenes: scenes!,
+          breakdowns,
+          counterparts,
+          tags,
           members,
         }}
         defaultTransactionTypeId={editData.state.transactionTypeId}
+        currentUserId={user!.id}
       />
     </div>
   );

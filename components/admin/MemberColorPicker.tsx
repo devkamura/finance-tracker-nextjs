@@ -53,7 +53,8 @@ export function MemberColorPicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-10 mt-1 grid w-40 grid-cols-4 gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+        // 親（「色」ボタン）の幅に縮まないよう、中身の幅（w-max）で横一列に並べる
+        <div className="absolute right-0 z-10 mt-1 flex w-max gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
           <button
             type="button"
             onClick={() => pick(null)}

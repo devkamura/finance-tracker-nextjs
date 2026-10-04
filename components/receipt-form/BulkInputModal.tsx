@@ -6,24 +6,31 @@ import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { visibleBreakdownsFor } from "@/lib/receipts/breakdowns";
+import { counterpartOptionLabel } from "@/lib/receipts/labels";
 import type { MasterData } from "@/types/receipt";
 
-type BulkValues = {
+// 一括入力で全項目に適用する値（undefined の項目は変更しない）
+export type BulkInputValues = {
   taxType?: "inclusive" | "exclusive";
   taxRateId?: string;
   categoryId?: string;
-  purposeId?: string;
+  // カテゴリと一緒にだけ指定できる。カテゴリだけを指定した場合は、各項目で内訳を選び直す
+  // （内訳が1つだけのカテゴリは自動で選ばれる）
+  breakdownId?: string;
+  counterpartId?: string;
   ownerUserId?: string;
 };
 
 type BulkInputModalProps = {
   open: boolean;
   onClose: () => void;
-  onApply: (values: BulkValues) => void;
+  onApply: (values: BulkInputValues) => void;
   masterData: Pick<
     MasterData,
-    "consumptionTaxes" | "categories" | "purposes" | "members"
+    "consumptionTaxes" | "categories" | "breakdowns" | "counterparts" | "members"
   >;
+  currentUserId?: string;
 };
 
 const NOT_CHANGED = "";
@@ -33,18 +40,21 @@ export function BulkInputModal({
   onClose,
   onApply,
   masterData,
+  currentUserId,
 }: BulkInputModalProps) {
   const [taxType, setTaxType] = useState(NOT_CHANGED);
   const [taxRateId, setTaxRateId] = useState(NOT_CHANGED);
   const [categoryId, setCategoryId] = useState(NOT_CHANGED);
-  const [purposeId, setPurposeId] = useState(NOT_CHANGED);
+  const [breakdownId, setBreakdownId] = useState(NOT_CHANGED);
+  const [counterpartId, setCounterpartId] = useState(NOT_CHANGED);
   const [ownerUserId, setOwnerUserId] = useState(NOT_CHANGED);
 
   const reset = () => {
     setTaxType(NOT_CHANGED);
     setTaxRateId(NOT_CHANGED);
     setCategoryId(NOT_CHANGED);
-    setPurposeId(NOT_CHANGED);
+    setBreakdownId(NOT_CHANGED);
+    setCounterpartId(NOT_CHANGED);
     setOwnerUserId(NOT_CHANGED);
   };
 
@@ -53,7 +63,8 @@ export function BulkInputModal({
       taxType: (taxType || undefined) as "inclusive" | "exclusive" | undefined,
       taxRateId: taxRateId || undefined,
       categoryId: categoryId || undefined,
-      purposeId: purposeId || undefined,
+      breakdownId: categoryId && breakdownId ? breakdownId : undefined,
+      counterpartId: counterpartId || undefined,
       ownerUserId: ownerUserId || undefined,
     });
     reset();
@@ -108,7 +119,11 @@ export function BulkInputModal({
         <Select
           label="カテゴリー"
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          onChange={(e) => {
+            setCategoryId(e.target.value);
+            // カテゴリを変えたら内訳は選び直す
+            setBreakdownId(NOT_CHANGED);
+          }}
         >
           <option value={NOT_CHANGED}>変更しない</option>
           {masterData.categories.map((c) => (
@@ -117,17 +132,33 @@ export function BulkInputModal({
             </option>
           ))}
         </Select>
+        {categoryId && visibleBreakdownsFor(categoryId, masterData.breakdowns).length > 0 && (
+          <Select
+            label="内訳"
+            value={breakdownId}
+            onChange={(e) => setBreakdownId(e.target.value)}
+          >
+            <option value={NOT_CHANGED}>各項目で選ぶ</option>
+            {visibleBreakdownsFor(categoryId, masterData.breakdowns).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </Select>
+        )}
         <Select
-          label="目的"
-          value={purposeId}
-          onChange={(e) => setPurposeId(e.target.value)}
+          label="相手"
+          value={counterpartId}
+          onChange={(e) => setCounterpartId(e.target.value)}
         >
           <option value={NOT_CHANGED}>変更しない</option>
-          {masterData.purposes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+          {masterData.counterparts
+            .filter((c) => !c.isHidden)
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {counterpartOptionLabel(c, currentUserId)}
+              </option>
+            ))}
         </Select>
         <Select
           label="帰属先"

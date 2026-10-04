@@ -1,12 +1,48 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { updateReceipt } from "@/lib/actions/update-receipt";
-import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { OWNER_JOINT_VALUE, SELECT_NONE_VALUE } from "@/lib/constants";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 import type { ReceiptFormState, ReceiptItem } from "@/types/receipt";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// 内訳はこのテストの対象外（内訳なし＝必須チェックなし）
+vi.mock("@/lib/settings/queries", () => ({
+  getCategoryBreakdowns: vi.fn().mockResolvedValue([]),
+  // 相手は id 1 だけ、タグは id 5 だけがグループのもの
+  getCounterparts: vi
+    .fn()
+    .mockResolvedValue([{ id: 1, kind: "default", userId: null, name: "ふたり", isHidden: false }]),
+  getTags: vi.fn().mockResolvedValue([{ id: 5, name: "朝食", isHidden: false }]),
+  // 支払い先：1＝グループ全体、2＝Bさん用、3＝非表示（分析拡充 F3）。別名は F5
+  getPayees: vi.fn().mockResolvedValue([
+    {
+      id: 1,
+      name: "セブンイレブン",
+      ownerUserId: null,
+      isHidden: false,
+      defaults: {},
+      aliases: [{ id: 11, name: "セブン-イレブン長津田店" }],
+    },
+    {
+      id: 2,
+      name: "Bの薬局",
+      ownerUserId: "user-b",
+      isHidden: false,
+      defaults: {},
+      aliases: [{ id: 21, name: "Bの薬局 駅前店" }],
+    },
+    {
+      id: 3,
+      name: "閉店した店",
+      ownerUserId: null,
+      isHidden: true,
+      defaults: {},
+      aliases: [{ id: 31, name: "閉店" }],
+    },
+  ]),
+}));
 vi.mock("@/lib/supabase/group", () => ({
   getCurrentMembership: vi.fn(),
   getGroupMembers: vi.fn(),
@@ -31,8 +67,9 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxType: "inclusive",
     taxRateId: "",
     categoryId: "1",
-    purposeId: "1",
-    sceneIds: [],
+    breakdownId: "",
+    counterpartId: "1",
+    tagIds: [],
     ownerUserId: OWNER_JOINT_VALUE,
     ...overrides,
   };
@@ -69,6 +106,7 @@ type FakeOptions = {
     group_id: string;
     occurred_at: string;
     receipt_image_path: string | null;
+    payee_id?: number | null;
   } | null;
   isSettlementConfirmed?: boolean;
 };
@@ -79,9 +117,11 @@ function fakeSupabase({
     group_id: "group-1",
     occurred_at: "2026-08-05T00:00:00Z",
     receipt_image_path: null,
+    payee_id: 1,
   },
   isSettlementConfirmed = false,
-}: FakeOptions = {}) {
+  receiptUpdates = [],
+}: FakeOptions & { receiptUpdates?: Record<string, unknown>[] } = {}) {
   return {
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: USER_A } } }),
@@ -94,19 +134,10 @@ function fakeSupabase({
               maybeSingle: vi.fn().mockResolvedValue({ data: existing }),
             }),
           }),
-          update: () => ({ eq: vi.fn().mockResolvedValue({ error: null }) }),
-        };
-      }
-      if (table === "payees") {
-        return {
-          select: () => ({
-            eq: () => ({
-              single: vi.fn().mockResolvedValue({
-                data: { name: "セブンイレブン" },
-                error: null,
-              }),
-            }),
-          }),
+          update: (values: Record<string, unknown>) => {
+            receiptUpdates.push(values);
+            return { eq: vi.fn().mockResolvedValue({ error: null }) };
+          },
         };
       }
       if (table === "receipt_details") {
@@ -119,7 +150,7 @@ function fakeSupabase({
           }),
         };
       }
-      if (table === "receipt_detail_scenes") {
+      if (table === "receipt_detail_tags") {
         return { insert: vi.fn().mockResolvedValue({ error: null }) };
       }
       throw new Error(`unexpected table: ${table}`);
@@ -218,5 +249,66 @@ describe("updateReceipt", () => {
       buildFormData(buildState({ payerUserId: USER_B }))
     );
     expect(result).toEqual({ success: true });
+  });
+
+  it("U-111: 保存済みの支払い先なら、相方用・非表示でもそのまま保存できる", async () => {
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+    for (const payeeId of [2, 3]) {
+      mockedCreateClient.mockResolvedValue(
+        fakeSupabase({
+          existing: {
+            id: "receipt-1",
+            group_id: "group-1",
+            occurred_at: "2026-08-05T00:00:00Z",
+            receipt_image_path: null,
+            payee_id: payeeId,
+          },
+        })
+      );
+      const result = await updateReceipt(
+        "receipt-1",
+        buildFormData(buildState({ payeeSelect: String(payeeId) }))
+      );
+      expect(result).toEqual({ success: true });
+    }
+  });
+
+  it("U-111: 保存済みでない相方用・非表示の支払い先には変更できない", async () => {
+    mockedCreateClient.mockResolvedValue(fakeSupabase());
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+    for (const payeeSelect of ["2", "3"]) {
+      const result = await updateReceipt(
+        "receipt-1",
+        buildFormData(buildState({ payeeSelect }))
+      );
+      expect(result).toEqual({ success: false, errors: ["支払い先が見つかりません。"] });
+    }
+  });
+
+  it("U-127: 編集でも、手入力の店名が別名と一致したら支払い先IDと名前を変換して保存する", async () => {
+    const receiptUpdates: Record<string, unknown>[] = [];
+    mockedCreateClient.mockResolvedValue(
+      fakeSupabase({
+        existing: {
+          id: "receipt-1",
+          group_id: "group-1",
+          occurred_at: "2026-08-05T00:00:00Z",
+          receipt_image_path: null,
+          payee_id: null,
+        },
+        receiptUpdates,
+      })
+    );
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+    const result = await updateReceipt(
+      "receipt-1",
+      buildFormData(
+        buildState({ payeeSelect: SELECT_NONE_VALUE, payeeInputText: "セブン-イレブン長津田店" })
+      )
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(receiptUpdates[0]).toMatchObject({ payee_id: 1, payee_name: "セブンイレブン" });
   });
 });

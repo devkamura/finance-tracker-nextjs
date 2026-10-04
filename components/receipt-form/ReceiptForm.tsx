@@ -8,13 +8,20 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { ReceiptUnitSection } from "@/components/receipt-form/ReceiptUnitSection";
 import { ReceiptItemsSection } from "@/components/receipt-form/ReceiptItemsSection";
 import { OcrUploadSection } from "@/components/receipt-form/OcrUploadSection";
+import type { BulkInputValues } from "@/components/receipt-form/BulkInputModal";
 import { ConfirmSubmitModal } from "@/components/receipt-form/ConfirmSubmitModal";
 import { SubmitLoadingOverlay } from "@/components/receipt-form/SubmitLoadingOverlay";
 import { Toast, type ToastState } from "@/components/receipt-form/Toast";
 import { createReceipt } from "@/lib/actions/create-receipt";
 import { updateReceipt } from "@/lib/actions/update-receipt";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
+import { autoBreakdownIdFor, breakdownIdAfterBulkApply } from "@/lib/receipts/breakdowns";
 import { findPartner } from "@/lib/receipts/duplicate";
+import {
+  applyPayeeDefaults,
+  EMPTY_PAYEE_DEFAULTS,
+  findPayeeByName,
+} from "@/lib/receipts/payees";
 import {
   validateReceiptForm,
   type ReceiptFormFieldErrors,
@@ -50,8 +57,9 @@ function createEmptyItem(): ReceiptItem {
     taxType: "inclusive",
     taxRateId: "",
     categoryId: "",
-    purposeId: "",
-    sceneIds: [],
+    breakdownId: "",
+    counterpartId: "",
+    tagIds: [],
     // 帰属先は誤って共同のまま登録されることがないよう、既定は未選択にする。
     ownerUserId: "",
   };
@@ -87,20 +95,23 @@ export function buildOcrItem(
     taxType: "exclusive",
     taxRateId: resolveTaxRateId(item.taxRatePercent, consumptionTaxes),
     categoryId: "",
-    purposeId: "",
-    sceneIds: [],
+    breakdownId: "",
+    counterpartId: "",
+    tagIds: [],
     ownerUserId: "",
   };
 }
 
 // OCR読み取り結果を既存フォームの状態にマッピングする。
-// カテゴリー・目的・帰属先はマスタ選択式でOCRからは判定できないため既定値のままとし、
-// 支払い先名は登録済みマスタと名称が一致すればプルダウン選択、一致しなければ
-// 手入力欄に反映する。
-function buildOcrPatch(
+// 支払い先名はプルダウンに出す支払い先（グループ全体・自分用）の名前か別名と一致すれば
+// プルダウン選択、一致しなければ手入力欄に反映する。
+// 支払い先を選んだときの既定値（カテゴリ・内訳・相手・帰属先・タグ）は、呼び出し側
+// （handleOcrExtracted）で明細に入れる（docs/分析拡充/要件定義書.md 4.7節）。
+export function buildOcrPatch(
   result: OcrReceiptResult,
   payees: MasterData["payees"],
-  consumptionTaxes: MasterData["consumptionTaxes"]
+  consumptionTaxes: MasterData["consumptionTaxes"],
+  currentUserId: string | undefined
 ): Partial<ReceiptFormState> {
   const patch: Partial<ReceiptFormState> = {};
 
@@ -111,7 +122,7 @@ function buildOcrPatch(
     patch.amount = String(result.totalPrice);
   }
   if (result.payeeName) {
-    const matched = payees.find((payee) => payee.name === result.payeeName);
+    const matched = findPayeeByName(payees, result.payeeName, currentUserId);
     if (matched) {
       patch.payeeSelect = String(matched.id);
       patch.payeeInputText = "";
@@ -127,6 +138,22 @@ function buildOcrPatch(
   }
 
   return patch;
+}
+
+// OCRの読み取り結果をフォームの状態に反映する。登録済みの支払い先が選ばれたら、プルダウンで選んだときと
+// 同じく既定値ですべての明細を上書きする（読み取った明細があればその明細に、なければ入力中の明細に入れる。
+// 要件定義書 4.7節）。手入力欄に入った場合（一致する支払い先なし）は既定値を入れない。
+export function applyOcrPatch(
+  prev: ReceiptFormState,
+  patch: Partial<ReceiptFormState>,
+  withPayeeDefaults: (item: ReceiptItem, payeeSelect: string) => ReceiptItem
+): ReceiptFormState {
+  const next = { ...prev, ...patch };
+  const payeeSelect = patch.payeeSelect;
+  if (payeeSelect && payeeSelect !== SELECT_NONE_VALUE) {
+    next.items = next.items.map((item) => withPayeeDefaults(item, payeeSelect));
+  }
+  return next;
 }
 
 function createInitialState(defaultTransactionTypeId: string): ReceiptFormState {
@@ -150,7 +177,8 @@ type ReceiptFormProps = {
   receiptId?: string;
   initialState?: ReceiptFormState;
   initialImageUrl?: string | null;
-  // ログインユーザーのid。相方分の複製登録で「相方」を特定するために使う（新規登録モードのみ）。
+  // ログインユーザーのid。相方分の複製登録で「相方」を特定する（新規登録モードのみ）ほか、
+  // 相手のプルダウンで自分を「自分（A）」と表示するために使う。
   currentUserId?: string;
   // 編集成功後の遷移先（一覧から開いていた月・並び順付きの詳細URLなど）。
   // 省略時は/receipts/{receiptId}へ遷移する。
@@ -194,11 +222,30 @@ export function ReceiptForm({
       ? findPartner(masterData.members, currentUserId)
       : null;
 
-  const updateState = (patch: Partial<ReceiptFormState>) =>
-    setState((prev) => ({ ...prev, ...patch }));
+  // 選択中の支払い先の既定値を明細に入れる（docs/分析拡充/基本設計書.md 3.4節）。
+  // 「該当なし」・未選択は、既定値のない支払い先と同じ扱い（すべて未選択にする）。
+  const withPayeeDefaults = (item: ReceiptItem, payeeSelect: string): ReceiptItem => {
+    const payee = masterData.payees.find((p) => String(p.id) === payeeSelect);
+    return applyPayeeDefaults(item, payee?.defaults ?? EMPTY_PAYEE_DEFAULTS, masterData);
+  };
 
+  // 支払い先の欄を変えたら、その既定値で全明細を上書きする（既定値のない項目は未選択にする。ユーザー確認済み）。
+  // 編集画面を開いたときは保存済みの内容のまま（欄を変えたときだけ上書きする）。
+  const updateState = (patch: Partial<ReceiptFormState>) =>
+    setState((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.payeeSelect !== undefined && patch.payeeSelect !== prev.payeeSelect) {
+        next.items = next.items.map((item) => withPayeeDefaults(item, patch.payeeSelect!));
+      }
+      return next;
+    });
+
+  // 明細を追加したときも、選択中の支払い先の既定値を入れる
   const addItem = () =>
-    setState((prev) => ({ ...prev, items: [...prev.items, createEmptyItem()] }));
+    setState((prev) => ({
+      ...prev,
+      items: [...prev.items, withPayeeDefaults(createEmptyItem(), prev.payeeSelect)],
+    }));
 
   const removeItem = (clientId: string) =>
     setState((prev) => ({
@@ -206,21 +253,29 @@ export function ReceiptForm({
       items: prev.items.filter((item) => item.clientId !== clientId),
     }));
 
+  // カテゴリを変えたら内訳は選び直し。新しいカテゴリの内訳が1つだけなら自動で選ぶ
+  // （docs/分析拡充/基本設計書.md 3.1節）。内訳を同時に指定した場合はその値を使う。
+  const withBreakdownForCategory = (
+    item: ReceiptItem,
+    patch: Partial<ReceiptItem>
+  ): Partial<ReceiptItem> =>
+    patch.categoryId !== undefined &&
+    patch.categoryId !== item.categoryId &&
+    patch.breakdownId === undefined
+      ? { ...patch, breakdownId: autoBreakdownIdFor(patch.categoryId, masterData.breakdowns) }
+      : patch;
+
   const updateItem = (clientId: string, patch: Partial<ReceiptItem>) =>
     setState((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        item.clientId === clientId ? { ...item, ...patch } : item
+        item.clientId === clientId
+          ? { ...item, ...withBreakdownForCategory(item, patch) }
+          : item
       ),
     }));
 
-  const bulkApply = (values: {
-    taxType?: "inclusive" | "exclusive";
-    taxRateId?: string;
-    categoryId?: string;
-    purposeId?: string;
-    ownerUserId?: string;
-  }) =>
+  const bulkApply = (values: BulkInputValues) =>
     setState((prev) => ({
       ...prev,
       items: prev.items.map((item) => ({
@@ -231,13 +286,22 @@ export function ReceiptForm({
             ? ""
             : (values.taxRateId ?? item.taxRateId),
         categoryId: values.categoryId ?? item.categoryId,
-        purposeId: values.purposeId ?? item.purposeId,
+        breakdownId: breakdownIdAfterBulkApply(
+          item.breakdownId,
+          values.categoryId,
+          values.breakdownId,
+          masterData.breakdowns
+        ),
+        counterpartId: values.counterpartId ?? item.counterpartId,
         ownerUserId: values.ownerUserId ?? item.ownerUserId,
       })),
     }));
 
   const handleSubmitClick = () => {
-    const result = validateReceiptForm(state, memberUserIds);
+    const result = validateReceiptForm(state, memberUserIds, masterData.breakdowns, {
+      counterparts: masterData.counterparts,
+      tags: masterData.tags,
+    });
     if (result.errors.length > 0) {
       setClientErrors(result.errors);
       setFieldErrors(result.fieldErrors);
@@ -254,7 +318,13 @@ export function ReceiptForm({
   };
 
   const handleOcrExtracted = (result: OcrReceiptResult) => {
-    updateState(buildOcrPatch(result, masterData.payees, masterData.consumptionTaxes));
+    const patch = buildOcrPatch(
+      result,
+      masterData.payees,
+      masterData.consumptionTaxes,
+      currentUserId
+    );
+    setState((prev) => applyOcrPatch(prev, patch, withPayeeDefaults));
     setToast({
       type: "success",
       message: "レシートを読み取りました。内容を確認してください。",
@@ -362,6 +432,7 @@ export function ReceiptForm({
         masterData={masterData}
         fieldErrors={fieldErrors}
         showPayerSelect={mode === "edit"}
+        currentUserId={currentUserId}
       />
 
       <ReceiptItemsSection
@@ -375,6 +446,7 @@ export function ReceiptForm({
         openItemId={openItemId}
         onOpenItemChange={setOpenItemId}
         masterData={masterData}
+        currentUserId={currentUserId}
       />
 
       {partner && (

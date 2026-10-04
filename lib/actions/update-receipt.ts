@@ -4,10 +4,16 @@ import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildReceiptDetailRows,
-  buildReceiptDetailSceneRows,
+  buildReceiptDetailTagRows,
   resolvePayeeName,
 } from "@/lib/receipts/shared";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
+import {
+  getCategoryBreakdowns,
+  getCounterparts,
+  getPayees,
+  getTags,
+} from "@/lib/settings/queries";
 import { validateReceiptForm } from "@/lib/validation/receipt-rules";
 import type { ReceiptFormState } from "@/types/receipt";
 
@@ -53,7 +59,7 @@ export async function updateReceipt(
 
   const { data: existing } = await supabase
     .from("receipts")
-    .select("id, group_id, occurred_at, receipt_image_path")
+    .select("id, group_id, occurred_at, receipt_image_path, payee_id")
     .eq("id", receiptId)
     .maybeSingle();
 
@@ -61,9 +67,18 @@ export async function updateReceipt(
     return { success: false, errors: ["レシートが見つかりません。"] };
   }
 
-  const members = await getGroupMembers(supabase, membership.groupId);
+  const [members, breakdowns, tags, payees] = await Promise.all([
+    getGroupMembers(supabase, membership.groupId),
+    getCategoryBreakdowns(supabase, membership.groupId),
+    getTags(supabase, membership.groupId),
+    getPayees(supabase, membership.groupId),
+  ]);
+  const counterparts = await getCounterparts(supabase, membership.groupId, members);
   const memberUserIds = members.map((m) => m.userId);
-  const { errors } = validateReceiptForm(state, memberUserIds);
+  const { errors } = validateReceiptForm(state, memberUserIds, breakdowns, {
+    counterparts,
+    tags,
+  });
   if (!memberUserIds.includes(state.payerUserId)) {
     errors.push("支払者が不正です。");
   }
@@ -92,10 +107,13 @@ export async function updateReceipt(
   let payeeId: number | null;
   let payeeName: string;
   try {
-    ({ payeeId, payeeName } = await resolvePayeeName(
-      supabase,
+    // 保存済みの支払い先（相方用・非表示になったもの）は、そのまま保存できる
+    ({ payeeId, payeeName } = resolvePayeeName(
+      payees,
       state.payeeSelect,
-      state.payeeInputText
+      state.payeeInputText,
+      user.id,
+      existing.payee_id
     ));
   } catch (e) {
     return {
@@ -144,7 +162,7 @@ export async function updateReceipt(
     return { success: false, errors: ["レシートの更新に失敗しました。"] };
   }
 
-  // 明細は一旦削除して作り直す（receipt_detail_scenesはon delete cascadeで連動削除される）。
+  // 明細は一旦削除して作り直す（receipt_detail_tagsはon delete cascadeで連動削除される）。
   const { error: deleteDetailsError } = await supabase
     .from("receipt_details")
     .delete()
@@ -164,13 +182,13 @@ export async function updateReceipt(
     return { success: false, errors: ["レシート明細の更新に失敗しました。"] };
   }
 
-  const sceneRows = buildReceiptDetailSceneRows(state.items, insertedDetails);
-  if (sceneRows.length > 0) {
-    const { error: sceneError } = await supabase
-      .from("receipt_detail_scenes")
-      .insert(sceneRows);
-    if (sceneError) {
-      console.error("Failed to insert receipt detail scenes", sceneError);
+  const tagRows = buildReceiptDetailTagRows(state.items, insertedDetails);
+  if (tagRows.length > 0) {
+    const { error: tagError } = await supabase
+      .from("receipt_detail_tags")
+      .insert(tagRows);
+    if (tagError) {
+      console.error("Failed to insert receipt detail tags", tagError);
     }
   }
 

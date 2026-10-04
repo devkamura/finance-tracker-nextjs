@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faCircleCheck,
-  faPlus,
-  faSortAmountDown,
-  faSortAmountUp,
-} from "@fortawesome/free-solid-svg-icons";
+import { faPlus } from "@fortawesome/free-solid-svg-icons";
 
-import { ReceiptAccordionItem } from "@/components/receipt-list/ReceiptAccordionItem";
-import { MonthSelector } from "@/components/ui/MonthSelector";
+import { BackToAnalyticsButton } from "@/components/receipt-list/BackToAnalyticsButton";
+import { ReceiptListView } from "@/components/receipt-list/ReceiptListView";
+import {
+  buildAnalyticsReturnHref,
+  parseDrilldownSource,
+  pickListParams,
+} from "@/lib/receipts/list-params";
 import {
   listReceipts,
   monthPeriod,
@@ -16,23 +16,28 @@ import {
   retentionMonthRange,
   toMonthParam,
 } from "@/lib/receipts/queries";
+import { buildAnalyticsPayees } from "@/lib/analytics/payees";
+import {
+  getCategoriesWithCostType,
+  getCategoryBreakdowns,
+  getCounterpartNames,
+  getPayees,
+} from "@/lib/settings/queries";
 import { isMonthConfirmed } from "@/lib/settlement/queries";
-import { getCurrentMembership } from "@/lib/supabase/group";
+import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ReceiptsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; sort?: string; open?: string }>;
+  // month・sort・open に加え、分析画面からの絞り込み条件
+  // （category・breakdown・costType・payee・counterpart・scope・joint・from）を受け取る
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const {
-    month: monthParam,
-    sort: sortParam,
-    open: openReceiptId,
-  } = await searchParams;
+  const params = await searchParams;
+  const monthParam = typeof params.month === "string" ? params.month : undefined;
   const targetDate = parseMonthParam(monthParam);
   const month = toMonthParam(targetDate);
-  const sort: "asc" | "desc" = sortParam === "asc" ? "asc" : "desc";
 
   const supabase = await createClient();
   // ログイン必須・グループ所属必須はapp/(app)/layout.tsxで既に保証されている。
@@ -41,20 +46,31 @@ export default async function ReceiptsPage({
   } = await supabase.auth.getUser();
   const membership = await getCurrentMembership(supabase, user!.id);
 
+  // その月のレシートは絞り込み・並び順に関係なくすべて取得して画面に渡す。
+  // 絞り込み・解除・並び替えは画面側（ReceiptListView）だけで行う（詳細設計書 フェーズ3 5章）。
   const period = monthPeriod(targetDate);
-  const [receipts, confirmed] = await Promise.all([
-    listReceipts(supabase, membership!.groupId, period, sort),
-    isMonthConfirmed(supabase, membership!.groupId, targetDate),
+  const groupId = membership!.groupId;
+  const membersPromise = getGroupMembers(supabase, groupId);
+  const [receipts, confirmed, members, categories, breakdowns, counterparts, payees] =
+    await Promise.all([
+    listReceipts(supabase, groupId, period),
+    isMonthConfirmed(supabase, groupId, targetDate),
+    membersPromise,
+    // 絞り込みの条件の名前・費用区分の判定に使う（分析画面と同じデータ。docs/分析拡充/詳細設計書.md F4 4章）
+    getCategoriesWithCostType(supabase, groupId),
+    getCategoryBreakdowns(supabase, groupId),
+    membersPromise.then((m) => getCounterpartNames(supabase, groupId, m)),
+    getPayees(supabase, groupId),
   ]);
   const { min, max } = retentionMonthRange();
 
-  const sortToggleParams = new URLSearchParams({
-    month,
-    sort: sort === "asc" ? "desc" : "asc",
-  });
-
   return (
     <div className="flex flex-col gap-4">
+      {parseDrilldownSource(params) === "analytics" && (
+        <BackToAnalyticsButton
+          href={buildAnalyticsReturnHref(typeof params.ret === "string" ? params.ret : null)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-900">レシート一覧</h1>
         <Link
@@ -65,50 +81,25 @@ export default async function ReceiptsPage({
         </Link>
       </div>
 
-      <MonthSelector
-        basePath="/receipts"
+      <ReceiptListView
+        // 同じページへの移動（ヘッダーの「一覧」や月の切り替え）で部品が使い回されると、
+        // 画面側で持っている絞り込み・並び順が残ってしまう。サーバーが受け取ったURLの条件が
+        // 変わったときは作り直し、新しいURLから状態を読み直す。
+        key={pickListParams(params).toString()}
+        receipts={receipts}
+        master={{
+          categories,
+          breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
+          counterparts,
+          // 支払い先の条件は、分析画面から渡される値（相方の自分用・非表示を含む）をすべて受け付ける
+          payees: buildAnalyticsPayees(payees, user!.id, members, () => true),
+        }}
+        members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
         month={month}
-        extraParams={{ sort }}
         minMonth={toMonthParam(min)}
         maxMonth={toMonthParam(max)}
+        confirmed={confirmed}
       />
-
-      {confirmed && (
-        <Link
-          href="/settlement"
-          className="mx-auto flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-        >
-          <FontAwesomeIcon icon={faCircleCheck} />
-          この月の精算は確定済みです（編集・削除不可）
-        </Link>
-      )}
-
-      <div className="flex items-center justify-end">
-        <Link
-          href={`/receipts?${sortToggleParams.toString()}`}
-          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
-        >
-          <FontAwesomeIcon icon={sort === "asc" ? faSortAmountUp : faSortAmountDown} />
-          {sort === "asc" ? "古い順" : "新しい順"}（切り替え）
-        </Link>
-      </div>
-
-      {receipts.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          この月に登録されたレシートはまだありません。
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {receipts.map((receipt) => (
-            <ReceiptAccordionItem
-              key={receipt.id}
-              receipt={receipt}
-              detailHref={`/receipts/${receipt.id}?month=${month}&sort=${sort}`}
-              initiallyOpen={receipt.id === openReceiptId}
-            />
-          ))}
-        </ul>
-      )}
 
       {/* 一覧が長くなりページ上部までスクロールしなくても登録できるよう、
           常に画面に表示される位置に固定する。 */}

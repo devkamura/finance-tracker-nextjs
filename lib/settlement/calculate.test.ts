@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allocateReceiptAmount,
   calculateSettlement,
   type SettlementReceiptInput,
 } from "@/lib/settlement/calculate";
@@ -287,5 +288,41 @@ describe("calculateSettlement", () => {
       toUserId: USER_A,
       amount: 0,
     });
+  });
+});
+
+// 税別の明細を税込に直した合計が、支払額と一致しないとき（docs/分析拡充/テストデータ.md の No.12・13）
+describe("allocateReceiptAmount（税別の明細）", () => {
+  const exclusive = (price: number, taxRateMultiplier: number) => ({
+    price,
+    taxType: "exclusive" as const,
+    taxRateMultiplier,
+    ownerUserId: null,
+  });
+
+  it("U-122: 税率ごとの小計で税を計算したレシート（明細ごとに切り捨てた合計より1円多い）は、端数の1円を金額の大きい明細に足す", () => {
+    // 明細ごと：145×1.08＝156.6→156、245×1.08＝264.6→264、1,000×1.10＝1,100。合計 1,520
+    // お店：8%の小計 390×1.08＝421.2→421、10%は 1,100。支払額 1,521
+    const allocated = allocateReceiptAmount({
+      payerUserId: USER_A,
+      amount: 1521,
+      isRefund: false,
+      details: [exclusive(145, 1.08), exclusive(245, 1.08), exclusive(1000, 1.1)],
+    });
+    // 1,521×156÷1,520＝156.1→156、1,521×264÷1,520＝264.1→264、1,521×1,100÷1,520＝1,100.7→1,100。
+    // 残りの1円は、税込の金額が最も大きい洗剤（1,100）に足す
+    expect(allocated).toEqual([156, 264, 1101]);
+    expect(allocated.reduce((sum, a) => sum + a, 0)).toBe(1521);
+  });
+
+  it("U-123: 税別の明細の合計より支払額が少ない（クーポン等）ときは、税込に直した金額の比率で分ける", () => {
+    // 40,000×1.10＝44,000、10,000×1.10＝11,000。合計 55,000 に対して支払額 49,500（0.9倍）
+    const allocated = allocateReceiptAmount({
+      payerUserId: USER_A,
+      amount: 49500,
+      isRefund: false,
+      details: [exclusive(40000, 1.1), exclusive(10000, 1.1)],
+    });
+    expect(allocated).toEqual([39600, 9900]);
   });
 });

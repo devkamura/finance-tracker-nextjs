@@ -1,13 +1,49 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createReceipt } from "@/lib/actions/create-receipt";
-import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { OWNER_JOINT_VALUE, SELECT_NONE_VALUE } from "@/lib/constants";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 import { deleteReceiptImage, uploadReceiptImage } from "@/lib/supabase/storage";
 import type { ReceiptFormState, ReceiptItem } from "@/types/receipt";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// 内訳はこのテストの対象外（内訳なし＝必須チェックなし）
+vi.mock("@/lib/settings/queries", () => ({
+  getCategoryBreakdowns: vi.fn().mockResolvedValue([]),
+  // 相手は id 1 だけ、タグは id 5 だけがグループのもの
+  getCounterparts: vi
+    .fn()
+    .mockResolvedValue([{ id: 1, kind: "default", userId: null, name: "ふたり", isHidden: false }]),
+  getTags: vi.fn().mockResolvedValue([{ id: 5, name: "朝食", isHidden: false }]),
+  // 支払い先：1＝グループ全体、2＝Bさん用、3＝非表示（分析拡充 F3）。別名は F5
+  getPayees: vi.fn().mockResolvedValue([
+    {
+      id: 1,
+      name: "セブンイレブン",
+      ownerUserId: null,
+      isHidden: false,
+      defaults: {},
+      aliases: [{ id: 11, name: "セブン-イレブン長津田店" }],
+    },
+    {
+      id: 2,
+      name: "Bの薬局",
+      ownerUserId: "user-b",
+      isHidden: false,
+      defaults: {},
+      aliases: [{ id: 21, name: "Bの薬局 駅前店" }],
+    },
+    {
+      id: 3,
+      name: "閉店した店",
+      ownerUserId: null,
+      isHidden: true,
+      defaults: {},
+      aliases: [{ id: 31, name: "閉店" }],
+    },
+  ]),
+}));
 vi.mock("@/lib/supabase/group", () => ({
   getCurrentMembership: vi.fn(),
   getGroupMembers: vi.fn(),
@@ -34,8 +70,9 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     taxType: "inclusive",
     taxRateId: "",
     categoryId: "1",
-    purposeId: "1",
-    sceneIds: [],
+    breakdownId: "",
+    counterpartId: "1",
+    tagIds: [],
     ownerUserId: OWNER_JOINT_VALUE,
     ...overrides,
   };
@@ -72,7 +109,6 @@ function buildFormData(
 
 type FakeSupabaseOptions = {
   isSettlementConfirmed?: boolean;
-  payeeName?: string;
   receiptInsertError?: unknown;
   detailsInsertError?: unknown;
   // n回目（0始まり）のreceipts INSERTだけを失敗させたい場合に指定する
@@ -82,7 +118,6 @@ type FakeSupabaseOptions = {
 function fakeSupabase(options: FakeSupabaseOptions = {}) {
   const {
     isSettlementConfirmed = false,
-    payeeName = "セブンイレブン",
     receiptInsertError = null,
     detailsInsertError = null,
     receiptInsertErrorAt,
@@ -93,20 +128,9 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
   const receiptInserts: Record<string, unknown>[] = [];
   const receiptDeletes: string[] = [];
   const detailInserts: Record<string, unknown>[][] = [];
+  const tagInserts: Record<string, unknown>[][] = [];
 
   const from = vi.fn((table: string) => {
-    if (table === "payees") {
-      return {
-        select: () => ({
-          eq: () => ({
-            single: vi.fn().mockResolvedValue({
-              data: { name: payeeName },
-              error: null,
-            }),
-          }),
-        }),
-      };
-    }
     if (table === "receipts") {
       return {
         insert: vi.fn((row: Record<string, unknown>) => {
@@ -139,8 +163,13 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
         }),
       };
     }
-    if (table === "receipt_detail_scenes") {
-      return { insert: vi.fn().mockResolvedValue({ error: null }) };
+    if (table === "receipt_detail_tags") {
+      return {
+        insert: vi.fn((rows: Record<string, unknown>[]) => {
+          tagInserts.push(rows);
+          return Promise.resolve({ error: null });
+        }),
+      };
     }
     throw new Error(`unexpected table: ${table}`);
   });
@@ -154,6 +183,7 @@ function fakeSupabase(options: FakeSupabaseOptions = {}) {
     receiptInserts,
     receiptDeletes,
     detailInserts,
+    tagInserts,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
@@ -428,5 +458,106 @@ describe("createReceipt", () => {
       errors: ["相方がグループにいないため、複製登録できません。"],
     });
     expect(supabase.receiptInserts).toHaveLength(0);
+  });
+
+  it("U-102: 明細の相手を保存し、タグを明細ごとに登録する", async () => {
+    const supabase = fakeSupabase();
+    mockedCreateClient.mockResolvedValue(supabase);
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+    const result = await createReceipt(
+      buildFormData(buildState({ items: [buildItem({ counterpartId: "1", tagIds: ["5"] })] }))
+    );
+
+    expect(result.success).toBe(true);
+    expect(supabase.detailInserts[0][0]).toMatchObject({ counterpart_id: 1 });
+    expect(supabase.tagInserts).toEqual([[{ receipt_detail_id: "detail-1", tag_id: 5 }]]);
+  });
+
+  it("U-102: グループにない相手・タグは登録しない", async () => {
+    const supabase = fakeSupabase();
+    mockedCreateClient.mockResolvedValue(supabase);
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+    const result = await createReceipt(
+      buildFormData(buildState({ items: [buildItem({ counterpartId: "999", tagIds: ["999"] })] }))
+    );
+
+    expect(result).toEqual({
+      success: false,
+      errors: ["項目1: 相手が不正です。", "項目1: タグが不正です。"],
+    });
+    expect(supabase.receiptInserts).toHaveLength(0);
+  });
+
+  it("U-111: グループ全体の支払い先は、レシートに支払い先IDと名前を保存する", async () => {
+    const supabase = fakeSupabase();
+    mockedCreateClient.mockResolvedValue(supabase);
+    mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+    const result = await createReceipt(buildFormData(buildState({ payeeSelect: "1" })));
+
+    expect(result.success).toBe(true);
+    expect(supabase.receiptInserts[0]).toMatchObject({
+      payee_id: 1,
+      payee_name: "セブンイレブン",
+    });
+  });
+
+  it("U-111: 相方用・非表示の支払い先は選べない", async () => {
+    for (const payeeSelect of ["2", "3", "999"]) {
+      const supabase = fakeSupabase();
+      mockedCreateClient.mockResolvedValue(supabase);
+      mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+      const result = await createReceipt(buildFormData(buildState({ payeeSelect })));
+
+      expect(result).toEqual({ success: false, errors: ["支払い先が見つかりません。"] });
+      expect(supabase.receiptInserts).toHaveLength(0);
+    }
+  });
+
+  // 分析拡充 F5：手入力の店名が支払い先の名前か別名と一致したら、保存時にその支払い先へ変換する
+  it("U-127: 手入力の店名が別名・名前と一致したら、支払い先IDと名前だけを変換して保存する（明細はそのまま）", async () => {
+    for (const payeeInputText of ["セブン-イレブン長津田店", " セブンイレブン　"]) {
+      const supabase = fakeSupabase();
+      mockedCreateClient.mockResolvedValue(supabase);
+      mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+      const result = await createReceipt(
+        buildFormData(buildState({ payeeSelect: SELECT_NONE_VALUE, payeeInputText }))
+      );
+
+      expect(result.success).toBe(true);
+      expect(supabase.receiptInserts[0]).toMatchObject({
+        payee_id: 1,
+        payee_name: "セブンイレブン",
+      });
+      // 既定値は当てず、入力した明細の値のまま保存する
+      expect(supabase.detailInserts[0][0]).toMatchObject({
+        category_id: 1,
+        breakdown_id: null,
+        counterpart_id: 1,
+        owner_user_id: null,
+      });
+    }
+  });
+
+  it("U-127: 一致しない店名・相方用・非表示の支払い先の別名は、手入力のまま保存する", async () => {
+    for (const payeeInputText of ["セブン-イレブン", "Bの薬局 駅前店", "閉店", ""]) {
+      const supabase = fakeSupabase();
+      mockedCreateClient.mockResolvedValue(supabase);
+      mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
+
+      const result = await createReceipt(
+        buildFormData(buildState({ payeeSelect: SELECT_NONE_VALUE, payeeInputText }))
+      );
+
+      expect(result.success).toBe(true);
+      expect(supabase.receiptInserts[0]).toMatchObject({
+        payee_id: null,
+        payee_name: payeeInputText,
+      });
+    }
   });
 });

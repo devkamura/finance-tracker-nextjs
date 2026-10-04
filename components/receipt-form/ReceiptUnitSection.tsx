@@ -2,6 +2,7 @@
 
 import { Select } from "@/components/ui/Select";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
+import { findPayeeByName, payeeOptionGroups, payeeOptionLabel } from "@/lib/receipts/payees";
 import type { ReceiptFormFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptFormState } from "@/types/receipt";
 
@@ -12,6 +13,8 @@ type ReceiptUnitSectionProps = {
   fieldErrors?: Pick<ReceiptFormFieldErrors, "transactionTypeId" | "amount">;
   // 支払者選択は編集画面でのみ表示する（新規登録は常に登録者本人に自動設定されるため）。
   showPayerSelect?: boolean;
+  // ログインユーザーのid。支払い先のプルダウンに自分用の支払い先を出すために使う。
+  currentUserId?: string;
 };
 
 export function ReceiptUnitSection({
@@ -20,7 +23,18 @@ export function ReceiptUnitSection({
   masterData,
   fieldErrors,
   showPayerSelect = false,
+  currentUserId,
 }: ReceiptUnitSectionProps) {
+  // グループ全体と自分用を見出しで分けて出す。相方用・非表示の支払い先は、
+  // 編集中のレシートで選ばれているときだけ残す（docs/分析拡充/基本設計書.md 2.7節・3.5節）。
+  const payeeGroups = payeeOptionGroups(masterData.payees, currentUserId, state.payeeSelect);
+  // 手入力の店名が支払い先の名前か別名と一致するときは、保存時にその支払い先へ変換されることを案内する
+  // （入力中は何も変えない。docs/分析拡充/要件定義書.md 4.7節）
+  const convertTo =
+    state.payeeSelect === SELECT_NONE_VALUE
+      ? findPayeeByName(masterData.payees, state.payeeInputText, currentUserId)
+      : null;
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
       <h2 className="text-base font-semibold text-slate-900">
@@ -35,11 +49,29 @@ export function ReceiptUnitSection({
         >
           <option value="">選択してください</option>
           <option value={SELECT_NONE_VALUE}>該当なし</option>
-          {masterData.payees.map((payee) => (
-            <option key={payee.id} value={payee.id}>
-              {payee.name}
+          {payeeGroups.current && (
+            <option value={payeeGroups.current.id}>
+              {payeeOptionLabel(payeeGroups.current, currentUserId, masterData.members)}
             </option>
-          ))}
+          )}
+          {payeeGroups.shared.length > 0 && (
+            <optgroup label="グループ全体">
+              {payeeGroups.shared.map((payee) => (
+                <option key={payee.id} value={payee.id}>
+                  {payee.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {payeeGroups.own.length > 0 && (
+            <optgroup label="自分用">
+              {payeeGroups.own.map((payee) => (
+                <option key={payee.id} value={payee.id}>
+                  {payee.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </Select>
 
         {state.payeeSelect === SELECT_NONE_VALUE && (
@@ -51,6 +83,11 @@ export function ReceiptUnitSection({
               onChange={(e) => onChange({ payeeInputText: e.target.value })}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+            {convertTo && (
+              <span className="text-xs text-indigo-600">
+                保存時に「{convertTo.name}」として保存されます
+              </span>
+            )}
           </label>
         )}
 

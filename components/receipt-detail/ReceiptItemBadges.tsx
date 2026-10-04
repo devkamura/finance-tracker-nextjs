@@ -6,8 +6,12 @@ import type { ReceiptDetailItemView } from "@/types/receipt";
 export function ReceiptItemBadges({ item }: { item: ReceiptDetailItemView }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1.5">
-      <Badge label="カテゴリ" value={item.categoryName} />
-      <Badge label="目的" value={item.purposeName} />
+      {/* 内訳があれば「食費 ＞ 外食」のようにカテゴリと続けて表示する */}
+      <Badge
+        label="カテゴリ"
+        value={item.breakdownName ? `${item.categoryName} ＞ ${item.breakdownName}` : item.categoryName}
+      />
+      <Badge label="相手" value={item.counterpartName} />
       <span
         className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${getOwnerBadgeClass(item.ownerUserId, item.ownerColor)}`}
       >
@@ -23,8 +27,8 @@ export function ReceiptItemBadges({ item }: { item: ReceiptDetailItemView }) {
             : "税込"
         }
       />
-      {item.sceneNames.length > 0 && (
-        <Badge label="シーン" value={item.sceneNames.join("・")} />
+      {item.tagNames.length > 0 && (
+        <Badge label="タグ" value={item.tagNames.join("・")} />
       )}
     </div>
   );

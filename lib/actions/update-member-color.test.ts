@@ -67,6 +67,26 @@ describe("updateMemberColor", () => {
     expect(result).toEqual({ success: true, color: "blue" });
   });
 
+  it("U-75: レッドも保存できる", async () => {
+    mockedCreateClient.mockResolvedValue(
+      fakeSupabase({ data: { color: "red" }, error: null })
+    );
+
+    const result = await updateMemberColor("user-1", "red");
+    expect(result).toEqual({ success: true, color: "red" });
+  });
+
+  it("U-75: ブルー・レッド以外（以前選べた色を含む）は不正な色として拒否する", async () => {
+    for (const color of ["green", "purple", "pink"]) {
+      const result = await updateMemberColor("user-1", color);
+      expect(result).toEqual({
+        success: false,
+        error: "不正な色が指定されました。",
+      });
+    }
+    expect(mockedCreateClient).not.toHaveBeenCalled();
+  });
+
   it("allows clearing the color (null)", async () => {
     mockedCreateClient.mockResolvedValue(
       fakeSupabase({ data: { color: null }, error: null })

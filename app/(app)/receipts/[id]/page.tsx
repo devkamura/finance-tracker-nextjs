@@ -5,10 +5,12 @@ import {
   DuplicatedBadge,
   DuplicatedNotice,
 } from "@/components/receipt-detail/DuplicatedBadge";
+import { BackLink } from "@/components/navigation/BackLink";
 import { DeleteReceiptButton } from "@/components/receipt-detail/DeleteReceiptButton";
 import { ReceiptImagePreview } from "@/components/receipt-detail/ReceiptImagePreview";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
 import { UserBadge } from "@/components/ui/UserBadge";
+import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptDetail } from "@/lib/receipts/queries";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
@@ -24,10 +26,10 @@ export default async function ReceiptDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; sort?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const { month, sort } = await searchParams;
+  const searchParamValues = await searchParams;
 
   const supabase = await createClient();
   // ログイン必須・グループ所属必須はapp/(app)/layout.tsxで既に保証されている。
@@ -41,25 +43,19 @@ export default async function ReceiptDetailPage({
     notFound();
   }
 
-  // 一覧のどの月・並び順から遷移してきたかを維持しつつ、この行を開いた状態で
+  // 一覧のどの月・並び順・絞り込みから遷移してきたかを維持しつつ、この行を開いた状態で
   // 一覧に戻れるようにする（open=id）。削除時は開き直す対象が消えるのでopenは付けない。
-  const listParams = new URLSearchParams();
-  if (month) listParams.set("month", month);
-  if (sort) listParams.set("sort", sort);
+  // 引き継ぐパラメータは lib/receipts/list-params.ts で一元管理する。
+  const listParams = pickListParams(searchParamValues);
   const backParams = new URLSearchParams(listParams);
   backParams.set("open", id);
-  const editHref = `/receipts/${id}/edit?${new URLSearchParams(
-    month || sort ? { ...(month ? { month } : {}), ...(sort ? { sort } : {}) } : {}
-  ).toString()}`;
+  const editHref = withQuery(`/receipts/${id}/edit`, listParams);
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href={`/receipts?${backParams.toString()}`}
-        className="text-sm text-slate-500 hover:text-slate-700"
-      >
-        ← レシート一覧に戻る
-      </Link>
+      {/* 一覧から来たときは1つ前に戻る（通信なし。一覧は開いていた行をURLから復元する）。
+          直接開いた場合や編集後などは、この行を開いた状態の一覧へのリンクとして開く */}
+      <BackLink href={`/receipts?${backParams.toString()}`}>← レシート一覧に戻る</BackLink>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
         <div className="flex items-start justify-between">
@@ -143,7 +139,7 @@ export default async function ReceiptDetailPage({
           <DeleteReceiptButton
             receiptId={receipt.id}
             disabled={receipt.isLocked}
-            backHref={`/receipts?${listParams.toString()}`}
+            backHref={withQuery("/receipts", listParams)}
           />
         </div>
       </div>
