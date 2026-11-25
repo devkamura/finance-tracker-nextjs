@@ -13,17 +13,20 @@ import {
 } from "@/lib/analytics/dimensions";
 import { UNREGISTERED_PAYEE_KEY } from "@/lib/analytics/payees";
 import type { Scope } from "@/lib/analytics/types";
+import { SEARCH_PARAM_KEYS } from "@/lib/receipts/list-search";
 
 // 一覧の状態として引き継ぐパラメータ（openは行を開く一時的な指定のため含めない）。
 // ret は「← 分析に戻る」で開く分析画面の状態（詳細・編集と行き来しても失わないよう引き継ぐ）。
 // 絞り込みの条件（category〜counterpart）は、分析の「分ける」「絞り込み」の項目と同じ名前
 // （docs/分析拡充/詳細設計書.md F4 4章）。
+// payer・start・end・q は一覧画面のフィルタ欄で選ぶ条件（lib/receipts/list-search.ts。Issue #39）。
 export const LIST_PARAM_KEYS = [
   "month",
   "sort",
   ...DIMENSIONS,
   "scope",
   "joint",
+  ...SEARCH_PARAM_KEYS,
   "from",
   "ret",
 ] as const;
