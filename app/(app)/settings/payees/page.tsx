@@ -10,8 +10,8 @@ import {
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
-// 設定 ＞ 支払い先（docs/分析拡充/基本設計書.md 2.6節）。管理画面の「支払い先管理」から移設した。
-// グループ全体は管理者のみ、自分用は本人のみ編集できる。相方用は閲覧のみ。
+// 設定 ＞ 支払い先（docs/requirements.md「追加機能：支払い先の一本化」）。
+// 支払い先はグループで1つの一覧。メンバー全員が編集でき、表示／非表示は自分の分だけ切り替える。
 export default async function PayeeSettingsPage() {
   const supabase = await createClient();
   // ログイン必須・グループ所属必須はapp/(app)/layout.tsxで既に保証されている。
@@ -42,7 +42,6 @@ export default async function PayeeSettingsPage() {
       tags={tags}
       members={members}
       currentUserId={user!.id}
-      isAdmin={membership!.role === "admin"}
     />
   );
 }

@@ -126,11 +126,9 @@ export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
 
 // 支出分析画面を開いたときに一括で渡すデータを作る。
 // 以降の画面操作（表示対象・月の切り替え）はこのデータだけでクライアント側で再集計する。
-// currentUserId は支払い先の選択肢の見出し（自分用／相方の自分用）を決めるために使う。
 export async function getAnalyticsData(
   supabase: SupabaseClient,
   groupId: string,
-  currentUserId: string,
   now: Date = new Date()
 ): Promise<AnalyticsData> {
   const today = todayKey(now);
@@ -156,8 +154,8 @@ export async function getAnalyticsData(
     categories: categories.map((c) => ({ id: c.id, name: c.name, costType: c.costType })),
     breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
     counterparts,
-    // 支払い先は登録済みの支払い先（相方の自分用を含む）を選択肢にする。非表示のものは12ヶ月で使われているときだけ
-    payees: buildAnalyticsPayees(payees, currentUserId, members, (id) => usedPayeeIds.has(id)),
+    // 支払い先は登録済みの支払い先を選択肢にする。全員が非表示にしているものは12ヶ月で使われているときだけ
+    payees: buildAnalyticsPayees(payees, members, (id) => usedPayeeIds.has(id)),
     members: members.map((m) => ({
       userId: m.userId,
       displayName: m.displayName,
