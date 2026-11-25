@@ -21,6 +21,8 @@ import {
   applyPayeeDefaults,
   EMPTY_PAYEE_DEFAULTS,
   findPayeeByName,
+  payeeDefaultsFor,
+  isSelectablePayee,
 } from "@/lib/receipts/payees";
 import {
   validateReceiptForm,
@@ -103,8 +105,9 @@ export function buildOcrItem(
 }
 
 // OCR読み取り結果を既存フォームの状態にマッピングする。
-// 支払い先名はプルダウンに出す支払い先（グループ全体・自分用）の名前か別名と一致すれば
-// プルダウン選択、一致しなければ手入力欄に反映する。
+// 支払い先名はプルダウンに出す支払い先（自分が非表示にしていないもの）の名前か別名と一致すれば
+// プルダウン選択、一致しなければ手入力欄に反映する。自分が非表示にしている支払い先と一致したときも
+// 手入力欄に入れ、保存時に支払い先だけを紐づける（既定値は入れない。docs/requirements.md「支払い先の一本化」）。
 // 支払い先を選んだときの既定値（カテゴリ・内訳・相手・帰属先・タグ）は、呼び出し側
 // （handleOcrExtracted）で明細に入れる（docs/分析拡充/要件定義書.md 4.7節）。
 export function buildOcrPatch(
@@ -122,8 +125,8 @@ export function buildOcrPatch(
     patch.amount = String(result.totalPrice);
   }
   if (result.payeeName) {
-    const matched = findPayeeByName(payees, result.payeeName, currentUserId);
-    if (matched) {
+    const matched = findPayeeByName(payees, result.payeeName);
+    if (matched && isSelectablePayee(matched, currentUserId)) {
       patch.payeeSelect = String(matched.id);
       patch.payeeInputText = "";
     } else {
@@ -223,10 +226,15 @@ export function ReceiptForm({
       : null;
 
   // 選択中の支払い先の既定値を明細に入れる（docs/分析拡充/基本設計書.md 3.4節）。
+  // 既定値は操作しているメンバーのもの（自分用があれば自分用、なければ共通。docs/requirements.md「支払い先の一本化」）。
   // 「該当なし」・未選択は、既定値のない支払い先と同じ扱い（すべて未選択にする）。
   const withPayeeDefaults = (item: ReceiptItem, payeeSelect: string): ReceiptItem => {
     const payee = masterData.payees.find((p) => String(p.id) === payeeSelect);
-    return applyPayeeDefaults(item, payee?.defaults ?? EMPTY_PAYEE_DEFAULTS, masterData);
+    return applyPayeeDefaults(
+      item,
+      payee ? payeeDefaultsFor(payee, currentUserId) : EMPTY_PAYEE_DEFAULTS,
+      masterData
+    );
   };
 
   // 支払い先の欄を変えたら、その既定値で全明細を上書きする（既定値のない項目は未選択にする。ユーザー確認済み）。

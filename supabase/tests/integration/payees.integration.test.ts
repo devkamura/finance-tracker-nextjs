@@ -8,8 +8,8 @@ import {
 } from "./test-helpers";
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
-// 分析拡充 F3：支払い先のグループ全体／自分用の権限（RLS）・名前の重複・既定値の整合性を検証する
-// （docs/分析拡充/基本設計書.md 4章）。
+// 支払い先の権限（RLS）・メンバーごとの非表示・名前の重複・既定値の整合性を検証する
+// （docs/requirements.md「追加機能：支払い先の一本化」、docs/分析拡充/基本設計書.md 4章）。
 describe("支払い先", () => {
   const admin = createServiceRoleClient();
 
@@ -24,8 +24,8 @@ describe("支払い先", () => {
   let gasBreakdownId: number; // 水道光熱費 ＞ ガス
   let futariId: number;
   let otherFutariId: number; // 別グループの「ふたり」
-  let sharedPayeeId: number; // グループ全体
-  let memberPayeeId: number; // 一般メンバーの自分用
+  let sharedPayeeId: number; // 管理者が登録した支払い先
+  let memberPayeeId: number; // 一般メンバーが登録した支払い先
 
   beforeAll(async () => {
     owner = await createSignedInTestUser(admin, "payee-owner");
@@ -92,7 +92,7 @@ describe("支払い先", () => {
     await deleteTestUser(admin, outsider.id);
   });
 
-  it("I-41: グループ全体の支払い先は管理者だけ、自分用は本人だけが追加・変更・削除できる", async () => {
+  it("I-41: 支払い先は、管理者でも一般メンバーでも追加・変更・削除でき、他グループからは読み書きできない", async () => {
     const { data: shared, error: sharedError } = await owner.client
       .from("payees")
       .insert({ group_id: groupId, name: "myTOKYOGAS" })
@@ -101,173 +101,244 @@ describe("支払い先", () => {
     expect(sharedError).toBeNull();
     sharedPayeeId = shared!.id;
 
-    // 一般メンバーはグループ全体の支払い先を追加・変更できない
-    const { error: memberSharedError } = await member.client
-      .from("payees")
-      .insert({ group_id: groupId, name: "スーパー" });
-    expect(memberSharedError).not.toBeNull();
-    const { data: memberUpdated } = await member.client
-      .from("payees")
-      .update({ name: "変更" })
-      .eq("id", sharedPayeeId)
-      .select("id");
-    expect(memberUpdated ?? []).toEqual([]);
-
-    // 一般メンバーは自分用を追加できる。他の人の自分用としては追加できない
+    // 一般メンバーも追加できる
     const { data: own, error: ownError } = await member.client
       .from("payees")
-      .insert({ group_id: groupId, owner_user_id: member.id, name: "〇〇薬局" })
+      .insert({ group_id: groupId, name: "〇〇薬局" })
       .select("id")
       .single();
     expect(ownError).toBeNull();
     memberPayeeId = own!.id;
-    const { error: impersonateError } = await member.client
-      .from("payees")
-      .insert({ group_id: groupId, owner_user_id: owner.id, name: "なりすまし" });
-    expect(impersonateError).not.toBeNull();
 
-    // 相方（管理者でも）は、一般メンバーの自分用を読めるが変更・削除できない
-    const { data: ownerRead } = await owner.client.from("payees").select("id").eq("id", memberPayeeId);
-    expect(ownerRead).toHaveLength(1);
+    // 一般メンバーは、管理者が登録した支払い先も変更できる（逆も同じ）
+    const { data: memberUpdated } = await member.client
+      .from("payees")
+      .update({ name: "myTOKYOGAS（変更）" })
+      .eq("id", sharedPayeeId)
+      .select("name");
+    expect(memberUpdated).toEqual([{ name: "myTOKYOGAS（変更）" }]);
     const { data: ownerUpdated } = await owner.client
-      .from("payees")
-      .update({ is_hidden: true })
-      .eq("id", memberPayeeId)
-      .select("id");
-    expect(ownerUpdated ?? []).toEqual([]);
-    const { data: ownerDeleted } = await owner.client
-      .from("payees")
-      .delete()
-      .eq("id", memberPayeeId)
-      .select("id");
-    expect(ownerDeleted ?? []).toEqual([]);
-
-    // 本人は変更できる。グループ全体の支払い先には変えられない（登録者は変えられない）
-    const { data: renamed } = await member.client
       .from("payees")
       .update({ name: "〇〇ドラッグ" })
       .eq("id", memberPayeeId)
       .select("name");
-    expect(renamed).toEqual([{ name: "〇〇ドラッグ" }]);
-    const { error: ownerChangeError } = await member.client
-      .from("payees")
-      .update({ owner_user_id: owner.id })
-      .eq("id", memberPayeeId);
-    expect(ownerChangeError).not.toBeNull();
+    expect(ownerUpdated).toEqual([{ name: "〇〇ドラッグ" }]);
+    await owner.client.from("payees").update({ name: "myTOKYOGAS" }).eq("id", sharedPayeeId);
 
-    // 他グループからは読めず、他グループに自分用を追加することもできない
+    // 一般メンバーは、管理者が登録した支払い先も削除できる
+    const { data: temp } = await owner.client
+      .from("payees")
+      .insert({ group_id: groupId, name: "削除用" })
+      .select("id")
+      .single();
+    const { data: memberDeleted } = await member.client
+      .from("payees")
+      .delete()
+      .eq("id", temp!.id)
+      .select("id");
+    expect(memberDeleted).toHaveLength(1);
+
+    // 支払い先のグループは変えられない
+    const { error: groupChangeError } = await member.client
+      .from("payees")
+      .update({ group_id: otherGroupId })
+      .eq("id", memberPayeeId);
+    expect(groupChangeError).not.toBeNull();
+
+    // 他グループからは読めず、追加・変更・削除もできない
     const { data: outsiderRead } = await outsider.client
       .from("payees")
       .select("id")
       .eq("group_id", groupId);
     expect(outsiderRead).toEqual([]);
-    const { error: outsiderOwnError } = await outsider.client
+    const { error: outsiderInsertError } = await outsider.client
       .from("payees")
-      .insert({ group_id: groupId, owner_user_id: outsider.id, name: "他グループから" });
-    expect(outsiderOwnError).not.toBeNull();
+      .insert({ group_id: groupId, name: "他グループから" });
+    expect(outsiderInsertError).not.toBeNull();
+    const { data: outsiderUpdated } = await outsider.client
+      .from("payees")
+      .update({ name: "他グループから変更" })
+      .eq("id", sharedPayeeId)
+      .select("id");
+    expect(outsiderUpdated ?? []).toEqual([]);
+    const { data: outsiderDeleted } = await outsider.client
+      .from("payees")
+      .delete()
+      .eq("id", sharedPayeeId)
+      .select("id");
+    expect(outsiderDeleted ?? []).toEqual([]);
   });
 
-  it("I-42: 同じ一覧の中、グループ全体と自分用の間では名前が重複できず、ユーザーどうしの自分用では重複できる", async () => {
-    // グループ全体どうし
-    const { error: sharedDup } = await owner.client
+  it("I-42: 名前はグループの中で重複できず（誰が登録しても）、他グループとは重複できる", async () => {
+    const { error: sameUserDup } = await owner.client
       .from("payees")
       .insert({ group_id: groupId, name: "myTOKYOGAS" });
-    expect(sharedDup?.code).toBe("23505");
+    expect(sameUserDup?.code).toBe("23505");
 
-    // グループ全体にある名前は、自分用に登録できない（管理者・一般メンバーとも）
-    const { error: ownerOwnSameAsShared } = await owner.client
+    // 相方が登録した名前も登録できない
+    const { error: partnerDup } = await member.client
       .from("payees")
-      .insert({ group_id: groupId, owner_user_id: owner.id, name: "myTOKYOGAS" });
-    expect(ownerOwnSameAsShared?.code).toBe("23505");
-    expect(ownerOwnSameAsShared?.message).toContain("conflicts with a shared payee");
-    const { error: memberOwnSameAsShared } = await member.client
-      .from("payees")
-      .insert({ group_id: groupId, owner_user_id: member.id, name: "myTOKYOGAS" });
-    expect(memberOwnSameAsShared?.code).toBe("23505");
-
-    // ユーザーどうしの自分用は同じ名前でよい
-    const { error: ownerOwn } = await owner.client
-      .from("payees")
-      .insert({ group_id: groupId, owner_user_id: owner.id, name: "近所の店" });
-    expect(ownerOwn).toBeNull();
-    const { data: memberOwn, error: memberOwnError } = await member.client
-      .from("payees")
-      .insert({ group_id: groupId, owner_user_id: member.id, name: "近所の店" })
-      .select("id")
-      .single();
-    expect(memberOwnError).toBeNull();
-
-    // 同じユーザーの自分用どうし
-    const { error: ownDup } = await member.client
-      .from("payees")
-      .insert({ group_id: groupId, owner_user_id: member.id, name: "近所の店" });
-    expect(ownDup?.code).toBe("23505");
-
-    // 誰かの自分用にある名前は、グループ全体に登録できない
-    const { error: sharedSameAsOwn } = await owner.client
-      .from("payees")
-      .insert({ group_id: groupId, name: "近所の店" });
-    expect(sharedSameAsOwn?.code).toBe("23505");
-    expect(sharedSameAsOwn?.message).toContain("conflicts with an own payee");
+      .insert({ group_id: groupId, name: "myTOKYOGAS" });
+    expect(partnerDup?.code).toBe("23505");
 
     // 名前の変更でも同じ
     const { error: renameError } = await member.client
       .from("payees")
       .update({ name: "myTOKYOGAS" })
-      .eq("id", memberOwn!.id);
+      .eq("id", memberPayeeId);
     expect(renameError?.code).toBe("23505");
+
+    // 他グループには同じ名前を登録できる
+    const { error: otherGroupError } = await outsider.client
+      .from("payees")
+      .insert({ group_id: otherGroupId, name: "myTOKYOGAS" });
+    expect(otherGroupError).toBeNull();
   });
 
-  it("I-43: 既定値は、カテゴリの内訳・グループの相手・グループのメンバーでなければDBで拒否される", async () => {
-    // 正しい既定値は保存できる
-    const { error: okError } = await owner.client
+  it("I-53: 表示／非表示は自分の分だけ切り替えられ、相方・他グループの分は変えられない", async () => {
+    // 新しく登録した支払い先は、誰も非表示にしていない（全員に表示）
+    const { data: initial } = await owner.client
+      .from("payee_hidden_members")
+      .select("user_id")
+      .eq("payee_id", sharedPayeeId);
+    expect(initial).toEqual([]);
+
+    // 一般メンバーが自分の分を非表示にする。相方（管理者）からも読める
+    const { error: hideError } = await member.client
+      .from("payee_hidden_members")
+      .insert({ payee_id: sharedPayeeId, user_id: member.id });
+    expect(hideError).toBeNull();
+    const { data: ownerRead } = await owner.client
+      .from("payee_hidden_members")
+      .select("user_id")
+      .eq("payee_id", sharedPayeeId);
+    expect(ownerRead).toEqual([{ user_id: member.id }]);
+
+    // 相方の分は非表示にできず、相方の非表示を消すこともできない（管理者でも）
+    const { error: forPartnerError } = await member.client
+      .from("payee_hidden_members")
+      .insert({ payee_id: sharedPayeeId, user_id: owner.id });
+    expect(forPartnerError).not.toBeNull();
+    const { data: ownerDeleted } = await owner.client
+      .from("payee_hidden_members")
+      .delete()
+      .eq("payee_id", sharedPayeeId)
+      .eq("user_id", member.id)
+      .select("user_id");
+    expect(ownerDeleted ?? []).toEqual([]);
+
+    // 他グループからは読めず、他グループの支払い先を非表示にすることもできない
+    const { data: outsiderRead } = await outsider.client
+      .from("payee_hidden_members")
+      .select("user_id")
+      .eq("payee_id", sharedPayeeId);
+    expect(outsiderRead).toEqual([]);
+    const { error: outsiderHideError } = await outsider.client
+      .from("payee_hidden_members")
+      .insert({ payee_id: sharedPayeeId, user_id: outsider.id });
+    expect(outsiderHideError).not.toBeNull();
+
+    // 本人は表示に戻せる
+    const { data: unhidden } = await member.client
+      .from("payee_hidden_members")
+      .delete()
+      .eq("payee_id", sharedPayeeId)
+      .eq("user_id", member.id)
+      .select("user_id");
+    expect(unhidden).toHaveLength(1);
+  });
+
+  it("I-43: 既定値は、カテゴリの内訳・グループの相手・グループのメンバーでなければDBで拒否され、登録後もメンバー全員が変更できる", async () => {
+    // 正しい既定値で登録できる（登録したときの内容が共通の既定値になる）
+    const { data: created, error: okError } = await owner.client
       .from("payees")
-      .update({
+      .insert({
+        group_id: groupId,
+        name: "既定値テスト",
         default_category_id: utilityId,
         default_breakdown_id: gasBreakdownId,
         default_counterpart_id: futariId,
         default_owner_joint: true,
+        default_item_name: "ガス代",
       })
-      .eq("id", sharedPayeeId);
+      .select("id")
+      .single();
     expect(okError).toBeNull();
 
+    const insertWith = (name: string, values: Record<string, unknown>) =>
+      owner.client.from("payees").insert({ group_id: groupId, name, ...values });
+
     // 既定値のカテゴリと違うカテゴリの内訳
-    const { error: breakdownError } = await owner.client
-      .from("payees")
-      .update({ default_category_id: foodId, default_breakdown_id: gasBreakdownId })
-      .eq("id", sharedPayeeId);
+    const { error: breakdownError } = await insertWith("不正1", {
+      default_category_id: foodId,
+      default_breakdown_id: gasBreakdownId,
+    });
     expect(breakdownError).not.toBeNull();
-
     // カテゴリなしの内訳
-    const { error: noCategoryError } = await owner.client
-      .from("payees")
-      .update({ default_category_id: null, default_breakdown_id: gasBreakdownId })
-      .eq("id", sharedPayeeId);
+    const { error: noCategoryError } = await insertWith("不正2", {
+      default_breakdown_id: gasBreakdownId,
+    });
     expect(noCategoryError).not.toBeNull();
-
     // 他グループの相手
-    const { error: counterpartError } = await owner.client
-      .from("payees")
-      .update({ default_counterpart_id: otherFutariId })
-      .eq("id", sharedPayeeId);
+    const { error: counterpartError } = await insertWith("不正3", {
+      default_counterpart_id: otherFutariId,
+    });
     expect(counterpartError).not.toBeNull();
-
     // グループのメンバーでない帰属先、共同とメンバーの両方
-    const { error: ownerError } = await owner.client
-      .from("payees")
-      .update({ default_owner_joint: false, default_owner_user_id: outsider.id })
-      .eq("id", sharedPayeeId);
+    const { error: ownerError } = await insertWith("不正4", {
+      default_owner_user_id: outsider.id,
+    });
     expect(ownerError).not.toBeNull();
-    const { error: bothError } = await owner.client
-      .from("payees")
-      .update({ default_owner_joint: true, default_owner_user_id: member.id })
-      .eq("id", sharedPayeeId);
+    const { error: bothError } = await insertWith("不正5", {
+      default_owner_joint: true,
+      default_owner_user_id: member.id,
+    });
     expect(bothError).not.toBeNull();
+
+    // 登録後も、一般メンバーが共通の既定値を変更できる（変更後も整合性は確かめる）。名前も変更できる
+    const { error: memberInvalidError } = await member.client
+      .from("payees")
+      .update({ default_category_id: foodId })
+      .eq("id", created!.id);
+    expect(memberInvalidError).not.toBeNull(); // 食費とガスの内訳の組み合わせは不正
+    const { error: memberChangeError } = await member.client
+      .from("payees")
+      .update({
+        default_counterpart_id: null,
+        default_owner_joint: false,
+        default_owner_user_id: member.id,
+        default_item_name: "ガス料金",
+      })
+      .eq("id", created!.id);
+    expect(memberChangeError).toBeNull();
+    const { error: renameError } = await member.client
+      .from("payees")
+      .update({ name: "既定値テスト（改名）" })
+      .eq("id", created!.id);
+    expect(renameError).toBeNull();
+    // 他グループからは変更できない
+    const { data: outsiderUpdated } = await outsider.client
+      .from("payees")
+      .update({ default_item_name: "他グループ" })
+      .eq("id", created!.id)
+      .select("id");
+    expect(outsiderUpdated ?? []).toEqual([]);
+    // 管理者も変更できる（変更を戻して、下で登録時の値を確かめる）
+    const { error: adminRevertError } = await owner.client
+      .from("payees")
+      .update({
+        default_counterpart_id: futariId,
+        default_owner_joint: true,
+        default_owner_user_id: null,
+        default_item_name: "ガス代",
+      })
+      .eq("id", created!.id);
+    expect(adminRevertError).toBeNull();
 
     const { data } = await admin
       .from("payees")
-      .select("default_category_id, default_breakdown_id, default_counterpart_id, default_owner_joint, default_owner_user_id")
-      .eq("id", sharedPayeeId)
+      .select("default_category_id, default_breakdown_id, default_counterpart_id, default_owner_joint, default_owner_user_id, default_item_name")
+      .eq("id", created!.id)
       .single();
     expect(data).toEqual({
       default_category_id: utilityId,
@@ -275,19 +346,34 @@ describe("支払い先", () => {
       default_counterpart_id: futariId,
       default_owner_joint: true,
       default_owner_user_id: null,
+      default_item_name: "ガス代",
     });
   });
 
-  it("I-44: 既定値の内訳を削除すると、支払い先の内訳の既定値だけが空になる", async () => {
+  it("I-44: 既定値の内訳を削除すると、共通・自分用とも内訳の既定値だけが空になる", async () => {
     const { data: temp } = await owner.client
       .from("category_breakdowns")
       .insert({ group_id: groupId, category_id: utilityId, name: "電気" })
       .select("id")
       .single();
-    await owner.client
+    const { data: payee, error: payeeError } = await owner.client
       .from("payees")
-      .update({ default_breakdown_id: temp!.id })
-      .eq("id", sharedPayeeId);
+      .insert({
+        group_id: groupId,
+        name: "内訳削除テスト",
+        default_category_id: utilityId,
+        default_breakdown_id: temp!.id,
+      })
+      .select("id")
+      .single();
+    expect(payeeError).toBeNull();
+    const { error: ownError } = await member.client.from("payee_member_defaults").insert({
+      payee_id: payee!.id,
+      user_id: member.id,
+      default_category_id: utilityId,
+      default_breakdown_id: temp!.id,
+    });
+    expect(ownError).toBeNull();
 
     const { error: deleteError } = await owner.client
       .from("category_breakdowns")
@@ -295,15 +381,24 @@ describe("支払い先", () => {
       .eq("id", temp!.id);
     expect(deleteError).toBeNull();
 
-    const { data } = await admin
-      .from("payees")
-      .select("default_category_id, default_breakdown_id")
-      .eq("id", sharedPayeeId)
-      .single();
-    expect(data).toEqual({ default_category_id: utilityId, default_breakdown_id: null });
+    const [{ data: common }, { data: own }] = await Promise.all([
+      admin
+        .from("payees")
+        .select("default_category_id, default_breakdown_id")
+        .eq("id", payee!.id)
+        .single(),
+      admin
+        .from("payee_member_defaults")
+        .select("default_category_id, default_breakdown_id")
+        .eq("payee_id", payee!.id)
+        .eq("user_id", member.id)
+        .single(),
+    ]);
+    expect(common).toEqual({ default_category_id: utilityId, default_breakdown_id: null });
+    expect(own).toEqual({ default_category_id: utilityId, default_breakdown_id: null });
   });
 
-  it("I-45: レシートで使われている支払い先は削除できず、非表示にはできる", async () => {
+  it("I-45: レシートで使われている支払い先は誰も削除できず、自分の分を非表示にはできる", async () => {
     const { error: receiptError } = await member.client.from("receipts").insert({
       id: crypto.randomUUID(),
       group_id: groupId,
@@ -323,42 +418,53 @@ describe("支払い先", () => {
       .eq("id", memberPayeeId);
     expect(deleteError?.code).toBe("23503");
 
-    const { data: hidden, error: hideError } = await member.client
+    // 相方も削除できない（使われているため）。使わない人は自分の分を非表示にできる
+    const { error: partnerDeleteError } = await owner.client
       .from("payees")
-      .update({ is_hidden: true })
-      .eq("id", memberPayeeId)
-      .select("is_hidden");
+      .delete()
+      .eq("id", memberPayeeId);
+    expect(partnerDeleteError?.code).toBe("23503");
+    const { error: hideError } = await owner.client
+      .from("payee_hidden_members")
+      .insert({ payee_id: memberPayeeId, user_id: owner.id });
     expect(hideError).toBeNull();
-    expect(hidden).toEqual([{ is_hidden: true }]);
   });
 
-  it("I-46: 既定値のタグは支払い先と同じ権限で設定でき、他グループのタグは拒否され、タグを削除すると既定値から外れる", async () => {
+  it("I-46: 既定値のタグはメンバー全員が設定・入れ替え（削除）でき、他グループのタグは拒否され、タグを削除すると既定値から外れる", async () => {
     const [{ data: tag }, { data: otherTag }] = await Promise.all([
       member.client.from("tags").insert({ group_id: groupId, name: "支払い先テストタグ" }).select("id").single(),
       outsider.client.from("tags").insert({ group_id: otherGroupId, name: "他グループタグ" }).select("id").single(),
     ]);
 
-    // グループ全体の支払い先：管理者は設定でき、一般メンバーは設定できない
-    const { error: ownerError } = await owner.client
+    // 一般メンバーも、管理者が登録した支払い先の既定値のタグを登録できる
+    const { error: memberError } = await member.client
       .from("payee_default_tags")
       .insert({ payee_id: sharedPayeeId, tag_id: tag!.id });
-    expect(ownerError).toBeNull();
-    const { error: memberSharedError } = await member.client
-      .from("payee_default_tags")
-      .insert({ payee_id: sharedPayeeId, tag_id: tag!.id });
-    expect(memberSharedError).not.toBeNull();
-
-    // 自分用の支払い先：本人は設定でき、相方（管理者）は設定できない
-    const { error: memberOwnError } = await member.client
-      .from("payee_default_tags")
-      .insert({ payee_id: memberPayeeId, tag_id: tag!.id });
-    expect(memberOwnError).toBeNull();
-    const { data: ownerDeleted } = await owner.client
+    expect(memberError).toBeNull();
+    // 一般メンバーも消せる（入れ替えのため）。確かめた後、元に戻す
+    const { data: memberDeleted } = await member.client
       .from("payee_default_tags")
       .delete()
-      .eq("payee_id", memberPayeeId)
+      .eq("payee_id", sharedPayeeId)
       .select("tag_id");
-    expect(ownerDeleted ?? []).toEqual([]);
+    expect(memberDeleted).toHaveLength(1);
+    // 他グループからは消せない
+    const { data: outsiderDeleted } = await outsider.client
+      .from("payee_default_tags")
+      .delete()
+      .eq("payee_id", sharedPayeeId)
+      .select("tag_id");
+    expect(outsiderDeleted ?? []).toEqual([]);
+    const { error: reinsertError } = await owner.client
+      .from("payee_default_tags")
+      .insert({ payee_id: sharedPayeeId, tag_id: tag!.id });
+    expect(reinsertError).toBeNull();
+
+    // 他グループからは設定できない
+    const { error: outsiderError } = await outsider.client
+      .from("payee_default_tags")
+      .insert({ payee_id: sharedPayeeId, tag_id: otherTag!.id });
+    expect(outsiderError).not.toBeNull();
 
     // 他グループのタグは設定できない
     const { error: otherTagError } = await owner.client
@@ -373,13 +479,152 @@ describe("支払い先", () => {
       .eq("payee_id", sharedPayeeId);
     expect(outsiderRead).toEqual([]);
 
-    // タグを削除すると、支払い先の既定値からも外れる（明細で使われていないタグ）
+    // 自分用の既定値のタグも付けておく
+    await member.client
+      .from("payee_member_defaults")
+      .upsert({ payee_id: sharedPayeeId, user_id: member.id }, { onConflict: "payee_id,user_id" });
+    const { error: ownTagError } = await member.client
+      .from("payee_member_default_tags")
+      .insert({ payee_id: sharedPayeeId, user_id: member.id, tag_id: tag!.id });
+    expect(ownTagError).toBeNull();
+
+    // タグを削除すると、共通・自分用の既定値からも外れる（明細で使われていないタグ）
     const { error: deleteError } = await member.client.from("tags").delete().eq("id", tag!.id);
     expect(deleteError).toBeNull();
-    const { data: remaining } = await admin
-      .from("payee_default_tags")
-      .select("payee_id")
-      .eq("tag_id", tag!.id);
+    const [{ data: remaining }, { data: ownRemaining }] = await Promise.all([
+      admin.from("payee_default_tags").select("payee_id").eq("tag_id", tag!.id),
+      admin.from("payee_member_default_tags").select("payee_id").eq("tag_id", tag!.id),
+    ]);
     expect(remaining).toEqual([]);
+    expect(ownRemaining).toEqual([]);
+    await admin.from("payee_member_defaults").delete().eq("payee_id", sharedPayeeId);
+  });
+
+  it("I-55: 自分用の既定値は自分の分だけ作成・変更・削除でき、相方は読めるが変えられず、他グループからは読み書きできない", async () => {
+    // 本人（一般メンバー）は、管理者が登録した支払い先に自分用の既定値を作れる
+    const { error: createError } = await member.client.from("payee_member_defaults").insert({
+      payee_id: sharedPayeeId,
+      user_id: member.id,
+      default_category_id: utilityId,
+      default_breakdown_id: gasBreakdownId,
+      default_owner_user_id: member.id,
+    });
+    expect(createError).toBeNull();
+
+    // 相方は読める
+    const { data: ownerRead } = await owner.client
+      .from("payee_member_defaults")
+      .select("user_id, default_owner_user_id")
+      .eq("payee_id", sharedPayeeId);
+    expect(ownerRead).toEqual([{ user_id: member.id, default_owner_user_id: member.id }]);
+
+    // 相方は、本人の分を変更・削除できず、本人の分として作ることもできない
+    const { data: ownerUpdated } = await owner.client
+      .from("payee_member_defaults")
+      .update({ default_owner_joint: true, default_owner_user_id: null })
+      .eq("payee_id", sharedPayeeId)
+      .eq("user_id", member.id)
+      .select("user_id");
+    expect(ownerUpdated ?? []).toEqual([]);
+    const { data: ownerDeleted } = await owner.client
+      .from("payee_member_defaults")
+      .delete()
+      .eq("payee_id", sharedPayeeId)
+      .eq("user_id", member.id)
+      .select("user_id");
+    expect(ownerDeleted ?? []).toEqual([]);
+    const { error: impersonateError } = await owner.client
+      .from("payee_member_default_tags")
+      .insert({ payee_id: sharedPayeeId, user_id: member.id, tag_id: 1 });
+    expect(impersonateError).not.toBeNull();
+
+    // 他グループからは読めず、他グループの支払い先に自分用を作ることもできない
+    const { data: outsiderRead } = await outsider.client
+      .from("payee_member_defaults")
+      .select("user_id")
+      .eq("payee_id", sharedPayeeId);
+    expect(outsiderRead).toEqual([]);
+    const { error: outsiderError } = await outsider.client
+      .from("payee_member_defaults")
+      .insert({ payee_id: sharedPayeeId, user_id: outsider.id });
+    expect(outsiderError).not.toBeNull();
+    // service role でも、グループのメンバーでない人の自分用は作れない（DBのトリガー）
+    const { error: notMemberError } = await admin
+      .from("payee_member_defaults")
+      .insert({ payee_id: sharedPayeeId, user_id: outsider.id });
+    expect(notMemberError).not.toBeNull();
+
+    // 既定値の整合性は共通の既定値と同じく確かめる
+    for (const values of [
+      { default_category_id: foodId, default_breakdown_id: gasBreakdownId },
+      { default_category_id: null, default_breakdown_id: gasBreakdownId },
+      { default_counterpart_id: otherFutariId },
+      { default_owner_user_id: outsider.id },
+      { default_owner_joint: true, default_owner_user_id: member.id },
+    ]) {
+      const { error } = await member.client
+        .from("payee_member_defaults")
+        .update(values)
+        .eq("payee_id", sharedPayeeId)
+        .eq("user_id", member.id);
+      expect(error, JSON.stringify(values)).not.toBeNull();
+    }
+
+    // 本人は変更・削除（共通に戻す）できる（商品名の既定値も自分用に持てる）
+    const { data: updated } = await member.client
+      .from("payee_member_defaults")
+      .update({ default_counterpart_id: futariId, default_item_name: "Bのガス代" })
+      .eq("payee_id", sharedPayeeId)
+      .eq("user_id", member.id)
+      .select("default_counterpart_id, default_item_name");
+    expect(updated).toEqual([{ default_counterpart_id: futariId, default_item_name: "Bのガス代" }]);
+    const { data: reset } = await member.client
+      .from("payee_member_defaults")
+      .delete()
+      .eq("payee_id", sharedPayeeId)
+      .eq("user_id", member.id)
+      .select("user_id");
+    expect(reset).toHaveLength(1);
+  });
+
+  it("I-56: メンバーがグループから外れると、その人の自分用の既定値が削除される", async () => {
+    // グループは2人までのため、メンバーが1人の他グループに加わって確かめる
+    const leaver = await createSignedInTestUser(admin, "payee-leaver");
+    try {
+      const { error: inviteError } = await outsider.client.from("group_members").insert({
+        group_id: otherGroupId,
+        invited_email: leaver.email.toLowerCase(),
+        role: "member",
+      });
+      expect(inviteError).toBeNull();
+      const { error: linkError } = await leaver.client.rpc("link_pending_group_memberships");
+      expect(linkError).toBeNull();
+
+      const { data: payee, error: payeeError } = await outsider.client
+        .from("payees")
+        .insert({ group_id: otherGroupId, name: "脱退テスト" })
+        .select("id")
+        .single();
+      expect(payeeError).toBeNull();
+      const { error: createError } = await leaver.client
+        .from("payee_member_defaults")
+        .insert({ payee_id: payee!.id, user_id: leaver.id, default_owner_joint: true });
+      expect(createError).toBeNull();
+
+      const { error: leaveError } = await admin
+        .from("group_members")
+        .delete()
+        .eq("group_id", otherGroupId)
+        .eq("user_id", leaver.id);
+      expect(leaveError).toBeNull();
+
+      const { data } = await admin
+        .from("payee_member_defaults")
+        .select("user_id")
+        .eq("payee_id", payee!.id);
+      expect(data).toEqual([]);
+    } finally {
+      await deleteTestUser(admin, leaver.id);
+    }
   });
 });

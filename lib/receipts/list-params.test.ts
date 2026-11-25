@@ -16,7 +16,7 @@ const master = {
   ],
   breakdowns: [{ id: 11, categoryId: 1, name: "外食" }],
   counterparts: [{ id: 22, name: "友人" }],
-  payees: [{ id: 41, name: "A病院", section: "shared" as const, sectionLabel: "グループ全体" }],
+  payees: [{ id: 41, name: "A病院" }],
 };
 const members = [
   { userId: "user-a", displayName: "A" },

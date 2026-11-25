@@ -108,14 +108,12 @@ describe("settings/queries", () => {
     ]);
   });
 
-  it("U-110: 支払い先を画面用の形（グループ全体・自分用・非表示・既定値・既定値のタグ・別名）に変換する", async () => {
+  it("U-110: 支払い先を画面用の形（メンバーごとの非表示・既定値・既定値のタグ・別名）に変換する", async () => {
     const supabase = fakeSupabase({
       payees: [
         {
           id: 1,
           name: "myTOKYOGAS",
-          owner_user_id: null,
-          is_hidden: false,
           default_category_id: 4,
           default_breakdown_id: null,
           default_counterpart_id: 3,
@@ -126,12 +124,11 @@ describe("settings/queries", () => {
             { id: 12, name: "東京ガス" },
             { id: 11, name: "TOKYO GAS" },
           ],
+          payee_hidden_members: [],
         },
         {
           id: 2,
           name: "〇〇薬局",
-          owner_user_id: "user-b",
-          is_hidden: true,
           default_category_id: null,
           default_breakdown_id: null,
           default_counterpart_id: null,
@@ -139,6 +136,7 @@ describe("settings/queries", () => {
           default_owner_user_id: "user-b",
           payee_default_tags: [],
           payee_aliases: [],
+          payee_hidden_members: [{ user_id: "user-a" }, { user_id: "user-b" }],
         },
       ],
     });
@@ -147,15 +145,16 @@ describe("settings/queries", () => {
       {
         id: 1,
         name: "myTOKYOGAS",
-        ownerUserId: null,
-        isHidden: false,
+        hiddenUserIds: [],
         defaults: {
           categoryId: "4",
           breakdownId: "",
           counterpartId: "3",
           ownerUserId: "joint",
           tagIds: ["7"],
+          itemName: "",
         },
+        memberDefaults: [],
         // 別名は名前順
         aliases: [
           { id: 11, name: "TOKYO GAS" },
@@ -165,15 +164,16 @@ describe("settings/queries", () => {
       {
         id: 2,
         name: "〇〇薬局",
-        ownerUserId: "user-b",
-        isHidden: true,
+        hiddenUserIds: ["user-a", "user-b"],
         defaults: {
           categoryId: "",
           breakdownId: "",
           counterpartId: "",
           ownerUserId: "user-b",
           tagIds: [],
+          itemName: "",
         },
+        memberDefaults: [],
         aliases: [],
       },
     ]);

@@ -123,12 +123,19 @@ describe("グループベース管理画面機能のRLS/RPC", () => {
     expect(visibleFromB).toEqual([]);
   });
 
-  it("I-05: 一般メンバーは支払い先をINSERTできない", async () => {
+  it("I-05: 一般メンバーも自グループの支払い先をINSERTでき、他グループにはINSERTできない", async () => {
+    // 支払い先の登録・編集・削除はメンバー全員ができる（docs/requirements.md「支払い先の一本化」）
     const { error } = await memberA1.client.from("payees").insert({
       group_id: groupAId,
-      name: "一般メンバーが登録しようとした支払い先",
+      name: "一般メンバーが登録した支払い先",
     });
-    expect(error).not.toBeNull();
+    expect(error).toBeNull();
+
+    const { data } = await memberA1.client
+      .from("payees")
+      .insert({ group_id: groupBId, name: "一般メンバーの越境登録" })
+      .select("id");
+    expect(data === null || data.length === 0).toBe(true);
   });
 
   it("I-06: 管理者は他グループのgroup_idを指定して支払い先を書き込めない", async () => {

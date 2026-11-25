@@ -9,7 +9,7 @@ import {
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // 分析拡充 F5：支払い先の別名の権限（RLS・add_payee_alias）・重複のルール・過去のレシートの切り替えを検証する
-// （docs/分析拡充/要件定義書.md 4.7節、詳細設計書 F5）。
+// （docs/分析拡充/要件定義書.md 4.7節、詳細設計書 F5。権限と切り替え範囲は docs/requirements.md「支払い先の一本化」）。
 describe("支払い先の別名", () => {
   const admin = createServiceRoleClient();
 
@@ -21,8 +21,8 @@ describe("支払い先の別名", () => {
   let foodId: number;
   let expenseTypeId: number;
   let futariId: number;
-  let okId: number; // グループ全体「オーケー」
-  let memberPayeeId: number; // 一般メンバーの自分用「〇〇薬局」
+  let okId: number; // 管理者が登録した「オーケー」
+  let memberPayeeId: number; // 一般メンバーが登録した「〇〇薬局」
 
   // service_role でレシートを入れる（精算確定済みの月にも入れられるように RLS を通さない）
   const insertReceipt = async (values: {
@@ -116,7 +116,7 @@ describe("支払い先の別名", () => {
 
     const { data: own, error: ownError } = await member.client
       .from("payees")
-      .insert({ group_id: groupId, owner_user_id: member.id, name: "〇〇薬局" })
+      .insert({ group_id: groupId, name: "〇〇薬局" })
       .select("id")
       .single();
     if (ownError) throw ownError;
@@ -135,36 +135,29 @@ describe("支払い先の別名", () => {
     await deleteTestUser(admin, outsider.id);
   });
 
-  it("I-48: 別名は支払い先と同じ権限で追加・削除でき、直接の追加はできず、他グループからは読めない", async () => {
-    // グループ全体の支払い先：管理者は追加できる。一般メンバー・他グループは追加できない
+  it("I-48: 別名はグループのメンバー全員が追加・削除でき、直接の追加はできず、他グループからは読み書きできない", async () => {
+    // 管理者も一般メンバーも追加できる（誰が登録した支払い先でも）。他グループは追加できない
     const { data: added, error: addError } = await owner.client.rpc("add_payee_alias", {
       p_payee_id: okId,
       p_name: "OK STORE",
     });
     expect(addError).toBeNull();
     expect(added).toMatchObject({ name: "OK STORE", converted: 0 });
-    const { error: memberSharedError } = await member.client.rpc("add_payee_alias", {
+    const { error: memberError } = await member.client.rpc("add_payee_alias", {
       p_payee_id: okId,
       p_name: "一般メンバーから",
     });
-    expect(memberSharedError?.code).toBe("42501");
+    expect(memberError).toBeNull();
+    const { error: ownerToMemberPayeeError } = await owner.client.rpc("add_payee_alias", {
+      p_payee_id: memberPayeeId,
+      p_name: "〇〇薬局 駅前店",
+    });
+    expect(ownerToMemberPayeeError).toBeNull();
     const { error: outsiderError } = await outsider.client.rpc("add_payee_alias", {
       p_payee_id: okId,
       p_name: "他グループから",
     });
     expect(outsiderError?.code).toBe("P0002");
-
-    // 自分用の支払い先：本人は追加でき、相方（管理者でも）は追加できない
-    const { error: memberOwnError } = await member.client.rpc("add_payee_alias", {
-      p_payee_id: memberPayeeId,
-      p_name: "〇〇薬局 駅前店",
-    });
-    expect(memberOwnError).toBeNull();
-    const { error: ownerOwnError } = await owner.client.rpc("add_payee_alias", {
-      p_payee_id: memberPayeeId,
-      p_name: "相方から",
-    });
-    expect(ownerOwnError?.code).toBe("42501");
 
     // 直接の追加は RLS で拒否される（過去のレシートの切り替えを飛ばさないよう、RPC からだけ追加する）
     const { error: directError } = await owner.client
@@ -177,36 +170,32 @@ describe("支払い先の別名", () => {
       .from("payee_aliases")
       .select("name")
       .eq("group_id", groupId);
-    expect((memberRead ?? []).map((a) => a.name).sort()).toEqual(["OK STORE", "〇〇薬局 駅前店"]);
+    expect((memberRead ?? []).map((a) => a.name).sort()).toEqual(
+      ["OK STORE", "〇〇薬局 駅前店", "一般メンバーから"].sort()
+    );
     const { data: outsiderRead } = await outsider.client
       .from("payee_aliases")
       .select("name")
       .eq("group_id", groupId);
     expect(outsiderRead).toEqual([]);
 
-    // 削除：一般メンバーはグループ全体の別名を消せず、本人は自分用の別名を消せる
+    // 削除：他グループは消せない。一般メンバー・管理者は、誰が追加した別名でも消せる
+    const { data: outsiderDeleted } = await outsider.client
+      .from("payee_aliases")
+      .delete()
+      .eq("name", "OK STORE")
+      .select("id");
+    expect(outsiderDeleted ?? []).toEqual([]);
     const { data: memberDeleted } = await member.client
       .from("payee_aliases")
       .delete()
-      .eq("name", "OK STORE")
+      .in("name", ["OK STORE", "一般メンバーから"])
       .select("id");
-    expect(memberDeleted ?? []).toEqual([]);
-    const { data: ownerDeletedOwn } = await owner.client
-      .from("payee_aliases")
-      .delete()
-      .eq("name", "〇〇薬局 駅前店")
-      .select("id");
-    expect(ownerDeletedOwn ?? []).toEqual([]);
-    const { data: memberDeletedOwn } = await member.client
-      .from("payee_aliases")
-      .delete()
-      .eq("name", "〇〇薬局 駅前店")
-      .select("id");
-    expect(memberDeletedOwn).toHaveLength(1);
+    expect(memberDeleted).toHaveLength(2);
     const { data: ownerDeleted } = await owner.client
       .from("payee_aliases")
       .delete()
-      .eq("name", "OK STORE")
+      .eq("name", "〇〇薬局 駅前店")
       .select("id");
     expect(ownerDeleted).toHaveLength(1);
   });
@@ -219,14 +208,14 @@ describe("支払い先の別名", () => {
     expect(trimError).toBeNull();
     expect(trimmed).toMatchObject({ name: "オーケー青葉台店" });
 
-    // 同じ別名は、別の支払い先（自分用）にも登録できない
+    // 同じ別名は、別の支払い先にも登録できない
     const { error: dupError } = await member.client.rpc("add_payee_alias", {
       p_payee_id: memberPayeeId,
       p_name: "オーケー青葉台店",
     });
     expect(dupError?.code).toBe("23505");
 
-    // 登録済みの支払い先の名前（グループ全体・自分用）は別名にできない
+    // 登録済みの支払い先の名前は別名にできない
     const { error: sameAsShared } = await member.client.rpc("add_payee_alias", {
       p_payee_id: memberPayeeId,
       p_name: "オーケー",
@@ -320,19 +309,24 @@ describe("支払い先の別名", () => {
     expect(await receiptPayee(target)).toEqual({ payee_id: okId, payee_name: "オーケー" });
   });
 
-  it("I-51: 自分用の支払い先の別名で切り替えるのは、本人が登録したレシートだけ", async () => {
+  it("I-51: 別名で切り替えるのはグループ全員のレシート（誰が登録したか・誰が非表示にしているかによらない）", async () => {
     const mine = await insertReceipt({ payeeName: "〇〇ドラッグ", createdBy: member.id });
     const partners = await insertReceipt({ payeeName: "〇〇ドラッグ", createdBy: owner.id });
+    // 相方（管理者）がこの支払い先を非表示にしていても、相方のレシートを切り替える
+    const { error: hideError } = await owner.client
+      .from("payee_hidden_members")
+      .insert({ payee_id: memberPayeeId, user_id: owner.id });
+    expect(hideError).toBeNull();
 
     const { data, error } = await member.client.rpc("add_payee_alias", {
       p_payee_id: memberPayeeId,
       p_name: "〇〇ドラッグ",
     });
     expect(error).toBeNull();
-    expect(data).toMatchObject({ converted: 1 });
+    expect(data).toMatchObject({ converted: 2 });
 
     expect(await receiptPayee(mine)).toEqual({ payee_id: memberPayeeId, payee_name: "〇〇薬局" });
-    expect(await receiptPayee(partners)).toEqual({ payee_id: null, payee_name: "〇〇ドラッグ" });
+    expect(await receiptPayee(partners)).toEqual({ payee_id: memberPayeeId, payee_name: "〇〇薬局" });
   });
 
   it("I-52: used_setting_ids は、グループのレシートで使われている支払い先・内訳・相手・タグだけを返し、他グループには返さない", async () => {

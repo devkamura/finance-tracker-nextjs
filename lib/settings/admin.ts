@@ -47,8 +47,8 @@ export async function requireGroupMember(): Promise<
 
 export type MembershipContext = AdminContext & { userId: string; isAdmin: boolean };
 
-// 設定画面のうち、対象によって編集できる人が変わる操作（支払い先：グループ全体は管理者、
-// 自分用は登録したユーザー本人）で使う、ログイン・グループ所属の確認。権限の判定は呼び出し側で行う。
+// 設定画面のうち、操作したユーザーが誰かを使う操作（支払い先：メンバー全員が編集でき、
+// 表示／非表示は自分の分だけ切り替える）で使う、ログイン・グループ所属の確認。
 // 最終的な防御はDBのRLSが担う。
 export async function requireGroupMembership(): Promise<
   { ok: true; context: MembershipContext } | { ok: false; error: string }

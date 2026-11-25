@@ -59,7 +59,7 @@ export type DimensionMaster = {
   categories: AnalyticsCategory[];
   breakdowns: AnalyticsBreakdown[];
   counterparts: AnalyticsCounterpart[];
-  payees: AnalyticsPayee[]; // 見出しの順（グループ全体 → 自分用 → 相方の自分用）
+  payees: AnalyticsPayee[]; // 名前順
 };
 
 export type CostTypeMap = Map<number, CostType>;
@@ -194,7 +194,7 @@ export function dimensionOptions(
       return COST_TYPES.map((t) => ({ key: t, label: COST_TYPE_LABELS[t] }));
     case "payee":
       return [
-        ...master.payees.map((p) => ({ key: String(p.id), label: p.name, group: p.sectionLabel })),
+        ...master.payees.map((p) => ({ key: String(p.id), label: p.name })),
         { key: UNREGISTERED_PAYEE_KEY, label: UNREGISTERED_PAYEE_LABEL },
       ];
     case "counterpart":

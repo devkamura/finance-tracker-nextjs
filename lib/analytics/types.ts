@@ -49,7 +49,7 @@ export type AnalyticsData = {
   categories: AnalyticsCategory[];
   breakdowns: AnalyticsBreakdown[];
   counterparts: AnalyticsCounterpart[];
-  payees: AnalyticsPayee[]; // 支払い先の選択肢（見出しの順。lib/analytics/payees.ts）
+  payees: AnalyticsPayee[]; // 支払い先の選択肢（名前順。lib/analytics/payees.ts）
   members: AnalyticsMember[];
   rows: AnalyticsRow[];
 };

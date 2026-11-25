@@ -243,7 +243,7 @@ describe("getAnalyticsData", () => {
     const lastPage = [buildReceipt({ id: "last", amount: 1, details: [{ price: 1 }] })];
     const { client, calls } = fakeSupabase([fullPage, lastPage]);
 
-    const data = await getAnalyticsData(client, "group-1", USER_A, new Date(2026, 9, 3));
+    const data = await getAnalyticsData(client, "group-1", new Date(2026, 9, 3));
 
     expect(calls.range).toEqual([
       [0, ANALYTICS_PAGE_SIZE - 1],
@@ -257,7 +257,7 @@ describe("getAnalyticsData", () => {
   it("U-67: 取得条件が当月を含む12ヶ月の範囲になり、画面用のデータを返す", async () => {
     const { client, calls } = fakeSupabase([[]]);
 
-    const data = await getAnalyticsData(client, "group-1", USER_A, new Date(2026, 9, 3, 8, 0));
+    const data = await getAnalyticsData(client, "group-1", new Date(2026, 9, 3, 8, 0));
 
     expect(calls.gte).toEqual([new Date(2025, 10, 1).toISOString()]);
     expect(calls.lt).toEqual([new Date(2026, 10, 1).toISOString()]);
@@ -274,21 +274,21 @@ describe("getAnalyticsData", () => {
     ]);
   });
 
-  it("U-117: 内訳（非表示も含む）・相手・支払い先の選択肢（見出しの順。非表示は使われているものだけ）を返す", async () => {
-    const payee = (id: number, name: string, ownerUserId: string | null, isHidden = false): Payee => ({
+  it("U-117: 内訳（非表示も含む）・相手・支払い先の選択肢（名前順。全員が非表示のものは使われているものだけ）を返す", async () => {
+    const payee = (id: number, name: string, hiddenUserIds: string[] = []): Payee => ({
       id,
       name,
-      ownerUserId,
-      isHidden,
+      hiddenUserIds,
       defaults: EMPTY_PAYEE_DEFAULTS,
+      memberDefaults: [],
       aliases: [],
     });
     vi.mocked(getPayees).mockResolvedValue([
-      payee(31, "B薬局", USER_B),
-      payee(32, "A病院", null),
-      payee(33, "ドラッグ", USER_A),
-      payee(34, "閉店した店", null, true), // 非表示で、12ヶ月のレシートで使われている
-      payee(35, "使っていない店", null, true), // 非表示で、使われていない
+      payee(31, "B薬局", [USER_A]), // 一部のメンバーだけが非表示
+      payee(32, "A病院"),
+      payee(33, "ドラッグ", [USER_B]),
+      payee(34, "閉店した店", [USER_A, USER_B]), // 全員が非表示で、12ヶ月のレシートで使われている
+      payee(35, "使っていない店", [USER_A, USER_B]), // 全員が非表示で、使われていない
     ]);
     const { client } = fakeSupabase([
       [
@@ -298,15 +298,15 @@ describe("getAnalyticsData", () => {
       ],
     ]);
 
-    const data = await getAnalyticsData(client, "group-1", USER_A, new Date(2026, 9, 3));
+    const data = await getAnalyticsData(client, "group-1", new Date(2026, 9, 3));
 
     expect(data.breakdowns).toEqual([{ id: 11, categoryId: FOOD, name: "外食" }]);
     expect(data.counterparts).toEqual([{ id: PAIR, name: "ふたり" }]);
     expect(data.payees).toEqual([
-      { id: 32, name: "A病院", section: "shared", sectionLabel: "グループ全体" },
-      { id: 34, name: "閉店した店", section: "shared", sectionLabel: "グループ全体" },
-      { id: 33, name: "ドラッグ", section: "own", sectionLabel: "自分用" },
-      { id: 31, name: "B薬局", section: "partner", sectionLabel: "みきさんの自分用" },
+      { id: 32, name: "A病院" },
+      { id: 31, name: "B薬局" },
+      { id: 33, name: "ドラッグ" },
+      { id: 34, name: "閉店した店" },
     ]);
     // 相手の名前は、取得したメンバーの表示名を使って求める
     expect(vi.mocked(getCounterpartNames)).toHaveBeenCalledWith(

@@ -329,19 +329,145 @@ export type Database = {
           },
         ]
       }
+      payee_hidden_members: {
+        Row: {
+          created_at: string
+          payee_id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          payee_id: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          payee_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payee_hidden_members_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "payees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payee_member_default_tags: {
+        Row: {
+          payee_id: number
+          tag_id: number
+          user_id: string
+        }
+        Insert: {
+          payee_id: number
+          tag_id: number
+          user_id: string
+        }
+        Update: {
+          payee_id?: number
+          tag_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payee_member_default_tags_payee_id_user_id_fkey"
+            columns: ["payee_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "payee_member_defaults"
+            referencedColumns: ["payee_id", "user_id"]
+          },
+          {
+            foreignKeyName: "payee_member_default_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payee_member_defaults: {
+        Row: {
+          created_at: string
+          default_breakdown_id: number | null
+          default_category_id: number | null
+          default_counterpart_id: number | null
+          default_item_name: string | null
+          default_owner_joint: boolean
+          default_owner_user_id: string | null
+          payee_id: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_breakdown_id?: number | null
+          default_category_id?: number | null
+          default_counterpart_id?: number | null
+          default_item_name?: string | null
+          default_owner_joint?: boolean
+          default_owner_user_id?: string | null
+          payee_id: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_breakdown_id?: number | null
+          default_category_id?: number | null
+          default_counterpart_id?: number | null
+          default_item_name?: string | null
+          default_owner_joint?: boolean
+          default_owner_user_id?: string | null
+          payee_id?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payee_member_defaults_default_breakdown_id_fkey"
+            columns: ["default_breakdown_id"]
+            isOneToOne: false
+            referencedRelation: "category_breakdowns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payee_member_defaults_default_category_id_fkey"
+            columns: ["default_category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payee_member_defaults_default_counterpart_id_fkey"
+            columns: ["default_counterpart_id"]
+            isOneToOne: false
+            referencedRelation: "counterparts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payee_member_defaults_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "payees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payees: {
         Row: {
           created_at: string
           default_breakdown_id: number | null
           default_category_id: number | null
           default_counterpart_id: number | null
+          default_item_name: string | null
           default_owner_joint: boolean
           default_owner_user_id: string | null
           group_id: string
           id: number
-          is_hidden: boolean
           name: string
-          owner_user_id: string | null
           updated_at: string
         }
         Insert: {
@@ -349,13 +475,12 @@ export type Database = {
           default_breakdown_id?: number | null
           default_category_id?: number | null
           default_counterpart_id?: number | null
+          default_item_name?: string | null
           default_owner_joint?: boolean
           default_owner_user_id?: string | null
           group_id: string
           id?: never
-          is_hidden?: boolean
           name: string
-          owner_user_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -363,13 +488,12 @@ export type Database = {
           default_breakdown_id?: number | null
           default_category_id?: number | null
           default_counterpart_id?: number | null
+          default_item_name?: string | null
           default_owner_joint?: boolean
           default_owner_user_id?: string | null
           group_id?: string
           id?: never
-          is_hidden?: boolean
           name?: string
-          owner_user_id?: string | null
           updated_at?: string
         }
         Relationships: [

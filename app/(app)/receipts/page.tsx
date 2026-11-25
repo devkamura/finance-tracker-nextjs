@@ -92,7 +92,7 @@ export default async function ReceiptsPage({
           breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
           counterparts,
           // 支払い先の条件は、分析画面から渡される値（相方の自分用・非表示を含む）をすべて受け付ける
-          payees: buildAnalyticsPayees(payees, user!.id, members, () => true),
+          payees: buildAnalyticsPayees(payees, members, () => true),
         }}
         members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
         month={month}
