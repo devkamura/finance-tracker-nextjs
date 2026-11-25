@@ -181,4 +181,20 @@ describe("list-params", () => {
       "/receipts?month=2026-07&costType=fixed&payee=unregistered&counterpart=22&scope=all&from=analytics"
     );
   });
+
+  it("U-150: フィルタ欄の条件（支払者・期間・キーワード）も詳細画面との行き来で引き継ぐ", () => {
+    const params = pickListParams({
+      month: "2026-07",
+      payer: "user-a",
+      start: "2026-07-01",
+      end: "2026-07-07",
+      q: "牛乳",
+      open: "r-1",
+    });
+    expect(params.get("payer")).toBe("user-a");
+    expect(params.get("start")).toBe("2026-07-01");
+    expect(params.get("end")).toBe("2026-07-07");
+    expect(params.get("q")).toBe("牛乳");
+    expect(params.has("open")).toBe(false);
+  });
 });

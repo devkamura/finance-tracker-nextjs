@@ -31,7 +31,8 @@ export default async function ReceiptsPage({
   searchParams,
 }: {
   // month・sort・open に加え、分析画面からの絞り込み条件
-  // （category・breakdown・costType・payee・counterpart・scope・joint・from）を受け取る
+  // （category・breakdown・costType・payee・counterpart・scope・joint・from）と、
+  // 一覧のフィルタ欄の条件（payer・start・end・q。Issue #39）を受け取る
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
