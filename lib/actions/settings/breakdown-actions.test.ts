@@ -87,7 +87,7 @@ describe("内訳・費用区分の設定（Server Action）", () => {
 
     expect(result).toEqual({
       success: true,
-      breakdown: { id: 10, categoryId: 1, name: "外食", isHidden: false },
+      breakdown: { id: 10, categoryId: 1, name: "外食", isHidden: false, costType: null },
     });
     expect(calls.find((c) => c.method === "insert")?.args[0]).toEqual({
       group_id: "group-1",
@@ -123,6 +123,32 @@ describe("内訳・費用区分の設定（Server Action）", () => {
     const result = await updateBreakdown(10, { isHidden: true });
     expect(result).toMatchObject({ success: true, breakdown: { isHidden: true } });
     expect(calls.find((c) => c.method === "update")?.args[0]).toEqual({ is_hidden: true });
+  });
+
+  it("U-179: 内訳の費用区分を保存できる。固定費・変動費以外は保存しない（Issue #49）", async () => {
+    const fixed = fakeSupabase({ write: { data: { ...row, cost_type: "fixed" }, error: null } });
+    asAdmin(fixed.client);
+    expect(await updateBreakdown(10, { costType: "fixed" })).toMatchObject({
+      success: true,
+      breakdown: { costType: "fixed" },
+    });
+    expect(fixed.calls.find((c) => c.method === "update")?.args[0]).toEqual({ cost_type: "fixed" });
+
+    const variable = fakeSupabase({ write: { data: { ...row, cost_type: "variable" }, error: null } });
+    asAdmin(variable.client);
+    expect(await updateBreakdown(10, { costType: "variable" })).toMatchObject({
+      success: true,
+      breakdown: { costType: "variable" },
+    });
+
+    // 不正な値・空（カテゴリに合わせて変わる仕組みはないため、空には戻せない）は保存しない
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const invalid of ["other", null] as any[]) {
+      expect(await updateBreakdown(10, { costType: invalid })).toEqual({
+        success: false,
+        error: "費用区分が不正です。",
+      });
+    }
   });
 
   it("U-96: 費用区分は固定費・変動費だけ保存でき、グループの設定として保存する", async () => {

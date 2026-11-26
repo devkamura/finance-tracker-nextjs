@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 個人の家計データ（家計相談の CSV・集計結果など）。コミットしない（Issue #49）
+/private/

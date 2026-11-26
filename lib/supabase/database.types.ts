@@ -55,6 +55,7 @@ export type Database = {
       category_breakdowns: {
         Row: {
           category_id: number
+          cost_type: string | null
           created_at: string
           group_id: string
           id: number
@@ -65,6 +66,7 @@ export type Database = {
         }
         Insert: {
           category_id: number
+          cost_type?: string | null
           created_at?: string
           group_id: string
           id?: never
@@ -75,6 +77,7 @@ export type Database = {
         }
         Update: {
           category_id?: number
+          cost_type?: string | null
           created_at?: string
           group_id?: string
           id?: never

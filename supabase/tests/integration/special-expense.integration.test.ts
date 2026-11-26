@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { specialExpenseTotal } from "@/lib/analytics/aggregate";
+import { costTypeMap } from "@/lib/analytics/dimensions";
 import { getAnalyticsData } from "@/lib/analytics/queries";
 import { buildSpecialExpenseListView } from "@/lib/analytics/special-expense-list";
 import { listSpecialExpenseReceipts } from "@/lib/receipts/queries";
@@ -179,7 +180,7 @@ describe("特別費フラグ（DB）", () => {
     expect(mixed?.items.map((i) => i.isSpecialExpense).sort()).toEqual([false, true]);
 
     const view = buildSpecialExpenseListView(receipts, { kind: "all" });
-    expect(view.total).toBe(specialExpenseTotal(data.rows, { kind: "all" }, data.months, new Map()));
+    expect(view.total).toBe(specialExpenseTotal(data.rows, { kind: "all" }, data.months, costTypeMap([])));
     expect(view.total).toBe(30000);
   });
 });

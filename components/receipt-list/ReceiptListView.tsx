@@ -14,9 +14,10 @@ import { ReceiptAccordionItem } from "@/components/receipt-list/ReceiptAccordion
 import { ReceiptFilterBanner } from "@/components/receipt-list/ReceiptFilterBanner";
 import { ReceiptFilterPanel } from "@/components/receipt-list/ReceiptFilterPanel";
 import { MonthSelector } from "@/components/ui/MonthSelector";
-import { costTypeMap, DIMENSIONS, type DimensionMaster } from "@/lib/analytics/dimensions";
+import { costTypeMap, type DimensionMaster } from "@/lib/analytics/dimensions";
 import { replaceUrlKeepingAppState } from "@/lib/navigation/history-state";
 import {
+  LIST_CONDITION_PARAM_KEYS,
   parseDrilldownSource,
   parseListFilter,
   withQuery,
@@ -26,7 +27,6 @@ import {
   MONTH_SCOPED_PARAM_KEYS,
   parseListSearch,
   readUserSelection,
-  SEARCH_PARAM_KEYS,
   withUserSelection,
   type ListConditionParams,
   type UserBasis,
@@ -57,9 +57,8 @@ function urlParamsWithOpen(listParams: URLSearchParams, openReceiptId: string | 
   return params;
 }
 
-// 絞り込み条件のURLパラメータ（解除するとまとめて外す）。
-// 分析画面から渡される条件（カテゴリ〜相手・表示対象）と、フィルタ欄の条件（支払者・期間・キーワード）。
-const CONDITION_PARAM_KEYS = [...DIMENSIONS, "scope", "joint", ...SEARCH_PARAM_KEYS] as const;
+// 絞り込み条件のURLパラメータ（解除するとまとめて外す）。lib/receipts/list-params.ts で一元管理する。
+const CONDITION_PARAM_KEYS = LIST_CONDITION_PARAM_KEYS;
 
 // レシート一覧の表示部分（詳細設計書 フェーズ3 5章）。
 // その月のレシートはサーバーから1回だけ受け取り、絞り込み・解除・並び替えは画面側だけで行う
@@ -107,7 +106,11 @@ export function ReceiptListView({
     () => parseListSearch(conditionParams, month, members),
     [conditionParams, month, members]
   );
-  const costTypes = useMemo(() => costTypeMap(master.categories), [master.categories]);
+  // 費用区分は、内訳の費用区分 → カテゴリの費用区分の順に決める（Issue #49）
+  const costTypes = useMemo(
+    () => costTypeMap(master.categories, master.breakdowns),
+    [master.categories, master.breakdowns]
+  );
   const view = useMemo(
     () => buildReceiptListView(receipts, filter, sort, costTypes, search),
     [receipts, filter, sort, costTypes, search]
@@ -215,7 +218,6 @@ export function ReceiptListView({
       {filtering && (
         <ReceiptFilterBanner
           parts={describeListConditions(filter, search, members)}
-          total={view.matchedTotal}
           count={view.items.length}
           onClear={clearConditions}
         />

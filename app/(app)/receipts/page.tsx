@@ -90,7 +90,13 @@ export default async function ReceiptsPage({
         receipts={receipts}
         master={{
           categories,
-          breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
+          // 費用区分の条件は、内訳の費用区分 → カテゴリの費用区分の順に決める（Issue #49）
+          breakdowns: breakdowns.map((b) => ({
+            id: b.id,
+            categoryId: b.categoryId,
+            name: b.name,
+            costType: b.costType ?? null,
+          })),
           counterparts,
           // 支払い先の条件は、分析画面から渡される値（相方の自分用・非表示を含む）をすべて受け付ける
           payees: buildAnalyticsPayees(payees, members, () => true),
