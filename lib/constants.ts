@@ -4,7 +4,7 @@
 export const SELECT_NONE_VALUE = "none";
 
 // 明細の帰属先セレクトで「共同」を選択したことを示すセンチネル値。
-// DB上はowner_user_id = NULLで表現する（docs/basic-design.md 2.2節）。
+// DB上はowner_user_id = NULLで表現する（docs/全体仕様書/基本設計書.md 3.2節）。
 export const OWNER_JOINT_VALUE = "joint";
 
 // 支払い先の共通の既定値で、相手・帰属先に「登録する人」を選んだことを示すセンチネル値（Issue #44）。
@@ -22,5 +22,5 @@ export const OCR_ALLOWED_MIME_TYPES = [
   "image/heif",
 ];
 
-// レシート画像用Supabase Storageバケット名（docs/basic-design.md 4章）
+// レシート画像用Supabase Storageバケット名（docs/全体仕様書/基本設計書.md 3.8節）
 export const RECEIPT_IMAGES_BUCKET = "receipt-images";

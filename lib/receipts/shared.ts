@@ -5,11 +5,11 @@ import { findPayeeByName, isSelectablePayee, type Payee } from "@/lib/receipts/p
 import type { ReceiptItem } from "@/types/receipt";
 
 // 選ばれた支払い先から、レシートに保存する支払い先ID・名前を求める。
-// 選べるのは、自分が非表示にしていない支払い先（docs/requirements.md「支払い先の一本化」）。
+// 選べるのは、自分が非表示にしていない支払い先（docs/全体仕様書/基本設計書.md 5.3節）。
 // 編集で、保存済みの支払い先（自分が非表示にしているもの）をそのまま保存する場合は許す。
 // 手入力の店名が支払い先の名前か別名と一致したら、その支払い先として保存する
 // （自分が非表示にしている支払い先も対象。支払い先IDと名前だけを変え、明細には既定値を当てない。
-// docs/分析拡充/要件定義書.md 4.7節）。
+// docs/全体仕様書/基本設計書.md 5.3節）。
 export function resolvePayeeName(
   payees: Payee[],
   payeeSelect: string,

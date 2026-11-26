@@ -33,7 +33,7 @@ export async function uploadReceiptImage(
   return path;
 }
 
-// 画像差し替え・レシート削除時に旧オブジェクトを同期削除する（docs/basic-design.md 4章）。
+// 画像差し替え・レシート削除時に旧オブジェクトを同期削除する（docs/全体仕様書/基本設計書.md 3.8節）。
 export async function deleteReceiptImage(
   supabase: SupabaseClient,
   path: string

@@ -1,4 +1,4 @@
-// レシート一覧のURLパラメータ（docs/支出分析機能/詳細設計書.md フェーズ3 2章・5.4節）。
+// レシート一覧のURLパラメータ（docs/全体仕様書/基本設計書.md 2.2節・5.6節）。
 // 一覧 → 詳細 → 編集 → 詳細 → 一覧 と移動しても、月・並び順・絞り込みの条件が
 // 保たれるよう、引き継ぐパラメータをここで一元管理する。
 // 分析画面（Client Component）からも使うため server-only にはしない。
@@ -19,7 +19,7 @@ import { SEARCH_PARAM_KEYS } from "@/lib/receipts/list-search";
 // 一覧の状態として引き継ぐパラメータ（openは行を開く一時的な指定のため含めない）。
 // ret は「← 分析に戻る」で開く分析画面の状態（詳細・編集と行き来しても失わないよう引き継ぐ）。
 // 絞り込みの条件（category〜specialExpense）は、分析の「分ける」「絞り込み」の項目と同じ名前
-// （docs/分析拡充/詳細設計書.md F4 4章）。
+// （docs/全体仕様書/基本設計書.md 5.6節）。
 // payer・start・end・q は一覧画面のフィルタ欄で選ぶ条件（lib/receipts/list-search.ts。Issue #39）。
 export const LIST_PARAM_KEYS = [
   "month",

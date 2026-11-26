@@ -22,7 +22,7 @@ import {
   type PayeeRow,
 } from "@/lib/receipts/payees";
 
-// 設定 ＞ 支払い先の操作（docs/requirements.md「追加機能：支払い先の一本化」）。
+// 設定 ＞ 支払い先の操作（docs/全体仕様書/基本設計書.md 5.3節）。
 // 登録・名前の変更・削除はグループのメンバー全員ができる（管理者と非管理者を区別しない）。
 // 既定値は、登録したときの内容が共通の既定値になる。共通の既定値は登録後もメンバー全員が変更でき、
 // 共通の変更の影響を受けたくないメンバーは自分用の既定値で上書きできる。表示／非表示・自分用の既定値は自分の分だけ変えられる。
@@ -418,7 +418,7 @@ async function payeeExists(
   return existing ? { ok: true } : { ok: false, error: NOT_FOUND };
 }
 
-// 別名を追加する（docs/分析拡充/要件定義書.md 4.7節）。追加と同時に、店名が別名と一致する過去のレシートを
+// 別名を追加する（docs/全体仕様書/基本設計書.md 5.3節）。追加と同時に、店名が別名と一致する過去のレシートを
 // この支払い先に切り替える（DBの add_payee_alias。切り替えた件数を返す）。
 export async function addPayeeAlias(
   payeeId: number,

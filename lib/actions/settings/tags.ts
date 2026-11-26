@@ -3,7 +3,7 @@
 import type { Tag } from "@/lib/receipts/labels";
 import { requireGroupMember } from "@/lib/settings/admin";
 
-// 設定 ＞ タグの操作（docs/分析拡充/基本設計書.md 2.5節・4.2節・Q2）。
+// 設定 ＞ タグの操作（docs/全体仕様書/基本設計書.md 5.4節・4章）。
 // タグは集計に使わないため、グループのメンバー全員が編集できる。
 
 export type TagActionResult = { success: true; tag: Tag } | { success: false; error: string };

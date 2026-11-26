@@ -183,7 +183,7 @@ describe("validateReceiptForm", () => {
     expect(result.fieldErrors.items["1"]?.ownerUserId).toBe(true);
   });
 
-  describe("内訳（docs/分析拡充/基本設計書.md 3.1節）", () => {
+  describe("内訳（docs/全体仕様書/基本設計書.md 5.2節）", () => {
     const breakdowns: CategoryBreakdown[] = [
       { id: 10, categoryId: 1, name: "外食", isHidden: false },
       { id: 11, categoryId: 1, name: "旧内訳", isHidden: true },
@@ -223,7 +223,7 @@ describe("validateReceiptForm", () => {
     });
   });
 
-  describe("相手・タグ（docs/分析拡充/基本設計書.md 3.3節）", () => {
+  describe("相手・タグ（docs/全体仕様書/基本設計書.md 5.4節）", () => {
     it("U-101: グループにない相手は「相手が不正です。」", () => {
       const result = validateReceiptForm(
         buildState({ items: [buildItem({ counterpartId: "999" })] }),

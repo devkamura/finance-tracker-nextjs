@@ -3,7 +3,7 @@ import { getCounterparts, getUsedSettingIds } from "@/lib/settings/queries";
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
-// 設定 ＞ 相手（docs/分析拡充/基本設計書.md 2.4節）。
+// 設定 ＞ 相手（docs/全体仕様書/基本設計書.md 5.4節）。
 // 編集は管理者のみ。管理者以外には閲覧だけを表示する。
 export default async function CounterpartSettingsPage() {
   const supabase = await createClient();

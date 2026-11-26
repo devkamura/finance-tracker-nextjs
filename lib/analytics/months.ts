@@ -1,4 +1,4 @@
-// 支出分析で使う月の計算（docs/支出分析機能/詳細設計書.md 3章）。
+// 支出分析で使う月の計算（docs/全体仕様書/基本設計書.md 1.3節）。
 // サーバーはinstrumentation.tsでTZ=Asia/Tokyoに固定されているため、
 // 既存のlib/receipts/queries.tsのmonthPeriodと同じくローカル時刻のgetterで
 // JSTの年月日を取り出す（一覧・精算と同じ規則で月を判定するため）。

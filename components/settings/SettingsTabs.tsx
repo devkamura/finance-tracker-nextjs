@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// 設定画面のタブ（docs/分析拡充/基本設計書.md 2.2節）
+// 設定画面のタブ（docs/全体仕様書/基本設計書.md 2章）
 const TABS = [
   { href: "/settings/categories", label: "カテゴリ" },
   { href: "/settings/counterparts", label: "相手" },

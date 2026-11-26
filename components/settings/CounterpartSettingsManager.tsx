@@ -28,7 +28,7 @@ function toListItem(counterpart: Counterpart, used: boolean): NamedListItem {
   };
 }
 
-// 設定 ＞ 相手（docs/分析拡充/基本設計書.md 2.4節）。
+// 設定 ＞ 相手（docs/全体仕様書/基本設計書.md 5.4節）。
 // メンバー・既定の相手は表示・非表示だけ、任意の相手は追加・名前の変更・削除もできる。編集は管理者のみ。
 export function CounterpartSettingsManager({
   counterparts,

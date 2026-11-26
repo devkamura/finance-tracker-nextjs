@@ -1,4 +1,4 @@
-// 単体テスト：特別費フラグの分析側（Issue #41。docs/test-spec.md U-151〜U-157）。
+// 単体テスト：特別費フラグの分析側（Issue #41）。
 
 import { describe, expect, it } from "vitest";
 

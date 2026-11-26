@@ -57,7 +57,7 @@ export default async function ReceiptsPage({
     listReceipts(supabase, groupId, period),
     isMonthConfirmed(supabase, groupId, targetDate),
     membersPromise,
-    // 絞り込みの条件の名前・費用区分の判定に使う（分析画面と同じデータ。docs/分析拡充/詳細設計書.md F4 4章）
+    // 絞り込みの条件の名前・費用区分の判定に使う（分析画面と同じデータ。docs/全体仕様書/基本設計書.md 5.6節）
     getCategoriesWithCostType(supabase, groupId),
     getCategoryBreakdowns(supabase, groupId),
     membersPromise.then((m) => getCounterpartNames(supabase, groupId, m)),

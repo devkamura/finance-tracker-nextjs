@@ -26,7 +26,7 @@ type CategorySettingsManagerProps = {
   canEdit: boolean; // 管理者のみ編集できる
 };
 
-// 設定 ＞ カテゴリ（docs/分析拡充/基本設計書.md 2.3節）。
+// 設定 ＞ カテゴリ（docs/全体仕様書/基本設計書.md 5.4節）。
 // カテゴリごとに費用区分（固定費／変動費）と内訳（追加・名前の変更・表示/非表示・削除）を設定する。
 // カテゴリ自体の追加・削除はしない（アプリ共通のマスタ）。
 export function CategorySettingsManager({
