@@ -1,4 +1,4 @@
-// グラフで使うカテゴリの色（docs/支出分析機能/詳細設計書.md 6.3節）。
+// グラフで使うカテゴリの色（docs/全体仕様書/基本設計書.md 5.5節）。
 // メンバーの色（ブルー／レッド）・共同の色（濃いグレー）と紛れないよう、
 // 青系・赤系・グレーを除いた12色を使う。Rechartsのfillに直接渡すためhex値で持つ。
 export const CATEGORY_PALETTE = [
@@ -32,7 +32,7 @@ export function categoryColor(
   return CATEGORY_PALETTE[Math.max(index, 0) % CATEGORY_PALETTE.length];
 }
 
-// カテゴリ以外の項目（内訳・費用区分・支払い先・相手）の色（docs/分析拡充/詳細設計書.md F4 5章）。
+// カテゴリ以外の項目（内訳・費用区分・支払い先・相手）の色（docs/全体仕様書/基本設計書.md 5.5節）。
 // 並び順の何番目かでパレットの色を割り当てる。隣り合う色（オレンジとアンバー等）が続くと
 // 見分けにくいため、パレットを5つ飛ばしで使う（12と5は互いに素のため、12色を1巡してから重なる）。
 export function paletteColor(index: number): string {

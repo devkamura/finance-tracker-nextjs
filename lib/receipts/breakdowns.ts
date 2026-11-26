@@ -1,4 +1,4 @@
-// カテゴリの内訳（docs/分析拡充/基本設計書.md 3.1節）。
+// カテゴリの内訳（docs/全体仕様書/基本設計書.md 5.4節）。
 // 登録画面（クライアント）と Server Action の入力チェックの両方から使うため server-only にはしない。
 
 export type CategoryBreakdown = {
@@ -7,6 +7,9 @@ export type CategoryBreakdown = {
   name: string;
   // 使われている内訳は削除できないため、選択肢から外したいときは非表示にする
   isHidden: boolean;
+  // 内訳の費用区分（Issue #49）。DB では必須（作るときにカテゴリの費用区分が入る）。
+  // テストなどで省略したときは、カテゴリの費用区分として扱う
+  costType?: CostType | null;
 };
 
 export type CostType = "fixed" | "variable";
@@ -15,6 +18,15 @@ export const COST_TYPE_LABELS: Record<CostType, string> = {
   fixed: "固定費",
   variable: "変動費",
 };
+
+export function isCostType(value: unknown): value is CostType {
+  return value === "fixed" || value === "variable";
+}
+
+// DB の値（text）を費用区分にする。不正な値は null（集計ではカテゴリの費用区分として扱う）
+export function toBreakdownCostType(value: string | null | undefined): CostType | null {
+  return isCostType(value) ? value : null;
+}
 
 // カテゴリの選択肢に出す（非表示でない）内訳。categoryIdはフォームの文字列値も受け付ける。
 export function visibleBreakdownsFor(

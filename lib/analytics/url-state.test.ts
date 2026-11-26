@@ -28,6 +28,7 @@ const initial = {
   filter: null,
   trendMonth: null,
   includeSpecialExpense: false,
+  includeInvestment: false,
 };
 
 describe("url-state", () => {
@@ -44,6 +45,7 @@ describe("url-state", () => {
       filter: { dimension: "category", key: "1" },
       trendMonth: "2026-08",
       includeSpecialExpense: false,
+      includeInvestment: false,
     });
     expect(serializeAnalyticsState(state).toString()).toBe(query);
   });

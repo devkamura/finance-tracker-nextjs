@@ -11,7 +11,7 @@ function toListItem(tag: Tag, used = false): NamedListItem {
   return { id: tag.id, name: tag.name, isHidden: tag.isHidden, editable: true, used };
 }
 
-// 設定 ＞ タグ（docs/分析拡充/基本設計書.md 2.5節）。追加・名前の変更・表示/非表示・削除。
+// 設定 ＞ タグ（docs/全体仕様書/基本設計書.md 5.4節）。追加・名前の変更・表示/非表示・削除。
 // タグは集計に使わないため、グループのメンバー全員が編集できる（基本設計書 Q2）。
 export function TagSettingsManager({
   tags,

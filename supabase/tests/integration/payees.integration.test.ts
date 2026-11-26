@@ -11,7 +11,7 @@ import { PAYEE_SELECT, toPayee, type PayeeRow } from "@/lib/receipts/payees";
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // 支払い先の権限（RLS）・メンバーごとの非表示・名前の重複・既定値の整合性を検証する
-// （docs/requirements.md「追加機能：支払い先の一本化」、docs/分析拡充/基本設計書.md 4章）。
+// （docs/全体仕様書/基本設計書.md 3.6節・4章・5.3節）。
 describe("支払い先", () => {
   const admin = createServiceRoleClient();
 

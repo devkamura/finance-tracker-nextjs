@@ -57,7 +57,7 @@ export default async function ReceiptsPage({
     listReceipts(supabase, groupId, period),
     isMonthConfirmed(supabase, groupId, targetDate),
     membersPromise,
-    // 絞り込みの条件の名前・費用区分の判定に使う（分析画面と同じデータ。docs/分析拡充/詳細設計書.md F4 4章）
+    // 絞り込みの条件の名前・費用区分の判定に使う（分析画面と同じデータ。docs/全体仕様書/基本設計書.md 5.6節）
     getCategoriesWithCostType(supabase, groupId),
     getCategoryBreakdowns(supabase, groupId),
     membersPromise.then((m) => getCounterpartNames(supabase, groupId, m)),
@@ -90,7 +90,13 @@ export default async function ReceiptsPage({
         receipts={receipts}
         master={{
           categories,
-          breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
+          // 費用区分の条件は、内訳の費用区分 → カテゴリの費用区分の順に決める（Issue #49）
+          breakdowns: breakdowns.map((b) => ({
+            id: b.id,
+            categoryId: b.categoryId,
+            name: b.name,
+            costType: b.costType ?? null,
+          })),
           counterparts,
           // 支払い先の条件は、分析画面から渡される値（相方の自分用・非表示を含む）をすべて受け付ける
           payees: buildAnalyticsPayees(payees, members, () => true),

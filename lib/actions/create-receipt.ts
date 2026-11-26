@@ -27,7 +27,7 @@ export type CreateReceiptResult =
 // 画像ファイルを含むため、既存のextractReceiptOcrと同じくFormData経由で受け取る
 // （state はJSON文字列化してformDataの"state"フィールドに積む）。
 // formDataの"duplicateForPartner"が"true"の場合は、相方を支払者とした同じ内容の
-// レシートも同時に登録する（複製登録。docs/requirements.md参照）。
+// レシートも同時に登録する（複製登録。docs/全体仕様書/要件定義書.md 4.2節）。
 export async function createReceipt(
   formData: FormData
 ): Promise<CreateReceiptResult> {

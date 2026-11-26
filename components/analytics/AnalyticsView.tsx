@@ -11,7 +11,7 @@ import { AnalyticsMonthSelect } from "@/components/analytics/AnalyticsMonthSelec
 import { ChartTypeTabs } from "@/components/analytics/ChartTypeTabs";
 import { NegativeAmountNotice } from "@/components/analytics/NegativeAmountNotice";
 import { ScopeSelector } from "@/components/analytics/ScopeSelector";
-import { SpecialExpenseToggle } from "@/components/analytics/SpecialExpenseToggle";
+import { IncludeToggle } from "@/components/analytics/IncludeToggle";
 import { SplitBreakdownTable } from "@/components/analytics/SplitBreakdownTable";
 import { SplitFilterControls } from "@/components/analytics/SplitFilterControls";
 import { SplitPieChart } from "@/components/analytics/SplitPieChart";
@@ -29,6 +29,7 @@ import {
   conditionsLabel,
   costTypeMap,
   DIMENSION_LABELS,
+  investmentCategoryId,
   keyColor,
   keyLabel,
 } from "@/lib/analytics/dimensions";
@@ -36,6 +37,7 @@ import type { AnalyticsData, Scope } from "@/lib/analytics/types";
 import {
   analysisConditions,
   filterConditions,
+  isInvestmentForced,
   isSpecialExpenseForced,
   parseAnalyticsState,
   serializeAnalyticsState,
@@ -70,8 +72,17 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
   const update = (patch: Partial<AnalyticsState>) =>
     setState((prev) => ({ ...prev, ...patch }));
 
-  const { scopeUserId, includeJoint, month, chart, split, filter, trendMonth, includeSpecialExpense } =
-    state;
+  const {
+    scopeUserId,
+    includeJoint,
+    month,
+    chart,
+    split,
+    filter,
+    trendMonth,
+    includeSpecialExpense,
+    includeInvestment,
+  } = state;
 
   const scope: Scope = useMemo(
     () =>
@@ -81,18 +92,27 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
     [scopeUserId, includeJoint]
   );
 
-  const costTypes = useMemo(() => costTypeMap(data.categories), [data.categories]);
+  // 費用区分は、内訳の費用区分 → カテゴリの費用区分の順に決める（Issue #49）
+  const costTypes = useMemo(
+    () => costTypeMap(data.categories, data.breakdowns),
+    [data.categories, data.breakdowns]
+  );
+  // カテゴリ「投資」。「投資を含める」が OFF のとき（絞り込みで投資を選んでいるときを除く）は、
+  // このカテゴリの明細を集計・一覧へのリンクから除く（Issue #49）
+  const investmentId = investmentCategoryId(data.categories);
+  const investmentForced = isInvestmentForced(filter, investmentId, data.breakdowns);
+  const excludeCategoryId = includeInvestment || investmentForced ? null : investmentId;
   // 利用者が選んだ絞り込みの条件（見出しの「食費の合計」などの表示に使う）
   const userConditions = useMemo(() => filterConditions(filter), [filter]);
   // 集計・一覧へのリンクに使う条件。特別費を除くときは「通常の明細のみ」の条件が足される（Issue #41）。
   // 推移グラフは「分ける」を使わないため、分けるの特別費では強制 ON にしない。
   const pieConditions = useMemo(
-    () => analysisConditions(filter, split, includeSpecialExpense),
-    [filter, split, includeSpecialExpense]
+    () => analysisConditions(filter, split, includeSpecialExpense, excludeCategoryId),
+    [filter, split, includeSpecialExpense, excludeCategoryId]
   );
   const trendConditions = useMemo(
-    () => analysisConditions(filter, null, includeSpecialExpense),
-    [filter, includeSpecialExpense]
+    () => analysisConditions(filter, null, includeSpecialExpense, excludeCategoryId),
+    [filter, includeSpecialExpense, excludeCategoryId]
   );
   // 今のグラフで特別費の項目を選んでいるか（選んでいる間はチェックを ON とみなす）
   const specialExpenseForced = isSpecialExpenseForced(filter, chart === "pie" ? split : null);
@@ -144,6 +164,8 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
     ...(chart === "pie" ? [`${DIMENSION_LABELS[split]}で分ける`] : []),
     // 特別費を含めているときだけ出す（初期の「除く」は出さない。Issue #41）
     ...(includeSpecialExpense || specialExpenseForced ? ["特別費を含む"] : []),
+    // 投資も、含めているときだけ出す（初期の「除く」は出さない。Issue #49）
+    ...(investmentId !== null && (includeInvestment || investmentForced) ? ["投資を含む"] : []),
   ].join(" ／ ");
 
   const firstMonth = data.months[0];
@@ -166,11 +188,23 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
               onChangeScope={changeScope}
               onChangeIncludeJoint={(value) => update({ includeJoint: value })}
               toggles={
-                <SpecialExpenseToggle
-                  checked={includeSpecialExpense}
-                  forced={specialExpenseForced}
-                  onChange={(value) => update({ includeSpecialExpense: value })}
-                />
+                <>
+                  <IncludeToggle
+                    label="特別費を含める"
+                    checked={includeSpecialExpense}
+                    forced={specialExpenseForced}
+                    onChange={(value) => update({ includeSpecialExpense: value })}
+                  />
+                  {/* カテゴリ「投資」があるときだけ出す。初期値は OFF（投資を除く。Issue #49） */}
+                  {investmentId !== null && (
+                    <IncludeToggle
+                      label="投資を含める"
+                      checked={includeInvestment}
+                      forced={investmentForced}
+                      onChange={(value) => update({ includeInvestment: value })}
+                    />
+                  )}
+                </>
               }
             />
           </div>

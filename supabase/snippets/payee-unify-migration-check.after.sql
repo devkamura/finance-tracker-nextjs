@@ -1,4 +1,4 @@
--- 支払い先の一本化の移行結果を確かめる（docs/test-spec.md I-54）。
+-- 支払い先の一本化の移行結果を確かめる。
 -- payee-unify-migration-check.before.sql → マイグレーション → このファイルの順に、同じトランザクションで実行する。
 -- 期待と違えば例外で止まる。最後まで進めば「payee unify migration check: OK」と表示する。
 

@@ -77,7 +77,7 @@ async function fetchAllReceipts(
 
 // レシートを精算と同じロジックで明細に按分し、返金はマイナスにしたうえで
 // 「月×カテゴリ×内訳×相手×支払い先×帰属先×特別費」ごとに合計する
-// （docs/支出分析機能/詳細設計書.md 4.2節、docs/分析拡充/詳細設計書.md F4 2章）。
+// （docs/全体仕様書/基本設計書.md 5.5節、docs/全体仕様書/用語と算出方法.md 2〜3章）。
 export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
   const totals = new Map<string, AnalyticsRow>();
 
@@ -156,7 +156,12 @@ export async function getAnalyticsData(
     today,
     months,
     categories: categories.map((c) => ({ id: c.id, name: c.name, costType: c.costType })),
-    breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
+    breakdowns: breakdowns.map((b) => ({
+      id: b.id,
+      categoryId: b.categoryId,
+      name: b.name,
+      costType: b.costType,
+    })),
     counterparts,
     // 支払い先は登録済みの支払い先を選択肢にする。全員が非表示にしているものは12ヶ月で使われているときだけ
     payees: buildAnalyticsPayees(payees, members, (id) => usedPayeeIds.has(id)),

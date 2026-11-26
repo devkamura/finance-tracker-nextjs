@@ -3,7 +3,7 @@ import { getAnalyticsData } from "@/lib/analytics/queries";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
-// 支出分析画面（docs/支出分析機能/詳細設計書.md 6章）。
+// 支出分析画面（docs/全体仕様書/基本設計書.md 5.5節）。
 // 画面を開いたときに12ヶ月分の集計用データを一括で取得し、以降の表示対象・月の切り替えは
 // クライアント側だけで処理する（サーバー通信なし）。
 // 画面の状態（表示対象・月など）はURLに保持し、AnalyticsViewが現在のURLから読み取る

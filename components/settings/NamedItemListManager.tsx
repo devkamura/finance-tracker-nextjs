@@ -39,7 +39,7 @@ type NamedItemListManagerProps = {
   onDelete: (item: NamedListItem) => ActionResult<null>;
 };
 
-// 設定 ＞ 相手・タグの共通の一覧（docs/分析拡充/基本設計書.md 2.4〜2.5節）。
+// 設定 ＞ 相手・タグの共通の一覧（docs/全体仕様書/基本設計書.md 5.4節）。
 // 追加・名前の変更・表示/非表示・削除。カテゴリの内訳（CategorySettingsManager）と同じ操作感にする。
 export function NamedItemListManager({
   label,

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import "@/lib/fontawesome";
 
-// docs/bug-reports/2026-10-04-fontawesome-icon-flash.md の回帰テスト
+// 読み込み直後にアイコンが大きく表示されるバグ（コミット 3afcf32 で修正）の回帰テスト
 describe("fontawesome", () => {
   it("U-132: アイコンの CSS を JavaScript で後から追加しない設定になり、ルートのレイアウトで読み込まれる", () => {
     expect(config.autoAddCss).toBe(false);

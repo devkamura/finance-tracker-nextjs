@@ -26,10 +26,10 @@ export function ReceiptUnitSection({
   currentUserId,
 }: ReceiptUnitSectionProps) {
   // 自分が非表示にしていない支払い先を出す。非表示の支払い先は、
-  // 編集中のレシートで選ばれているときだけ残す（docs/requirements.md「支払い先の一本化」）。
+  // 編集中のレシートで選ばれているときだけ残す（docs/全体仕様書/基本設計書.md 5.3節）。
   const payeeGroups = payeeOptions(masterData.payees, currentUserId, state.payeeSelect);
   // 手入力の店名が支払い先の名前か別名と一致するときは、保存時にその支払い先へ変換されることを案内する
-  // （入力中は何も変えない。自分が非表示にしている支払い先も対象。docs/分析拡充/要件定義書.md 4.7節）
+  // （入力中は何も変えない。自分が非表示にしている支払い先も対象。docs/全体仕様書/基本設計書.md 5.3節）
   const convertTo =
     state.payeeSelect === SELECT_NONE_VALUE
       ? findPayeeByName(masterData.payees, state.payeeInputText)

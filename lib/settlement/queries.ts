@@ -72,7 +72,7 @@ async function fetchReceiptsForCalc(
 }
 
 // 対象月の精算サマリーを返す。settlement_periodsが確定済み(status='confirmed')なら
-// そのスナップショット値を、それ以外は都度計算した最新値を返す（docs/basic-design.md 5章）。
+// そのスナップショット値を、それ以外は都度計算した最新値を返す（docs/全体仕様書/用語と算出方法.md 4章）。
 export async function getSettlementSummary(
   supabase: SupabaseClient,
   groupId: string,

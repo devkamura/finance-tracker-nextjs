@@ -32,5 +32,11 @@ insert into public.categories (name) values
   ('その他')
 on conflict (name) do nothing;
 
+-- 投資・保険料（Issue #49。20261126000002_investment_category.sql と同じ）。費用区分の初期値は固定費。
+insert into public.categories (name, default_cost_type) values
+  ('投資', 'fixed'),
+  ('保険料', 'fixed')
+on conflict (name) do nothing;
+
 -- 目的・シーンは、グループごとの相手・タグに置き換えた（分析拡充 F2。
 -- 20261003000004_counterparts_tags.sql参照）。既定の相手はグループ作成時に自動で作られる。

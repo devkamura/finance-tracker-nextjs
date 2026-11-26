@@ -9,7 +9,7 @@ import {
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // 分析拡充 F2：相手・タグの自動作成・RLS・明細との整合性を検証する
-// （docs/分析拡充/基本設計書.md 4章）。
+// （docs/全体仕様書/基本設計書.md 3章・4章）。
 describe("相手・タグ", () => {
   const admin = createServiceRoleClient();
 

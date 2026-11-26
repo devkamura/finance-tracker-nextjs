@@ -2,7 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { CategoryBreakdown, CostType } from "@/lib/receipts/breakdowns";
+import {
+  toBreakdownCostType,
+  type CategoryBreakdown,
+  type CostType,
+} from "@/lib/receipts/breakdowns";
 import type { Counterpart, CounterpartKind, Tag } from "@/lib/receipts/labels";
 import { PAYEE_SELECT, toPayee, type Payee, type PayeeRow } from "@/lib/receipts/payees";
 
@@ -14,7 +18,7 @@ export async function getCategoryBreakdowns(
 ): Promise<CategoryBreakdown[]> {
   const { data, error } = await supabase
     .from("category_breakdowns")
-    .select("id, category_id, name, is_hidden")
+    .select("id, category_id, name, is_hidden, cost_type")
     .eq("group_id", groupId)
     .order("sort_order")
     .order("id");
@@ -26,6 +30,7 @@ export async function getCategoryBreakdowns(
     categoryId: row.category_id,
     name: row.name,
     isHidden: row.is_hidden,
+    costType: toBreakdownCostType(row.cost_type),
   }));
 }
 
@@ -87,7 +92,7 @@ export async function getCounterparts(
   });
 }
 
-// 分析・レシート一覧の絞り込みで表示する相手の名前（docs/分析拡充/詳細設計書.md F4 2章）。
+// 分析・レシート一覧の絞り込みで表示する相手の名前（docs/全体仕様書/基本設計書.md 5.5節）。
 // 非表示の相手に加え、グループから外れたメンバーの相手も、既存の明細の集計に出てくるため含める
 // （名前は一覧・詳細の表示と同じく unknown）。並び順→登録順。
 export async function getCounterpartNames(

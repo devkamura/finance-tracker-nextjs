@@ -3,7 +3,7 @@ import { getTags, getUsedSettingIds } from "@/lib/settings/queries";
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
-// 設定 ＞ タグ（docs/分析拡充/基本設計書.md 2.5節）。
+// 設定 ＞ タグ（docs/全体仕様書/基本設計書.md 5.4節）。
 // タグは集計に使わないため、グループのメンバー全員が編集できる（基本設計書 Q2）。
 export default async function TagSettingsPage() {
   const supabase = await createClient();

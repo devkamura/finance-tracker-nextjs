@@ -9,7 +9,7 @@ import {
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // 分析拡充 F5：支払い先の別名の権限（RLS・add_payee_alias）・重複のルール・過去のレシートの切り替えを検証する
-// （docs/分析拡充/要件定義書.md 4.7節、詳細設計書 F5。権限と切り替え範囲は docs/requirements.md「支払い先の一本化」）。
+// （docs/全体仕様書/要件定義書.md 4.3節、docs/全体仕様書/基本設計書.md 4章）。
 describe("支払い先の別名", () => {
   const admin = createServiceRoleClient();
 

@@ -111,9 +111,9 @@ export function buildOcrItem(
 // OCR読み取り結果を既存フォームの状態にマッピングする。
 // 支払い先名はプルダウンに出す支払い先（自分が非表示にしていないもの）の名前か別名と一致すれば
 // プルダウン選択、一致しなければ手入力欄に反映する。自分が非表示にしている支払い先と一致したときも
-// 手入力欄に入れ、保存時に支払い先だけを紐づける（既定値は入れない。docs/requirements.md「支払い先の一本化」）。
+// 手入力欄に入れ、保存時に支払い先だけを紐づける（既定値は入れない。docs/全体仕様書/基本設計書.md 5.3節）。
 // 支払い先を選んだときの既定値（カテゴリ・内訳・相手・帰属先・タグ）は、呼び出し側
-// （handleOcrExtracted）で明細に入れる（docs/分析拡充/要件定義書.md 4.7節）。
+// （handleOcrExtracted）で明細に入れる（docs/全体仕様書/基本設計書.md 5.3節）。
 export function buildOcrPatch(
   result: OcrReceiptResult,
   payees: MasterData["payees"],
@@ -256,8 +256,8 @@ export function ReceiptForm({
       ? findPartner(masterData.members, currentUserId)
       : null;
 
-  // 選択中の支払い先の既定値を明細に入れる（docs/分析拡充/基本設計書.md 3.4節）。
-  // 既定値は操作しているメンバーのもの（自分用があれば自分用、なければ共通。docs/requirements.md「支払い先の一本化」）。
+  // 選択中の支払い先の既定値を明細に入れる（docs/全体仕様書/基本設計書.md 5.3節）。
+  // 既定値は操作しているメンバーのもの（自分用があれば自分用、なければ共通。docs/全体仕様書/基本設計書.md 5.3節）。
   // 「該当なし」・未選択は、既定値のない支払い先と同じ扱い（すべて未選択にする）。
   // 相手・帰属先の「登録する人」は、操作しているメンバー本人に置き換えてから入れる（Issue #44）。
   const withPayeeDefaults = (item: ReceiptItem, payeeSelect: string): ReceiptItem => {
@@ -300,7 +300,7 @@ export function ReceiptForm({
     }));
 
   // カテゴリを変えたら内訳は選び直し。新しいカテゴリの内訳が1つだけなら自動で選ぶ
-  // （docs/分析拡充/基本設計書.md 3.1節）。内訳を同時に指定した場合はその値を使う。
+  // （docs/全体仕様書/基本設計書.md 5.2節）。内訳を同時に指定した場合はその値を使う。
   const withBreakdownForCategory = (
     item: ReceiptItem,
     patch: Partial<ReceiptItem>

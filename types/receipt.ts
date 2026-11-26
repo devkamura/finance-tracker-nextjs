@@ -11,9 +11,9 @@ export type ReceiptItem = {
   taxType: TaxType;
   taxRateId: string; // taxTypeが"exclusive"の場合のみ必須
   categoryId: string;
-  // 内訳。"" または実際の内訳ID（内訳を設定したカテゴリでは必須。docs/分析拡充/基本設計書.md 3.1節）
+  // 内訳。"" または実際の内訳ID（内訳を設定したカテゴリでは必須。docs/全体仕様書/基本設計書.md 5.2節）
   breakdownId: string;
-  // 相手（必須。docs/分析拡充/基本設計書.md 3.3節）
+  // 相手（必須。docs/全体仕様書/基本設計書.md 5.4節）
   counterpartId: string;
   // タグ（任意・複数）
   tagIds: string[];
@@ -84,7 +84,7 @@ export type ReceiptDetailItemView = {
   categoryName: string;
   breakdownId: number | null;
   breakdownName: string | null; // 内訳なしはnull
-  // 相手。一覧の絞り込み（相手で絞り込む）で使う（docs/分析拡充/詳細設計書.md F4 4章）
+  // 相手。一覧の絞り込み（相手で絞り込む）で使う（docs/全体仕様書/基本設計書.md 5.6節）
   counterpartId: number;
   counterpartName: string;
   ownerUserId: string | null;

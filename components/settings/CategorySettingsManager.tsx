@@ -26,7 +26,7 @@ type CategorySettingsManagerProps = {
   canEdit: boolean; // 管理者のみ編集できる
 };
 
-// 設定 ＞ カテゴリ（docs/分析拡充/基本設計書.md 2.3節）。
+// 設定 ＞ カテゴリ（docs/全体仕様書/基本設計書.md 5.4節）。
 // カテゴリごとに費用区分（固定費／変動費）と内訳（追加・名前の変更・表示/非表示・削除）を設定する。
 // カテゴリ自体の追加・削除はしない（アプリ共通のマスタ）。
 export function CategorySettingsManager({
@@ -97,6 +97,15 @@ export function CategorySettingsManager({
       return null;
     });
 
+  // 内訳の費用区分（Issue #49）。選んだ値をそのまま保存する
+  const changeBreakdownCostType = (breakdown: CategoryBreakdown, costType: CostType) =>
+    run(breakdown.categoryId, breakdown.id, async () => {
+      const result = await updateBreakdown(breakdown.id, { costType });
+      if (!result.success) return result.error;
+      setBreakdowns((prev) => prev.map((b) => (b.id === breakdown.id ? result.breakdown : b)));
+      return null;
+    });
+
   const remove = (breakdown: CategoryBreakdown) =>
     run(breakdown.categoryId, breakdown.id, async () => {
       const result = await deleteBreakdown(breakdown.id);
@@ -114,6 +123,7 @@ export function CategorySettingsManager({
       )}
       <p className="text-xs text-slate-500">
         内訳を設定したカテゴリでは、レシート登録時に内訳の選択が必須になります。
+        費用区分は内訳ごとにも選べます（カテゴリの費用区分を変えても、内訳の費用区分は変わりません）。
         使われている内訳は削除できないため、選択肢から外すときは非表示にしてください。
       </p>
 
@@ -194,54 +204,75 @@ export function CategorySettingsManager({
                               <span className="ml-2 text-xs no-underline">（非表示）</span>
                             )}
                           </span>
-                          {canEdit && (
-                            <div className="flex items-center gap-3">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingId(breakdown.id);
-                                  setDraft(breakdown.name);
-                                }}
-                                disabled={isPending}
-                                aria-label="名前を変更"
-                                className="text-slate-400 hover:text-slate-600"
-                              >
-                                <FontAwesomeIcon icon={faPen} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => toggleHidden(breakdown)}
-                                disabled={isPending}
-                                aria-label={breakdown.isHidden ? "表示する" : "非表示にする"}
-                                title={breakdown.isHidden ? "表示する" : "非表示にする"}
-                                className="text-slate-400 hover:text-slate-600"
-                              >
-                                <FontAwesomeIcon icon={breakdown.isHidden ? faEye : faEyeSlash} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => remove(breakdown)}
-                                disabled={isPending || usedBreakdownIds.includes(breakdown.id)}
-                                aria-label={
-                                  usedBreakdownIds.includes(breakdown.id)
-                                    ? "削除（使用中のため削除できません）"
-                                    : "削除"
-                                }
-                                title={
-                                  usedBreakdownIds.includes(breakdown.id)
-                                    ? "登録済みのレシートで使われているため削除できません。非表示にしてください。"
-                                    : "削除"
-                                }
-                                className={
-                                  usedBreakdownIds.includes(breakdown.id)
-                                    ? "cursor-not-allowed text-slate-300"
-                                    : "text-red-400 hover:text-red-600"
-                                }
-                              >
-                                <FontAwesomeIcon icon={faTrash} />
-                              </button>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-3">
+                            {/* 内訳の費用区分（Issue #49）。固定費・変動費の2つから選び、そのまま保存する。
+                                カテゴリの費用区分と一致している方に「（カテゴリと同じ）」と添えるだけで、
+                                カテゴリの区分を変えても内訳の区分は変わらない */}
+                            <select
+                              value={breakdown.costType ?? costType}
+                              onChange={(e) =>
+                                changeBreakdownCostType(breakdown, e.target.value as CostType)
+                              }
+                              disabled={!canEdit || isPending}
+                              aria-label={`${breakdown.name}の費用区分`}
+                              className="rounded-lg border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-700 disabled:bg-slate-50"
+                            >
+                              {(Object.keys(COST_TYPE_LABELS) as CostType[]).map((type) => (
+                                <option key={type} value={type}>
+                                  {COST_TYPE_LABELS[type]}
+                                  {type === costType ? "（カテゴリと同じ）" : ""}
+                                </option>
+                              ))}
+                            </select>
+                            {canEdit && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingId(breakdown.id);
+                                    setDraft(breakdown.name);
+                                  }}
+                                  disabled={isPending}
+                                  aria-label="名前を変更"
+                                  className="text-slate-400 hover:text-slate-600"
+                                >
+                                  <FontAwesomeIcon icon={faPen} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleHidden(breakdown)}
+                                  disabled={isPending}
+                                  aria-label={breakdown.isHidden ? "表示する" : "非表示にする"}
+                                  title={breakdown.isHidden ? "表示する" : "非表示にする"}
+                                  className="text-slate-400 hover:text-slate-600"
+                                >
+                                  <FontAwesomeIcon icon={breakdown.isHidden ? faEye : faEyeSlash} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => remove(breakdown)}
+                                  disabled={isPending || usedBreakdownIds.includes(breakdown.id)}
+                                  aria-label={
+                                    usedBreakdownIds.includes(breakdown.id)
+                                      ? "削除（使用中のため削除できません）"
+                                      : "削除"
+                                  }
+                                  title={
+                                    usedBreakdownIds.includes(breakdown.id)
+                                      ? "登録済みのレシートで使われているため削除できません。非表示にしてください。"
+                                      : "削除"
+                                  }
+                                  className={
+                                    usedBreakdownIds.includes(breakdown.id)
+                                      ? "cursor-not-allowed text-slate-300"
+                                      : "text-red-400 hover:text-red-600"
+                                  }
+                                >
+                                  <FontAwesomeIcon icon={faTrash} />
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>

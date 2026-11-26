@@ -231,7 +231,7 @@ export function ReceiptItemCard({
             ))}
           </Select>
 
-          {/* 内訳はカテゴリに内訳を設定しているときだけ表示する（必須。docs/分析拡充/基本設計書.md 3.1節） */}
+          {/* 内訳はカテゴリに内訳を設定しているときだけ表示する（必須。docs/全体仕様書/基本設計書.md 5.2節） */}
           {showBreakdown && (
             <Select
               label="内訳"

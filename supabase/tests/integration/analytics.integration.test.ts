@@ -11,7 +11,7 @@ import {
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // 支出分析のデータ取得（ページング・RLS・期間）と、メンバーの色の制約を検証する
-// （docs/支出分析機能/詳細設計書.md 4章・6.5節）。
+// （docs/全体仕様書/基本設計書.md 5.5節）。
 describe("支出分析のデータ取得", () => {
   const admin = createServiceRoleClient();
   // 2026-10-03時点で分析する（対象は2025-11〜2026-10の12ヶ月）
@@ -244,7 +244,10 @@ describe("支出分析のデータ取得", () => {
       },
     ]);
     expect(data.categories.find((c) => c.id === foodId)?.costType).toBe("fixed");
-    expect(data.breakdowns).toEqual([{ id: breakdown!.id, categoryId: foodId, name: "外食" }]);
+    // 内訳の費用区分は、作ったときのカテゴリの費用区分（このグループでは食費を固定費にしている）が入る（Issue #49）
+    expect(data.breakdowns).toEqual([
+      { id: breakdown!.id, categoryId: foodId, name: "外食", costType: "fixed" },
+    ]);
     // 既定の相手とメンバー（表示名）の相手が入る
     expect(data.counterparts.map((c) => c.name)).toEqual(
       expect.arrayContaining(["ふたり", "友人", "実家"])

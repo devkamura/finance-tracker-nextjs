@@ -7,7 +7,7 @@ import {
 import { getCurrentMembership } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
-// 設定 ＞ カテゴリ：カテゴリごとの費用区分と内訳（docs/分析拡充/基本設計書.md 2.3節）。
+// 設定 ＞ カテゴリ：カテゴリごとの費用区分と内訳（docs/全体仕様書/基本設計書.md 5.4節）。
 // 編集は管理者のみ。管理者以外には閲覧だけを表示する。
 export default async function CategorySettingsPage() {
   const supabase = await createClient();

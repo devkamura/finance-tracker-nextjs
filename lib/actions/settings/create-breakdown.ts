@@ -1,13 +1,13 @@
 "use server";
 
-import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
+import { toBreakdownCostType, type CategoryBreakdown } from "@/lib/receipts/breakdowns";
 import { requireGroupAdmin } from "@/lib/settings/admin";
 
 export type CreateBreakdownResult =
   | { success: true; breakdown: CategoryBreakdown }
   | { success: false; error: string };
 
-// カテゴリに内訳を追加する（管理者のみ。docs/分析拡充/基本設計書.md 2.3節）。
+// カテゴリに内訳を追加する（管理者のみ。docs/全体仕様書/基本設計書.md 5.4節）。
 // 並び順はそのカテゴリの末尾にする。
 export async function createBreakdown(
   categoryId: number,
@@ -41,7 +41,7 @@ export async function createBreakdown(
       name: trimmed,
       sort_order: (last?.sort_order ?? -1) + 1,
     })
-    .select("id, category_id, name, is_hidden")
+    .select("id, category_id, name, is_hidden, cost_type")
     .single();
 
   if (error) {
@@ -59,6 +59,7 @@ export async function createBreakdown(
       categoryId: data.category_id,
       name: data.name,
       isHidden: data.is_hidden,
+      costType: toBreakdownCostType(data.cost_type),
     },
   };
 }

@@ -1,5 +1,4 @@
-// 支払い先（docs/分析拡充/基本設計書.md 2.6〜2.7節・3.4〜3.5節、
-// docs/requirements.md「追加機能：支払い先の一本化」）。
+// 支払い先（docs/全体仕様書/基本設計書.md 5.3節）。
 // 支払い先はグループで1つの一覧。プルダウンに出すかどうかはメンバーごとに決める。
 // 既定値は、登録したときの内容（共通の既定値）を、メンバーごとに自分用に上書きできる。
 // 登録画面・設定画面（クライアント）と Server Action の入力チェックの両方から使うため server-only にはしない。
@@ -13,7 +12,7 @@ import type { ReceiptItem } from "@/types/receipt";
 // ownerUserId は OWNER_JOINT_VALUE（共同）またはメンバーの user id。tagIds は空なら「設定しない」。
 // 共通の既定値に限り、counterpartId・ownerUserId は REGISTRANT_VALUE（登録する人）にもなる
 // （入力時に resolveRegistrantDefaults で操作しているメンバーに置き換える。Issue #44）。
-// itemName は商品名の既定値（商品名が空の明細にだけ入れる。docs/requirements.md「支払い先の一本化」）。
+// itemName は商品名の既定値（商品名が空の明細にだけ入れる。docs/全体仕様書/基本設計書.md 5.3節）。
 export type PayeeDefaults = Pick<
   ReceiptItem,
   "categoryId" | "breakdownId" | "counterpartId" | "ownerUserId" | "tagIds"
