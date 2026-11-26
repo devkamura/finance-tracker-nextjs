@@ -134,6 +134,7 @@ export function ReceiptItemCard({
       {!isOpen && (
         <p className="mt-1 pl-6 text-xs text-slate-500">
           {priceSummary}・{taxSummary}
+          {item.isSpecialExpense && <span className="font-medium text-violet-700">・特別費</span>}
         </p>
       )}
 
@@ -306,6 +307,18 @@ export function ReceiptItemCard({
               </div>
             </div>
           )}
+
+          {/* 特別費（旅行など、ふだんは発生しない支出）。分析画面で集計から除けるようにする（Issue #41）。
+              タグのボタンと続けて見えないよう、区切り線で欄を分ける */}
+          <label className="flex items-center gap-2 border-t border-slate-100 pt-3 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={item.isSpecialExpense}
+              onChange={(e) => onChange({ isSpecialExpense: e.target.checked })}
+              className="h-4 w-4"
+            />
+            <span className="font-medium">特別費</span>
+          </label>
         </div>
       )}
     </div>

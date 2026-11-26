@@ -19,6 +19,7 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     counterpartId: "3",
     tagIds: ["4", "5"],
     ownerUserId: OWNER_JOINT_VALUE,
+    isSpecialExpense: false,
     ...overrides,
   };
 }

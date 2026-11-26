@@ -20,6 +20,8 @@ export type BulkInputValues = {
   breakdownId?: string;
   counterpartId?: string;
   ownerUserId?: string;
+  // 特別費にする（true）／しない（false）。undefined は変更しない（Issue #41）
+  isSpecialExpense?: boolean;
 };
 
 type BulkInputModalProps = {
@@ -34,6 +36,9 @@ type BulkInputModalProps = {
 };
 
 const NOT_CHANGED = "";
+// 特別費のプルダウンの値（Issue #41）
+const SPECIAL_EXPENSE_ON = "on";
+const SPECIAL_EXPENSE_OFF = "off";
 
 export function BulkInputModal({
   open,
@@ -48,6 +53,8 @@ export function BulkInputModal({
   const [breakdownId, setBreakdownId] = useState(NOT_CHANGED);
   const [counterpartId, setCounterpartId] = useState(NOT_CHANGED);
   const [ownerUserId, setOwnerUserId] = useState(NOT_CHANGED);
+  // 特別費も、ほかの項目と同じく既定は「変更しない」（帰属先などだけを一括入力したときに外れないように）
+  const [specialExpense, setSpecialExpense] = useState(NOT_CHANGED);
 
   const reset = () => {
     setTaxType(NOT_CHANGED);
@@ -56,6 +63,7 @@ export function BulkInputModal({
     setBreakdownId(NOT_CHANGED);
     setCounterpartId(NOT_CHANGED);
     setOwnerUserId(NOT_CHANGED);
+    setSpecialExpense(NOT_CHANGED);
   };
 
   const handleApply = () => {
@@ -66,6 +74,12 @@ export function BulkInputModal({
       breakdownId: categoryId && breakdownId ? breakdownId : undefined,
       counterpartId: counterpartId || undefined,
       ownerUserId: ownerUserId || undefined,
+      isSpecialExpense:
+        specialExpense === SPECIAL_EXPENSE_ON
+          ? true
+          : specialExpense === SPECIAL_EXPENSE_OFF
+            ? false
+            : undefined,
     });
     reset();
     onClose();
@@ -172,6 +186,15 @@ export function BulkInputModal({
               {m.displayName}
             </option>
           ))}
+        </Select>
+        <Select
+          label="特別費"
+          value={specialExpense}
+          onChange={(e) => setSpecialExpense(e.target.value)}
+        >
+          <option value={NOT_CHANGED}>変更しない</option>
+          <option value={SPECIAL_EXPENSE_ON}>特別費にする</option>
+          <option value={SPECIAL_EXPENSE_OFF}>特別費にしない</option>
         </Select>
       </div>
     </Modal>

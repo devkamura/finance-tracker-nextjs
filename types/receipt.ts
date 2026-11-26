@@ -19,6 +19,8 @@ export type ReceiptItem = {
   tagIds: string[];
   // 帰属先。OWNER_JOINT_VALUE（共同）または実際のuser id
   ownerUserId: string;
+  // 特別費（旅行など、ふだんは発生しない支出）か。分析の集計から除けるようにする（Issue #41）
+  isSpecialExpense: boolean;
 };
 
 export type ReceiptFormState = {
@@ -89,6 +91,8 @@ export type ReceiptDetailItemView = {
   ownerDisplayName: string; // "共同" またはユーザー表示名
   ownerColor: string | null; // 共同の場合はnull
   tagNames: string[];
+  // 特別費か（「特別費」バッジの表示と、分析画面からの絞り込みに使う。Issue #41）
+  isSpecialExpense: boolean;
 };
 
 export type ReceiptDetailView = {

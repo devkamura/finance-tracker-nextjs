@@ -133,6 +133,7 @@ describe("支出分析のデータ取得", () => {
     breakdownId: null,
     counterpartId: expect.any(Number),
     payeeId: null,
+    isSpecialExpense: false, // 列を指定せずに登録した明細は通常（Issue #41）
   };
 
   it("I-28: 取得上限（1,000件）を超える1,001件のレシートがすべて集計される", async () => {
@@ -238,6 +239,7 @@ describe("支出分析のデータ取得", () => {
         counterpartId: friend.id,
         payeeId: payee!.id,
         ownerUserId: outsider.id,
+        isSpecialExpense: false,
         amount: 3000,
       },
     ]);

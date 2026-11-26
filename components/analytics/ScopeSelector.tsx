@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import type { AnalyticsMember } from "@/lib/analytics/types";
 import { getUserBadgeClass } from "@/lib/user-colors";
 
@@ -9,6 +11,8 @@ type ScopeSelectorProps = {
   includeJoint: boolean;
   onChangeScope: (userId: string | null) => void;
   onChangeIncludeJoint: (value: boolean) => void;
+  // 「共同を含める」と同じ行に並べるチェックボックス（「特別費を含める」。Issue #41）
+  toggles?: ReactNode;
 };
 
 // 表示対象（全体／メンバー）の切り替えと、メンバー選択時の「共同を含める」トグル
@@ -20,6 +24,7 @@ export function ScopeSelector({
   includeJoint,
   onChangeScope,
   onChangeIncludeJoint,
+  toggles,
 }: ScopeSelectorProps) {
   const baseClass =
     "rounded-full border px-3 py-1 text-sm transition-colors";
@@ -27,7 +32,7 @@ export function ScopeSelector({
     "border-slate-200 bg-white font-medium text-slate-500 hover:bg-slate-50";
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-2" role="group" aria-label="表示対象">
         <button
           type="button"
@@ -59,16 +64,22 @@ export function ScopeSelector({
         })}
       </div>
 
-      {scopeUserId !== null && (
-        <label className="flex items-center gap-1.5 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={includeJoint}
-            onChange={(e) => onChangeIncludeJoint(e.target.checked)}
-            className="h-4 w-4"
-          />
-          共同を含める（1/2）
-        </label>
+      {/* チェックボックスはボタンの下に横一列で並べる（幅が足りないときだけ折り返す） */}
+      {(scopeUserId !== null || toggles) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {scopeUserId !== null && (
+            <label className="flex items-center gap-1.5 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={includeJoint}
+                onChange={(e) => onChangeIncludeJoint(e.target.checked)}
+                className="h-4 w-4"
+              />
+              共同を含める（1/2）
+            </label>
+          )}
+          {toggles}
+        </div>
       )}
     </div>
   );

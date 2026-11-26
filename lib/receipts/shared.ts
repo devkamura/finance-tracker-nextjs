@@ -43,6 +43,9 @@ export function buildReceiptDetailRows(items: ReceiptItem[], receiptId: string) 
     counterpart_id: Number(item.counterpartId),
     owner_user_id:
       item.ownerUserId === OWNER_JOINT_VALUE ? null : item.ownerUserId,
+    // クライアントから来る JSON の値が boolean の true のときだけ特別費にする
+    // （未指定・不正な値は通常として保存する。Issue #41）
+    is_special_expense: item.isSpecialExpense === true,
   }));
 }
 

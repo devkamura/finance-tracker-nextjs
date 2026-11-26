@@ -5,11 +5,13 @@ import {
   DuplicatedBadge,
   DuplicatedNotice,
 } from "@/components/receipt-detail/DuplicatedBadge";
+import { SpecialExpenseReceiptBadge } from "@/components/receipt-detail/SpecialExpenseReceiptBadge";
 import { BackLink } from "@/components/navigation/BackLink";
 import { DeleteReceiptButton } from "@/components/receipt-detail/DeleteReceiptButton";
 import { ReceiptImagePreview } from "@/components/receipt-detail/ReceiptImagePreview";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
 import { UserBadge } from "@/components/ui/UserBadge";
+import { specialExpenseBackHref } from "@/lib/analytics/special-expense-list";
 import { pickListParams, withQuery } from "@/lib/receipts/list-params";
 import { getReceiptDetail } from "@/lib/receipts/queries";
 import { getCurrentMembership } from "@/lib/supabase/group";
@@ -50,12 +52,18 @@ export default async function ReceiptDetailPage({
   const backParams = new URLSearchParams(listParams);
   backParams.set("open", id);
   const editHref = withQuery(`/receipts/${id}/edit`, listParams);
+  // 特別費の一覧（分析画面から開く。Issue #41 要件10）から来たときは、戻り先を特別費の一覧にする
+  const specialExpenseHref = specialExpenseBackHref(searchParamValues);
 
   return (
     <div className="flex flex-col gap-4">
       {/* 一覧から来たときは1つ前に戻る（通信なし。一覧は開いていた行をURLから復元する）。
           直接開いた場合や編集後などは、この行を開いた状態の一覧へのリンクとして開く */}
-      <BackLink href={`/receipts?${backParams.toString()}`}>← レシート一覧に戻る</BackLink>
+      {specialExpenseHref ? (
+        <BackLink href={specialExpenseHref}>← 特別費の一覧に戻る</BackLink>
+      ) : (
+        <BackLink href={`/receipts?${backParams.toString()}`}>← レシート一覧に戻る</BackLink>
+      )}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
         <div className="flex items-start justify-between">
@@ -67,6 +75,7 @@ export default async function ReceiptDetailPage({
                   返金
                 </span>
               )}
+              <SpecialExpenseReceiptBadge items={receipt.items} />
               {receipt.isDuplicated && (
                 <DuplicatedBadge createdByDisplayName={receipt.createdByDisplayName} />
               )}
@@ -139,7 +148,7 @@ export default async function ReceiptDetailPage({
           <DeleteReceiptButton
             receiptId={receipt.id}
             disabled={receipt.isLocked}
-            backHref={withQuery("/receipts", listParams)}
+            backHref={specialExpenseHref ?? withQuery("/receipts", listParams)}
           />
         </div>
       </div>

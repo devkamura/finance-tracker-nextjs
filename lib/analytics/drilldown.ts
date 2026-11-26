@@ -9,7 +9,7 @@ import { allocateReceiptAmount } from "@/lib/settlement/calculate";
 import type { ReceiptListItem } from "@/types/receipt";
 
 export type DrilldownFilter = {
-  // カテゴリ・内訳・費用区分・支払い先・相手の条件（なし＝総支出。docs/分析拡充/詳細設計書.md F4 4章）
+  // カテゴリ・内訳・費用区分・支払い先・相手・特別費の条件（なし＝総支出。docs/分析拡充/詳細設計書.md F4 4章）
   conditions: Conditions;
   scope: Scope;
 };
@@ -58,6 +58,7 @@ export function matchReceipt(
       breakdownId: item.breakdownId,
       counterpartId: item.counterpartId,
       payeeId: receipt.payeeId,
+      isSpecialExpense: item.isSpecialExpense,
     };
     if (!matchesConditions(values, filter.conditions, costTypes)) return;
     const weight = ownerWeight(item.ownerUserId, filter.scope);

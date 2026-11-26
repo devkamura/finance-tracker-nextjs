@@ -72,6 +72,7 @@ function makeReceipt(input: {
     ownerDisplayName: i.owner ?? "共同",
     ownerColor: null,
     tagNames: [],
+    isSpecialExpense: false,
   }));
   return {
     id: input.id,

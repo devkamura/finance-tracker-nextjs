@@ -326,3 +326,26 @@ describe("allocateReceiptAmount（税別の明細）", () => {
     expect(allocated).toEqual([39600, 9900]);
   });
 });
+
+describe("特別費（Issue #41）", () => {
+  it("U-159: 特別費の明細があっても、精算の金額は変わらない（精算は特別費を区別しない）", () => {
+    const details = [
+      { price: 30000, taxType: "inclusive" as const, taxRateMultiplier: null, ownerUserId: null },
+      { price: 2000, taxType: "inclusive" as const, taxRateMultiplier: null, ownerUserId: USER_B },
+    ];
+    // 明細に特別費のフラグが付いていても、精算の入力としては無視される
+    const flagged = details.map((d, i) => ({ ...d, isSpecialExpense: i === 0 }));
+    const normal = calculateSettlement(
+      [receipt({ payerUserId: USER_A, amount: 32000, details })],
+      USER_A,
+      USER_B
+    );
+    const withSpecialExpense = calculateSettlement(
+      [receipt({ payerUserId: USER_A, amount: 32000, details: flagged })],
+      USER_A,
+      USER_B
+    );
+    expect(withSpecialExpense).toEqual(normal);
+    expect(withSpecialExpense.burden).toEqual({ [USER_A]: 15000, [USER_B]: 17000 });
+  });
+});
