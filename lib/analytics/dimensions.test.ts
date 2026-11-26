@@ -37,7 +37,13 @@ const master = {
 };
 const costTypes = costTypeMap(master.categories);
 
-const values = { categoryId: UTILITY, breakdownId: null, counterpartId: 21, payeeId: 41 };
+const values = {
+  categoryId: UTILITY,
+  breakdownId: null,
+  counterpartId: 21,
+  payeeId: 41,
+  isSpecialExpense: false,
+};
 
 describe("dimensions", () => {
   it("U-120: 明細の値（内訳なし・費用区分はカテゴリの設定）と、条件に当てはまるか", () => {

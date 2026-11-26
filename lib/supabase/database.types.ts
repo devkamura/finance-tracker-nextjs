@@ -588,6 +588,7 @@ export type Database = {
           counterpart_id: number
           created_at: string
           id: string
+          is_special_expense: boolean
           item_name: string
           owner_user_id: string | null
           price: number
@@ -602,6 +603,7 @@ export type Database = {
           counterpart_id: number
           created_at?: string
           id?: string
+          is_special_expense?: boolean
           item_name: string
           owner_user_id?: string | null
           price: number
@@ -616,6 +618,7 @@ export type Database = {
           counterpart_id?: number
           created_at?: string
           id?: string
+          is_special_expense?: boolean
           item_name?: string
           owner_user_id?: string | null
           price?: number

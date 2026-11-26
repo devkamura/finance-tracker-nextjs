@@ -569,6 +569,58 @@ DBを使わないため、`lib/receipts/list-filter.flow.test.ts`（I-57）・`l
 
 ---
 
+## 追加機能：特別費フラグ（Issue #41）
+
+対象：[docs/requirements.md](./requirements.md)「追加機能：特別費フラグ」、詳細設計は `docs/仕様書/#41_…/詳細設計書.md`。テストフレームワーク: Vitest（単体・結合）。
+テストコード：U-151〜U-157・U-160 は `lib/analytics/special-expense.test.ts`、U-161・U-162 は `lib/analytics/special-expense-list.test.ts`、I-62 は I-60 と同じファイル、U-158・U-163 は `lib/receipts/special-expense.test.ts`、U-159 は `lib/settlement/calculate.test.ts`、I-60 は `supabase/tests/integration/special-expense.integration.test.ts`（`npm run test:integration`）、I-61 は `lib/analytics/special-expense.flow.test.ts`。
+外部API・有料サービスへの通信は発生しない。
+既存の分析・一覧・精算のテストは、特別費のない明細（false）として変更なしで通ること（リグレッション）。
+
+### 単体テスト
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| U-151 | `lib/analytics/dimensions.ts`（`dimensionKey`・`keyLabel`・`dimensionOptions`・`keyColor`） | 正常系：特別費の項目 | 特別費の明細／通常の明細／選択肢／色 | `special`／`normal`、表示名は「特別費」「通常」、選択肢は [通常, 特別費] の順、2つの色が異なる | なし |
+| U-152 | `lib/analytics/dimensions.ts`（`matchesConditions`・`conditionsLabel`） | 正常系：特別費の条件 | `specialExpense: normal`／`special`／カテゴリと組み合わせ | 条件どおりの明細だけ当てはまる／表示名は「特別費を除く」「特別費」「食費・特別費を除く」 | なし |
+| U-153 | `lib/analytics/queries.ts`（`buildAnalyticsRows`） | 正常系：集約のキー | 同じ月・カテゴリ・帰属先で、特別費と通常の明細が混ざるレシート／`is_special_expense` が null | 特別費と通常が別の行になり、`isSpecialExpense` が入る。合計は今までと同じ／null は通常 | なし |
+| U-154 | `lib/analytics/url-state.ts`（`parseAnalyticsState`・`serializeAnalyticsState`） | 正常系／異常系：URL | `special=1`／なし／不正な値／往復／絞り込み `specialExpense`＝`special` | true／false（初期値）／false／同じ状態に戻る／絞り込みとして読める | なし |
+| U-155 | `lib/analytics/url-state.ts`（`isSpecialExpenseForced`・`analysisConditions`） | 正常系：含める／除くと強制 ON | 含めない＋絞り込みなし／含める／含めない＋絞り込み「特別費」／含めない＋分ける「特別費」／推移（split=null）＋分ける以外 | `{specialExpense: normal}`／`{}`／`{specialExpense: special}`（normal を足さない）／`{}`／絞り込みだけで判定 | なし |
+| U-156 | `lib/analytics/aggregate.ts`（`sumByDimension`・`sumByMonth`） | 正常系：除く／含めるで合計が変わる | 特別費を含む行で、`analysisConditions` の条件を使う | 除くと特別費の分だけ減り、含めると今までと同じ。分ける「特別費」で通常／特別費に分かれる | なし |
+| U-157 | `lib/analytics/drilldown.ts`（`matchReceipt`）・`lib/receipts/list-params.ts`（`parseListFilter`・`buildFilteredListHref`・`buildAnalyticsReturnHref`） | 正常系／異常系：一覧への引き継ぎ | 特別費と通常が混ざるレシートに `specialExpense: normal`／URL の `specialExpense=special`・不正な値／戻り先に `special=1` | 通常の明細だけが当てはまり「うち」の金額も通常分だけ／読める・無視される／「← 分析に戻る」に `special=1` が残る | なし |
+| U-158 | `ReceiptForm.tsx`（`applyBulkInput`・`buildOcrItem`）・`lib/receipts/shared.ts`（`buildReceiptDetailRows`）・`lib/receipts/duplicate.ts` | 正常系：一括入力・フォームと保存 | 一括入力で「特別費にする」／「特別費にしない」／「変更しない」／ほかの項目だけ一括入力／OCR の明細／保存行（true・false・未指定・不正な値）／複製登録 | 全明細 ON／全明細 OFF／各明細の値のまま／特別費は変わらない／OFF／`is_special_expense` が true・false・false・false／フラグを引き継ぐ | なし |
+| U-159 | `lib/settlement/calculate.ts` | 正常系：精算に影響しない | 同じレシートを、特別費あり／なしで精算 | 精算の金額が同じ | なし |
+| U-160 | `lib/analytics/aggregate.ts`（`specialExpenseTotal`・`sumOverMonths`） | 正常系：直近12ヶ月の特別費（要件9） | 3ヶ月分の特別費（共同・A・共同の返金）と通常・対象外の月の行／全体・A＋共同1/2・A／特別費なし | 全体 28,000・A＋共同 15,000・A 2,000（通常と対象外の月は足さない、返金はマイナス、共同は1/2）／0／推移グラフの各月の合計の和と一致 | なし |
+| U-161 | `lib/analytics/special-expense-list.ts`（`buildSpecialExpenseListView`） | 正常系：特別費の一覧（要件10） | 9月（共同の宿泊費）・10月（B の個人分）・11月（特別費と通常が混ざる1割引のレシート・共同の返金）／全体・A＋共同1/2・A／空 | 月が新しい順・月の中も新しい順。混ざるレシートは特別費の明細だけ・按分後の金額。全体 32,800・A＋共同 14,800（B の個人分は出ない）・A 1,800。返金はマイナス／空 | なし |
+| U-162 | `lib/analytics/special-expense-list.ts`（URL・詳細との行き来）・`list-params.ts` | 正常系／異常系：URL | 一覧へのURL（A＋共同・全体）／表示対象の読み取り（グループ外・指定なし）／詳細 → 編集 → 詳細で引き継ぐパラメータ／詳細の戻り先／分析への戻り先 | scope・joint・ret が付く／全体／from=special-expense・ret が残る／特別費の一覧（ほかから来たときは null）／元の分析画面（special=1 も残る） | なし |
+| U-163 | `lib/receipts/special-expense-label.ts`（`specialExpenseReceiptLabel`） | 正常系／境界値：レシートの見出しの印（要件6） | すべて特別費（1件・2件）／一部だけ特別費／特別費なし／明細なし | 「特別費」／「特別費あり」／null（出さない）／null | なし |
+
+### 結合テスト
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| I-60 | `supabase/tests/integration/special-expense.integration.test.ts`（ローカル Supabase） | DB の列・保存・分析データの連携 | 列を指定せずに明細を作成／`is_special_expense=true` の明細を含むレシートを作成し、`getAnalyticsData` で取得 | 初期値は false／分析の行に `isSpecialExpense` が入り、通常と特別費が別の行になる。確定済みの月はフラグの変更も RLS で拒否される | なし |
+| I-62 | `supabase/tests/integration/special-expense.integration.test.ts`（ローカル Supabase）・`listSpecialExpenseReceipts`・`buildSpecialExpenseListView` | 特別費の一覧の取得（要件10） | 特別費と通常が混ざるレシート・通常だけのレシート・期間外の特別費のレシート | 特別費を含むレシートだけを読み（通常だけ・期間外は出ない）、混ざるレシートは通常の明細も読む。一覧の合計は分析画面の直近12ヶ月の特別費と一致する | なし |
+| I-61 | `lib/analytics/special-expense.flow.test.ts`（`url-state`・`aggregate`・`list-params`・`list-view`・`drilldown`） | 分析画面と一覧の金額の一致 | 特別費と通常が混ざるレシート（共同・返金を含む）。①除く ②含める ③絞り込み「特別費」 ④分ける「特別費」の各行 ⑤直近12ヶ月の特別費 で、分析の合計と、同じ条件で作った一覧 URL の「うち」の合計を比べる | いずれも分析の合計と一覧の合計が一致する（⑤は推移グラフの「絞り込み：特別費」の合計とも一致する）。①＋③＝②になる | なし |
+
+### E2Eテスト
+
+**実施しない。**（既存機能と同じく Playwright 未導入のため）画面操作の観点は次の手順で手動確認する。期待値つきの手順は `docs/仕様書/#41_…/受け入れテスト仕様書.md`。
+
+| No | シナリオ | 操作手順 | 期待結果 | モック対象 |
+|---|---|---|---|---|
+| S-M-01 | 明細ごとのフラグ | 1. 登録画面で明細を2つ作り、1つだけ「特別費」にして登録する 2. 詳細を開く | 特別費にした明細だけに「特別費」バッジが出る。一覧の行と詳細の見出しに「特別費あり」（すべての明細を特別費にしたときは「特別費」）が出る | なし |
+| S-M-02 | 一括入力 | 1. 明細を2つ以上にして「一括入力」を開く 2. 「特別費」で「特別費にする」を選んで適用 3. もう一度開き、「変更しない」のまま帰属先だけ適用 4. もう一度開き、「特別費にしない」を選んで適用 | 1. 「特別費」の初期値は「変更しない」 2. 全明細 ON 3. 特別費は ON のまま変わらない 4. 全明細 OFF | なし |
+| S-M-03 | 編集 | 1. 特別費の明細を含むレシートを編集画面で開く 2. フラグを変えて保存 | 1. 保存したとおりにチェックが入っている 2. 変更が反映される | なし |
+| S-M-04 | 分析の含める／除く | 1. 分析画面を開く 2. 「特別費を含める」を ON／OFF する | 初期は OFF で特別費を除いた合計。ON で特別費の分だけ増える。円グラフ・推移の両方で変わる | なし |
+| S-M-05 | 絞り込み・分ける | 1. 推移グラフで「絞り込み：特別費 → 特別費」 2. 円グラフで「分ける：特別費」 | 1・2 とも「特別費を含める」が ON の表示で押せなくなる。1 は月ごとの特別費、2 は通常／特別費の割合が出る | なし |
+| S-M-06 | 一覧への移動 | 1. 特別費を除いた状態で総支出・カテゴリの行をタップ 2. 一覧のバナーを見る 3. 「← 分析に戻る」 | 一覧の合計がグラフと一致し、バナーに「特別費を除く」が出る。戻ると元の状態（チェック含む）に戻る | なし |
+| S-M-07 | 精算 | 1. 特別費の明細を含む月の精算画面を開く | 特別費を付ける前と金額が変わらない | なし |
+| S-M-08 | スマホ表示 | 1. スマホ幅（375px）で登録画面・分析画面を開く | チェックボックスが押しやすく、横スクロールが出ない | なし |
+| S-M-09 | 直近12ヶ月の特別費 | 1. 円グラフの下の「直近12ヶ月の特別費」を見る 2. 推移グラフに切り替える（絞り込みを変えても） 3. 表示対象を変える | 1. 12ヶ月の特別費の合計が出る（0円なら出ない） 2. 推移グラフでも同じ行が同じ金額で出る 3. 表示対象に合わせて金額が変わる | なし |
+| S-M-10 | 特別費の一覧 | 1. 「直近12ヶ月の特別費」を押す 2. 行を開いて「詳細を見る」→ 詳細の「戻る」 3. 「← 分析に戻る」 | 1. 一覧の画面に移り、合計が押した金額と同じ。月ごとに新しい順に並ぶ 2. 詳細の戻るは「← 特別費の一覧に戻る」で一覧に戻る 3. 元の分析画面（表示対象・特別費を含める などそのまま）に戻る | なし |
+
+---
+
 ## 追加機能：管理画面（グループ・管理者・ユーザー管理・支払い先管理）
 
 テストフレームワーク: Vitest（単体・結合）/ Playwright（E2E）。

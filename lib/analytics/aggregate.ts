@@ -75,6 +75,29 @@ export function sumByMonth(
   return months.map((month) => ({ month, amount: sums.get(month) ?? 0 }));
 }
 
+// 対象の月（直近12ヶ月）全体の合計。sumByMonth の各月の合計を足したもの。
+export function sumOverMonths(
+  rows: AnalyticsRow[],
+  scope: Scope,
+  months: string[],
+  filter: Conditions,
+  costTypes: CostTypeMap
+): number {
+  return sumByMonth(rows, scope, months, filter, costTypes).reduce((sum, m) => sum + m.amount, 0);
+}
+
+// 直近12ヶ月の特別費の合計（Issue #41 要件9）。特別費は月単位では偏りが大きいため、
+// 12ヶ月の合計で見られるようにする。「特別費を含める」のチェックとは関係なく、特別費の明細だけを足す。
+// 表示対象の重み（共同オンなら共同は1/2）は他の集計と同じ。
+export function specialExpenseTotal(
+  rows: AnalyticsRow[],
+  scope: Scope,
+  months: string[],
+  costTypes: CostTypeMap
+): number {
+  return sumOverMonths(rows, scope, months, { specialExpense: "special" }, costTypes);
+}
+
 export type TrendPoint = MonthSum & {
   barValue: number; // 棒の高さ（マイナスは描画上0、基本設計書3.7節）
   mom: number | null; // 前月比（％）。算出しない月はnull

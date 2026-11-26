@@ -6,6 +6,7 @@
 import {
   conditionsLabel,
   DIMENSIONS,
+  isSpecialExpenseKey,
   NO_BREAKDOWN_KEY,
   type Conditions,
   type Dimension,
@@ -17,7 +18,7 @@ import { SEARCH_PARAM_KEYS } from "@/lib/receipts/list-search";
 
 // 一覧の状態として引き継ぐパラメータ（openは行を開く一時的な指定のため含めない）。
 // ret は「← 分析に戻る」で開く分析画面の状態（詳細・編集と行き来しても失わないよう引き継ぐ）。
-// 絞り込みの条件（category〜counterpart）は、分析の「分ける」「絞り込み」の項目と同じ名前
+// 絞り込みの条件（category〜specialExpense）は、分析の「分ける」「絞り込み」の項目と同じ名前
 // （docs/分析拡充/詳細設計書.md F4 4章）。
 // payer・start・end・q は一覧画面のフィルタ欄で選ぶ条件（lib/receipts/list-search.ts。Issue #39）。
 export const LIST_PARAM_KEYS = [
@@ -41,6 +42,7 @@ const ANALYTICS_STATE_KEYS = [
   "filter",
   "filterValue",
   "trendMonth",
+  "special", // 特別費を含める（Issue #41）
 ] as const;
 
 type ListParamKey = (typeof LIST_PARAM_KEYS)[number];
@@ -115,7 +117,7 @@ export type ReceiptListFilter = {
   scopeLabel: string; // 「全体」「A」「A＋共同1/2」
 };
 
-// URLの条件の値が正しいか。存在しないカテゴリ・内訳・相手・支払い先、不正な費用区分は無視する。
+// URLの条件の値が正しいか。存在しないカテゴリ・内訳・相手・支払い先、不正な費用区分・特別費の値は無視する。
 // 支払い先は登録済みの支払い先のID（相方の自分用・非表示を含む）か、登録外（手入力）。
 function isValidConditionValue(
   dimension: Dimension,
@@ -133,6 +135,8 @@ function isValidConditionValue(
       return value === UNREGISTERED_PAYEE_KEY || master.payees.some((p) => String(p.id) === value);
     case "counterpart":
       return master.counterparts.some((c) => String(c.id) === value);
+    case "specialExpense":
+      return isSpecialExpenseKey(value);
   }
 }
 

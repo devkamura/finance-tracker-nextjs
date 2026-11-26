@@ -70,6 +70,7 @@ function item(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     counterpartId: "1",
     tagIds: ["7"],
     ownerUserId: USER_A,
+    isSpecialExpense: false,
     ...overrides,
   };
 }

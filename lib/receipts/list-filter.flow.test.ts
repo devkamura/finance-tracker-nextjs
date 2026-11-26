@@ -56,6 +56,7 @@ function item(
     ownerDisplayName: ownerUserId ?? "共同",
     ownerColor: null,
     tagNames: [],
+    isSpecialExpense: false,
   };
 }
 

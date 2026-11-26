@@ -29,6 +29,7 @@ function item(id: string, categoryId: number, price: number): ReceiptDetailItemV
     ownerDisplayName: "共同",
     ownerColor: null,
     tagNames: [],
+    isSpecialExpense: false,
   };
 }
 

@@ -26,6 +26,7 @@ type RawDetail = {
   breakdown_id: number | null;
   counterpart_id: number;
   owner_user_id: string | null;
+  is_special_expense?: boolean | null; // null・未指定は通常として扱う
   consumption_taxes: { multiplier: number } | { multiplier: number }[] | null;
 };
 
@@ -53,7 +54,7 @@ async function fetchAllReceipts(
       .select(
         `id, occurred_at, amount, payee_id, payer_user_id, transaction_types(name),
          receipt_details(price, tax_type, category_id, breakdown_id, counterpart_id, owner_user_id,
-           consumption_taxes(multiplier))`
+           is_special_expense, consumption_taxes(multiplier))`
       )
       .eq("group_id", groupId)
       .gte("occurred_at", from.toISOString())
@@ -75,7 +76,7 @@ async function fetchAllReceipts(
 }
 
 // レシートを精算と同じロジックで明細に按分し、返金はマイナスにしたうえで
-// 「月×カテゴリ×内訳×相手×支払い先×帰属先」ごとに合計する
+// 「月×カテゴリ×内訳×相手×支払い先×帰属先×特別費」ごとに合計する
 // （docs/支出分析機能/詳細設計書.md 4.2節、docs/分析拡充/詳細設計書.md F4 2章）。
 export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
   const totals = new Map<string, AnalyticsRow>();
@@ -99,6 +100,7 @@ export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
     const month = monthKeyOf(new Date(receipt.occurred_at));
 
     details.forEach((detail, index) => {
+      const isSpecialExpense = detail.is_special_expense === true;
       const key = JSON.stringify([
         month,
         detail.category_id,
@@ -106,6 +108,7 @@ export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
         detail.counterpart_id,
         receipt.payee_id,
         detail.owner_user_id,
+        isSpecialExpense,
       ]);
       const row = totals.get(key) ?? {
         month,
@@ -114,6 +117,7 @@ export function buildAnalyticsRows(receipts: RawReceipt[]): AnalyticsRow[] {
         counterpartId: detail.counterpart_id,
         payeeId: receipt.payee_id,
         ownerUserId: detail.owner_user_id,
+        isSpecialExpense,
         amount: 0,
       };
       row.amount += allocated[index] * sign;

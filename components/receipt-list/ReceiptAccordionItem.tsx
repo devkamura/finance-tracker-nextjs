@@ -10,6 +10,7 @@ import {
   DuplicatedNotice,
 } from "@/components/receipt-detail/DuplicatedBadge";
 import { ReceiptItemBadges } from "@/components/receipt-detail/ReceiptItemBadges";
+import { SpecialExpenseReceiptBadge } from "@/components/receipt-detail/SpecialExpenseReceiptBadge";
 import { UserBadge } from "@/components/ui/UserBadge";
 import { formatYen } from "@/lib/analytics/aggregate";
 import type { ReceiptListItem } from "@/types/receipt";
@@ -72,6 +73,8 @@ export function ReceiptAccordionItem({
                 返金
               </span>
             )}
+            {/* どのレシートに特別費があるか、行を開かなくても分かるようにする（Issue #41） */}
+            <SpecialExpenseReceiptBadge items={receipt.items} />
             {receipt.isDuplicated && (
               <DuplicatedBadge createdByDisplayName={receipt.createdByDisplayName} />
             )}

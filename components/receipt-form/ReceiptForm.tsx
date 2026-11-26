@@ -64,6 +64,8 @@ function createEmptyItem(): ReceiptItem {
     tagIds: [],
     // 帰属先は誤って共同のまま登録されることがないよう、既定は未選択にする。
     ownerUserId: "",
+    // 特別費は既定でチェックなし（Issue #41）
+    isSpecialExpense: false,
   };
 }
 
@@ -101,6 +103,7 @@ export function buildOcrItem(
     counterpartId: "",
     tagIds: [],
     ownerUserId: "",
+    isSpecialExpense: false,
   };
 }
 
@@ -157,6 +160,33 @@ export function applyOcrPatch(
     next.items = next.items.map((item) => withPayeeDefaults(item, payeeSelect));
   }
   return next;
+}
+
+// 一括入力の値を1項目に反映する（指定のない項目は変えない）。
+// 特別費は「特別費にする／しない」を選んだときだけ変える（「変更しない」は今の値のまま。Issue #41）。
+export function applyBulkInput(
+  item: ReceiptItem,
+  values: BulkInputValues,
+  breakdowns: MasterData["breakdowns"]
+): ReceiptItem {
+  return {
+    ...item,
+    taxType: values.taxType ?? item.taxType,
+    taxRateId:
+      values.taxType === "inclusive"
+        ? ""
+        : (values.taxRateId ?? item.taxRateId),
+    categoryId: values.categoryId ?? item.categoryId,
+    breakdownId: breakdownIdAfterBulkApply(
+      item.breakdownId,
+      values.categoryId,
+      values.breakdownId,
+      breakdowns
+    ),
+    counterpartId: values.counterpartId ?? item.counterpartId,
+    ownerUserId: values.ownerUserId ?? item.ownerUserId,
+    isSpecialExpense: values.isSpecialExpense ?? item.isSpecialExpense,
+  };
 }
 
 function createInitialState(defaultTransactionTypeId: string): ReceiptFormState {
@@ -286,23 +316,7 @@ export function ReceiptForm({
   const bulkApply = (values: BulkInputValues) =>
     setState((prev) => ({
       ...prev,
-      items: prev.items.map((item) => ({
-        ...item,
-        taxType: values.taxType ?? item.taxType,
-        taxRateId:
-          values.taxType === "inclusive"
-            ? ""
-            : (values.taxRateId ?? item.taxRateId),
-        categoryId: values.categoryId ?? item.categoryId,
-        breakdownId: breakdownIdAfterBulkApply(
-          item.breakdownId,
-          values.categoryId,
-          values.breakdownId,
-          masterData.breakdowns
-        ),
-        counterpartId: values.counterpartId ?? item.counterpartId,
-        ownerUserId: values.ownerUserId ?? item.ownerUserId,
-      })),
+      items: prev.items.map((item) => applyBulkInput(item, values, masterData.breakdowns)),
     }));
 
   const handleSubmitClick = () => {

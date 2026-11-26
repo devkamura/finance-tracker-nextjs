@@ -137,6 +137,7 @@ describe("画像読み取りの支払い先", () => {
     counterpartId: "",
     tagIds: [],
     ownerUserId: "",
+    isSpecialExpense: false,
   };
   const prev: ReceiptFormState = {
     payeeSelect: "",

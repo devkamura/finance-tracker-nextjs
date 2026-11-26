@@ -91,6 +91,8 @@ type RawReceiptDetail = {
   category_id: number;
   breakdown_id: number | null;
   counterpart_id: number;
+  // 列の追加前に登録された行を読む場合に備えて null も受ける（null は通常として扱う）
+  is_special_expense: boolean | null;
   category_breakdowns: { name: string } | { name: string }[] | null;
   consumption_taxes:
     | { name: string; multiplier: number }
@@ -122,6 +124,7 @@ const RECEIPT_WITH_DETAILS_SELECT = `id, occurred_at, payee_id, payee_name, amou
    transaction_types(name),
    receipt_details(
      id, item_name, price, tax_type, owner_user_id, category_id, breakdown_id, counterpart_id,
+     is_special_expense,
      consumption_taxes(name, multiplier), categories(name), category_breakdowns(name),
      counterparts(kind, user_id, name),
      receipt_detail_tags(tags(name, sort_order))
@@ -159,7 +162,53 @@ function mapReceiptDetailItems(
       .filter((tag): tag is { name: string; sort_order: number } => Boolean(tag))
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((tag) => tag.name),
+    isSpecialExpense: detail.is_special_expense === true,
   }));
+}
+
+// 一覧の行（receipts＋明細）を、画面で使う形に変換する（画像の署名付きURLもここで作る）。
+// レシート一覧と特別費の一覧（Issue #41 要件10）で共通に使う。
+type RawReceiptListRow = {
+  id: string;
+  occurred_at: string;
+  payee_id: number | null;
+  payee_name: string;
+  amount: number;
+  payer_user_id: string;
+  receipt_image_path: string | null;
+  is_duplicated: boolean | null;
+  created_by: string;
+  transaction_types: { name: string } | { name: string }[] | null;
+  receipt_details: unknown[] | null;
+};
+
+async function mapReceiptListRows(
+  supabase: SupabaseClient,
+  rows: RawReceiptListRow[],
+  memberInfo: Map<string, MemberInfo>
+): Promise<ReceiptListItem[]> {
+  return Promise.all(
+    rows.map(async (row) => ({
+      id: row.id,
+      occurredAt: row.occurred_at,
+      payeeId: row.payee_id,
+      payeeName: row.payee_name,
+      amount: row.amount,
+      transactionTypeName: unwrapToOne(row.transaction_types)?.name ?? "",
+      payerUserId: row.payer_user_id,
+      payerDisplayName: memberInfo.get(row.payer_user_id)?.displayName ?? "unknown",
+      payerColor: memberInfo.get(row.payer_user_id)?.color ?? null,
+      receiptImageUrl: row.receipt_image_path
+        ? await getReceiptImageSignedUrl(supabase, row.receipt_image_path)
+        : null,
+      isDuplicated: Boolean(row.is_duplicated),
+      createdByDisplayName: memberInfo.get(row.created_by)?.displayName ?? "unknown",
+      items: mapReceiptDetailItems(
+        (row.receipt_details ?? []) as unknown as RawReceiptDetail[],
+        memberInfo
+      ),
+    }))
+  );
 }
 
 // 一覧画面は明細をアコーディオンでその場に展開して確認できるようにするため、
@@ -186,29 +235,43 @@ export async function listReceipts(
     return [];
   }
 
-  const memberInfo = buildMemberInfoMap(members);
+  return mapReceiptListRows(
+    supabase,
+    data as unknown as RawReceiptListRow[],
+    buildMemberInfoMap(members)
+  );
+}
 
-  return Promise.all(
-    data.map(async (row) => ({
-      id: row.id,
-      occurredAt: row.occurred_at,
-      payeeId: row.payee_id,
-      payeeName: row.payee_name,
-      amount: row.amount,
-      transactionTypeName: unwrapToOne(row.transaction_types)?.name ?? "",
-      payerUserId: row.payer_user_id,
-      payerDisplayName: memberInfo.get(row.payer_user_id)?.displayName ?? "unknown",
-      payerColor: memberInfo.get(row.payer_user_id)?.color ?? null,
-      receiptImageUrl: row.receipt_image_path
-        ? await getReceiptImageSignedUrl(supabase, row.receipt_image_path)
-        : null,
-      isDuplicated: Boolean(row.is_duplicated),
-      createdByDisplayName: memberInfo.get(row.created_by)?.displayName ?? "unknown",
-      items: mapReceiptDetailItems(
-        (row.receipt_details ?? []) as unknown as RawReceiptDetail[],
-        memberInfo
-      ),
-    }))
+// 期間内の、特別費の明細を1件以上含むレシートを新しい順に取得する（Issue #41 要件10）。
+// 期間内のレシートをすべて読むのではなく、特別費の明細があるレシートだけを DB で絞り込む
+// （special_details は絞り込み専用の埋め込み。!inner で、条件に合う明細がないレシートを除く）。
+// 金額の按分には同じレシートの通常の明細も要るため、明細（receipt_details）はすべて読む。
+export async function listSpecialExpenseReceipts(
+  supabase: SupabaseClient,
+  groupId: string,
+  period: Period
+): Promise<ReceiptListItem[]> {
+  const [{ data, error }, members] = await Promise.all([
+    supabase
+      .from("receipts")
+      .select(`${RECEIPT_WITH_DETAILS_SELECT}, special_details:receipt_details!inner(id)`)
+      .eq("group_id", groupId)
+      .eq("special_details.is_special_expense", true)
+      .gte("occurred_at", period.from.toISOString())
+      .lt("occurred_at", period.to.toISOString())
+      .order("occurred_at", { ascending: false }),
+    getGroupMembers(supabase, groupId),
+  ]);
+
+  if (error || !data) {
+    // 一覧が空に見えると「特別費がない」と誤解されるため、例外にしてエラー画面を出す
+    throw error ?? new Error("特別費のレシートを取得できませんでした。");
+  }
+
+  return mapReceiptListRows(
+    supabase,
+    data as unknown as RawReceiptListRow[],
+    buildMemberInfoMap(members)
   );
 }
 
@@ -293,6 +356,7 @@ type RawEditDetail = {
   breakdown_id: number | null;
   counterpart_id: number;
   owner_user_id: string | null;
+  is_special_expense: boolean | null;
   receipt_detail_tags: { tag_id: number }[];
 };
 
@@ -309,7 +373,7 @@ export async function getReceiptForEdit(
       `id, occurred_at, payee_id, payee_name, transaction_type_id, amount, receipt_image_path, payer_user_id,
        receipt_details(
          id, item_name, price, tax_type, tax_rate_id, category_id, breakdown_id, counterpart_id, owner_user_id,
-         receipt_detail_tags(tag_id)
+         is_special_expense, receipt_detail_tags(tag_id)
        )`
     )
     .eq("id", receiptId)
@@ -344,6 +408,7 @@ export async function getReceiptForEdit(
     counterpartId: String(d.counterpart_id),
     tagIds: d.receipt_detail_tags.map((t) => String(t.tag_id)),
     ownerUserId: d.owner_user_id ?? OWNER_JOINT_VALUE,
+    isSpecialExpense: d.is_special_expense === true,
   }));
 
   const state: ReceiptFormState = {

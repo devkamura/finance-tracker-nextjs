@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
@@ -10,6 +11,7 @@ import { AnalyticsMonthSelect } from "@/components/analytics/AnalyticsMonthSelec
 import { ChartTypeTabs } from "@/components/analytics/ChartTypeTabs";
 import { NegativeAmountNotice } from "@/components/analytics/NegativeAmountNotice";
 import { ScopeSelector } from "@/components/analytics/ScopeSelector";
+import { SpecialExpenseToggle } from "@/components/analytics/SpecialExpenseToggle";
 import { SplitBreakdownTable } from "@/components/analytics/SplitBreakdownTable";
 import { SplitFilterControls } from "@/components/analytics/SplitFilterControls";
 import { SplitPieChart } from "@/components/analytics/SplitPieChart";
@@ -19,6 +21,7 @@ import {
   buildPieData,
   buildTrendData,
   formatYen,
+  specialExpenseTotal,
   sumByDimension,
   sumByMonth,
 } from "@/lib/analytics/aggregate";
@@ -31,11 +34,14 @@ import {
 } from "@/lib/analytics/dimensions";
 import type { AnalyticsData, Scope } from "@/lib/analytics/types";
 import {
+  analysisConditions,
   filterConditions,
+  isSpecialExpenseForced,
   parseAnalyticsState,
   serializeAnalyticsState,
   type AnalyticsState,
 } from "@/lib/analytics/url-state";
+import { buildSpecialExpenseListHref } from "@/lib/analytics/special-expense-list";
 import { replaceUrlKeepingAppState } from "@/lib/navigation/history-state";
 import { buildFilteredListHref } from "@/lib/receipts/list-params";
 
@@ -64,7 +70,8 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
   const update = (patch: Partial<AnalyticsState>) =>
     setState((prev) => ({ ...prev, ...patch }));
 
-  const { scopeUserId, includeJoint, month, chart, split, filter, trendMonth } = state;
+  const { scopeUserId, includeJoint, month, chart, split, filter, trendMonth, includeSpecialExpense } =
+    state;
 
   const scope: Scope = useMemo(
     () =>
@@ -75,18 +82,36 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
   );
 
   const costTypes = useMemo(() => costTypeMap(data.categories), [data.categories]);
-  // 絞り込みの条件（円グラフ・推移グラフ・一覧へのリンクで共通）
-  const conditions = useMemo(() => filterConditions(filter), [filter]);
+  // 利用者が選んだ絞り込みの条件（見出しの「食費の合計」などの表示に使う）
+  const userConditions = useMemo(() => filterConditions(filter), [filter]);
+  // 集計・一覧へのリンクに使う条件。特別費を除くときは「通常の明細のみ」の条件が足される（Issue #41）。
+  // 推移グラフは「分ける」を使わないため、分けるの特別費では強制 ON にしない。
+  const pieConditions = useMemo(
+    () => analysisConditions(filter, split, includeSpecialExpense),
+    [filter, split, includeSpecialExpense]
+  );
+  const trendConditions = useMemo(
+    () => analysisConditions(filter, null, includeSpecialExpense),
+    [filter, includeSpecialExpense]
+  );
+  // 今のグラフで特別費の項目を選んでいるか（選んでいる間はチェックを ON とみなす）
+  const specialExpenseForced = isSpecialExpenseForced(filter, chart === "pie" ? split : null);
 
   const pieData = useMemo(
     () =>
-      buildPieData(sumByDimension(data.rows, scope, month, split, conditions, costTypes)),
-    [data.rows, scope, month, split, conditions, costTypes]
+      buildPieData(sumByDimension(data.rows, scope, month, split, pieConditions, costTypes)),
+    [data.rows, scope, month, split, pieConditions, costTypes]
   );
 
   const trendData = useMemo(
-    () => buildTrendData(sumByMonth(data.rows, scope, data.months, conditions, costTypes)),
-    [data.rows, data.months, scope, conditions, costTypes]
+    () => buildTrendData(sumByMonth(data.rows, scope, data.months, trendConditions, costTypes)),
+    [data.rows, data.months, scope, trendConditions, costTypes]
+  );
+
+  // 直近12ヶ月の特別費の合計（Issue #41 要件9）。「特別費を含める」のチェックとは関係なく計算する
+  const twelveMonthSpecialExpense = useMemo(
+    () => specialExpenseTotal(data.rows, scope, data.months, costTypes),
+    [data.rows, data.months, scope, costTypes]
   );
 
   // 選択状態をURLに反映する（再読み込み・一覧から戻ったときの復元用）。
@@ -107,8 +132,9 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
   const labelOf = (key: string) =>
     keyLabel(split, key, data, { withCategory: filter?.dimension !== "category" });
   const colorOf = (key: string) => keyColor(split, key, data);
-  // 絞り込み中は合計の名前を「食費の合計」のように変える（基本設計書 2.9節）
-  const filterLabel = conditionsLabel(conditions, data);
+  // 絞り込み中は合計の名前を「食費の合計」のように変える（基本設計書 2.9節）。
+  // 「特別費を除く」は初期の状態のため、見出しには出さない（利用者が選んだ絞り込みだけで作る）。
+  const filterLabel = conditionsLabel(userConditions, data);
 
   // 条件の折りたたみを閉じているときに出す、今の条件（表示対象 ／ 絞り込み ／ 分ける）
   const scopeMember = data.members.find((m) => m.userId === scopeUserId);
@@ -116,6 +142,8 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
     scopeMember ? `${scopeMember.displayName}${includeJoint ? "＋共同1/2" : ""}` : "全体",
     filterLabel ?? "絞り込みなし",
     ...(chart === "pie" ? [`${DIMENSION_LABELS[split]}で分ける`] : []),
+    // 特別費を含めているときだけ出す（初期の「除く」は出さない。Issue #41）
+    ...(includeSpecialExpense || specialExpenseForced ? ["特別費を含む"] : []),
   ].join(" ／ ");
 
   const firstMonth = data.months[0];
@@ -137,6 +165,13 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
               includeJoint={includeJoint}
               onChangeScope={changeScope}
               onChangeIncludeJoint={(value) => update({ includeJoint: value })}
+              toggles={
+                <SpecialExpenseToggle
+                  checked={includeSpecialExpense}
+                  forced={specialExpenseForced}
+                  onChange={(value) => update({ includeSpecialExpense: value })}
+                />
+              }
             />
           </div>
         </div>
@@ -197,7 +232,7 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
                   hrefFor={(key) =>
                     buildFilteredListHref({
                       month,
-                      conditions: { ...conditions, [split]: key },
+                      conditions: { ...pieConditions, [split]: key },
                       scope,
                       from: "analytics",
                       returnState,
@@ -231,7 +266,7 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
                 selectedPoint
                   ? buildFilteredListHref({
                       month: selectedPoint.month,
-                      conditions,
+                      conditions: trendConditions,
                       scope,
                       from: "analytics",
                       returnState,
@@ -269,6 +304,24 @@ export function AnalyticsView({ data }: AnalyticsViewProps) {
             />
           </div>
         </>
+      )}
+
+      {/* 特別費は月単位では偏りが大きいため、直近12ヶ月の合計を1行で出し、
+          押すと特別費の一覧の画面に移る（Issue #41 要件9・10）。
+          円グラフ・推移グラフのどちらでも、グラフの下の同じ場所に出す。0円のときは出さない */}
+      {twelveMonthSpecialExpense !== 0 && (
+        <Link
+          href={buildSpecialExpenseListHref(scope, returnState)}
+          className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-600 hover:bg-slate-50"
+        >
+          <span>直近12ヶ月の特別費</span>
+          <span className="flex items-center gap-2">
+            <span className="font-bold text-slate-900">
+              {formatYen(twelveMonthSpecialExpense)}
+            </span>
+            <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3 text-slate-400" />
+          </span>
+        </Link>
       )}
     </div>
   );

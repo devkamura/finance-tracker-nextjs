@@ -39,6 +39,7 @@ type DetailInput = {
   breakdown_id?: number | null;
   counterpart_id?: number;
   owner_user_id?: string | null;
+  is_special_expense?: boolean | null;
   tax_type?: "inclusive" | "exclusive";
   multiplier?: number;
 };
@@ -67,6 +68,7 @@ function buildReceipt(
       breakdown_id: d.breakdown_id ?? null,
       counterpart_id: d.counterpart_id ?? PAIR,
       owner_user_id: d.owner_user_id === undefined ? null : d.owner_user_id,
+      is_special_expense: d.is_special_expense === undefined ? false : d.is_special_expense,
       consumption_taxes: d.multiplier ? { multiplier: d.multiplier } : null,
     })),
   };
@@ -104,7 +106,7 @@ function fakeSupabase(pages: unknown[][]) {
 }
 
 // 内訳なし・相手「ふたり」・支払い先「スーパー」の行（buildReceiptの既定値）
-const base = { breakdownId: null, counterpartId: PAIR, payeeId: SUPER };
+const base = { breakdownId: null, counterpartId: PAIR, payeeId: SUPER, isSpecialExpense: false };
 
 describe("buildAnalyticsRows", () => {
   it("U-63: 明細合計と支払額が違う場合、精算と同じく支払額を明細の比率で按分する", () => {
