@@ -13,6 +13,7 @@ import {
   ownPayeeDefaults,
   PAYEE_SELECT,
   toPayee,
+  toPayeeCommonDefaultColumns,
   toPayeeDefaultColumns,
   validatePayeeDefaults,
   type Payee,
@@ -47,10 +48,11 @@ const EMPTY_NAME = "支払い先名を入力してください。";
 const NOT_FOUND = "支払い先が見つかりません。";
 
 // 既定値の入力チェック。グループのカテゴリ・内訳・相手・メンバーと照らし合わせる。
+// 「登録する人」は共通の既定値（common: true）でだけ受け付ける（Issue #44）。
 async function checkDefaults(
   context: MembershipContext,
   defaults: PayeeDefaults,
-  current: PayeeDefaults = EMPTY_PAYEE_DEFAULTS
+  { common, current = EMPTY_PAYEE_DEFAULTS }: { common: boolean; current?: PayeeDefaults }
 ): Promise<string | null> {
   const { supabase, groupId } = context;
   const [categories, breakdowns, tags, members] = await Promise.all([
@@ -63,7 +65,8 @@ async function checkDefaults(
   return validatePayeeDefaults(
     defaults,
     { categories, breakdowns, counterparts, tags, members },
-    current
+    current,
+    { allowRegistrant: common }
   );
 }
 
@@ -120,7 +123,7 @@ export async function createPayee(input: {
   const context = auth.context;
 
   const defaults = input.defaults ?? EMPTY_PAYEE_DEFAULTS;
-  const defaultsError = await checkDefaults(context, defaults);
+  const defaultsError = await checkDefaults(context, defaults, { common: true });
   if (defaultsError) {
     return { success: false, error: defaultsError };
   }
@@ -130,7 +133,7 @@ export async function createPayee(input: {
     .insert({
       group_id: context.groupId,
       name: trimmed,
-      ...toPayeeDefaultColumns(defaults),
+      ...toPayeeCommonDefaultColumns(defaults),
     })
     .select(PAYEE_SELECT)
     .single();
@@ -207,14 +210,17 @@ export async function updatePayeeCommonDefaults(
   if (!current) {
     return { success: false, error: NOT_FOUND };
   }
-  const defaultsError = await checkDefaults(context, defaults, current.defaults);
+  const defaultsError = await checkDefaults(context, defaults, {
+    common: true,
+    current: current.defaults,
+  });
   if (defaultsError) {
     return { success: false, error: defaultsError };
   }
 
   const { error } = await context.supabase
     .from("payees")
-    .update(toPayeeDefaultColumns(defaults))
+    .update(toPayeeCommonDefaultColumns(defaults))
     .eq("id", id)
     .eq("group_id", context.groupId);
   if (error) {
@@ -255,11 +261,11 @@ export async function setOwnPayeeDefaults(
   if (!current) {
     return { success: false, error: NOT_FOUND };
   }
-  const defaultsError = await checkDefaults(
-    context,
-    defaults,
-    ownPayeeDefaults(current, context.userId) ?? current.defaults
-  );
+  // 自分用の既定値では「登録する人」を選べない（本人を選ぶのと同じ結果になるため）
+  const defaultsError = await checkDefaults(context, defaults, {
+    common: false,
+    current: ownPayeeDefaults(current, context.userId) ?? current.defaults,
+  });
   if (defaultsError) {
     return { success: false, error: defaultsError };
   }

@@ -11,7 +11,7 @@ import {
   updatePayee,
   updatePayeeCommonDefaults,
 } from "@/lib/actions/settings/payees";
-import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { OWNER_JOINT_VALUE, REGISTRANT_VALUE } from "@/lib/constants";
 import { EMPTY_PAYEE_DEFAULTS } from "@/lib/receipts/payees";
 import { requireGroupMembership } from "@/lib/settings/admin";
 
@@ -144,6 +144,9 @@ describe("支払い先の設定（Server Action）", () => {
       default_owner_joint: false,
       default_owner_user_id: USER_B,
       default_item_name: null,
+      // 「登録する人」でなければ false（Issue #44）
+      default_counterpart_registrant: false,
+      default_owner_registrant: false,
     });
   });
 
@@ -366,6 +369,8 @@ describe("支払い先の設定（Server Action）", () => {
       default_owner_joint: true,
       default_owner_user_id: null,
       default_item_name: null,
+      default_counterpart_registrant: false,
+      default_owner_registrant: false,
     });
     // 自分のグループの支払い先だけを更新し、共通の既定値のタグを消してから入れ直す（自分用には触れない）
     expect(calls).toEqual(expect.arrayContaining([{ method: "eq", args: ["group_id", "group-1"] }]));
@@ -582,5 +587,58 @@ describe("支払い先の設定（Server Action）", () => {
       success: false,
       error: "別名が見つかりません。",
     });
+  });
+  it("U-168: 追加・共通の既定値の変更では、相手・帰属先＝登録する人をフラグで保存する", async () => {
+    const registrant = {
+      ...EMPTY_PAYEE_DEFAULTS,
+      counterpartId: REGISTRANT_VALUE,
+      ownerUserId: REGISTRANT_VALUE,
+    };
+    const created = fakeSupabase({
+      write: {
+        data: row({ default_counterpart_registrant: true, default_owner_registrant: true }),
+        error: null,
+      },
+    });
+    signIn(created.client, USER_B, false);
+    expect(await createPayee({ name: "スーパー", defaults: registrant })).toMatchObject({
+      success: true,
+      payee: { defaults: { counterpartId: REGISTRANT_VALUE, ownerUserId: REGISTRANT_VALUE } },
+    });
+    expect(writtenValues(created.calls, "insert")).toMatchObject({
+      default_counterpart_id: null,
+      default_owner_joint: false,
+      default_owner_user_id: null,
+      default_counterpart_registrant: true,
+      default_owner_registrant: true,
+    });
+
+    const updated = fakeSupabase({ existing: row(), write: { data: row(), error: null } });
+    signIn(updated.client, USER_A, true);
+    expect((await updatePayeeCommonDefaults(10, registrant)).success).toBe(true);
+    expect(writtenValues(updated.calls, "update")).toMatchObject({
+      default_counterpart_registrant: true,
+      default_owner_registrant: true,
+    });
+  });
+
+  it("U-168: 自分用の既定値では登録する人を保存しない", async () => {
+    for (const [patch, error] of [
+      [{ counterpartId: REGISTRANT_VALUE }, "相手の既定値が不正です。"],
+      [{ ownerUserId: REGISTRANT_VALUE }, "帰属先の既定値が不正です。"],
+    ] as const) {
+      // 共通の既定値が登録する人でも、自分用には保存できない
+      const { client, calls } = fakeSupabase({
+        existing: row({ default_counterpart_registrant: true, default_owner_registrant: true }),
+      });
+      signIn(client, USER_B, false);
+      expect(await setOwnPayeeDefaults(10, { ...EMPTY_PAYEE_DEFAULTS, ...patch })).toEqual({
+        success: false,
+        error,
+      });
+      expect(calls.some((c) => ["upsert", "insert", "update", "delete"].includes(c.method))).toBe(
+        false
+      );
+    }
   });
 });

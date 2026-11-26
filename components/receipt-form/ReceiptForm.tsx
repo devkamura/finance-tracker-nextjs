@@ -22,6 +22,7 @@ import {
   EMPTY_PAYEE_DEFAULTS,
   findPayeeByName,
   payeeDefaultsFor,
+  resolveRegistrantDefaults,
   isSelectablePayee,
 } from "@/lib/receipts/payees";
 import {
@@ -258,11 +259,18 @@ export function ReceiptForm({
   // 選択中の支払い先の既定値を明細に入れる（docs/分析拡充/基本設計書.md 3.4節）。
   // 既定値は操作しているメンバーのもの（自分用があれば自分用、なければ共通。docs/requirements.md「支払い先の一本化」）。
   // 「該当なし」・未選択は、既定値のない支払い先と同じ扱い（すべて未選択にする）。
+  // 相手・帰属先の「登録する人」は、操作しているメンバー本人に置き換えてから入れる（Issue #44）。
   const withPayeeDefaults = (item: ReceiptItem, payeeSelect: string): ReceiptItem => {
     const payee = masterData.payees.find((p) => String(p.id) === payeeSelect);
     return applyPayeeDefaults(
       item,
-      payee ? payeeDefaultsFor(payee, currentUserId) : EMPTY_PAYEE_DEFAULTS,
+      payee
+        ? resolveRegistrantDefaults(
+            payeeDefaultsFor(payee, currentUserId),
+            currentUserId,
+            masterData.counterparts
+          )
+        : EMPTY_PAYEE_DEFAULTS,
       masterData
     );
   };

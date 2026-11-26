@@ -6,6 +6,8 @@ import {
   deleteTestUser,
   type TestUser,
 } from "./test-helpers";
+import { REGISTRANT_VALUE } from "@/lib/constants";
+import { PAYEE_SELECT, toPayee, type PayeeRow } from "@/lib/receipts/payees";
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // 支払い先の権限（RLS）・メンバーごとの非表示・名前の重複・既定値の整合性を検証する
@@ -626,5 +628,60 @@ describe("支払い先", () => {
     } finally {
       await deleteTestUser(admin, leaver.id);
     }
+  });
+  it("I-63: 相手・帰属先＝登録する人をフラグで保存でき、相手の id・共同・メンバーとは同時に持てない（Issue #44）", async () => {
+    // フラグを指定しなければ false（既存の支払い先も同じ）
+    const { data: plain, error: plainError } = await owner.client
+      .from("payees")
+      .insert({ group_id: groupId, name: "登録する人テスト（初期値）" })
+      .select("default_counterpart_registrant, default_owner_registrant")
+      .single();
+    expect(plainError).toBeNull();
+    expect(plain).toEqual({ default_counterpart_registrant: false, default_owner_registrant: false });
+
+    // 相手・帰属先＝登録する人で登録し、画面と同じ取得・変換で「登録する人」として読める
+    const { data: created, error: createError } = await owner.client
+      .from("payees")
+      .insert({
+        group_id: groupId,
+        name: "登録する人テスト",
+        default_category_id: foodId,
+        default_counterpart_registrant: true,
+        default_owner_registrant: true,
+      })
+      .select(PAYEE_SELECT)
+      .single();
+    expect(createError).toBeNull();
+    expect(toPayee(created as unknown as PayeeRow).defaults).toMatchObject({
+      categoryId: String(foodId),
+      counterpartId: REGISTRANT_VALUE,
+      ownerUserId: REGISTRANT_VALUE,
+    });
+
+    // 一般メンバーも共通の既定値として変更できる（登録する人 → 共同）
+    const { error: memberUpdateError } = await member.client
+      .from("payees")
+      .update({ default_owner_registrant: false, default_owner_joint: true })
+      .eq("id", (created as { id: number }).id);
+    expect(memberUpdateError).toBeNull();
+
+    const insertWith = (name: string, values: Record<string, unknown>) =>
+      owner.client.from("payees").insert({ group_id: groupId, name, ...values });
+    // 登録する人と、相手の id・共同・メンバーの同時指定は制約で拒否される
+    const { error: counterpartBoth } = await insertWith("登録する人不正1", {
+      default_counterpart_registrant: true,
+      default_counterpart_id: futariId,
+    });
+    expect(counterpartBoth?.code).toBe("23514");
+    const { error: jointBoth } = await insertWith("登録する人不正2", {
+      default_owner_registrant: true,
+      default_owner_joint: true,
+    });
+    expect(jointBoth?.code).toBe("23514");
+    const { error: memberBoth } = await insertWith("登録する人不正3", {
+      default_owner_registrant: true,
+      default_owner_user_id: member.id,
+    });
+    expect(memberBoth?.code).toBe("23514");
   });
 });
