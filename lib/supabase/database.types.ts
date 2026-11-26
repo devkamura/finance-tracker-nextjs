@@ -462,8 +462,10 @@ export type Database = {
           default_breakdown_id: number | null
           default_category_id: number | null
           default_counterpart_id: number | null
+          default_counterpart_registrant: boolean
           default_item_name: string | null
           default_owner_joint: boolean
+          default_owner_registrant: boolean
           default_owner_user_id: string | null
           group_id: string
           id: number
@@ -475,8 +477,10 @@ export type Database = {
           default_breakdown_id?: number | null
           default_category_id?: number | null
           default_counterpart_id?: number | null
+          default_counterpart_registrant?: boolean
           default_item_name?: string | null
           default_owner_joint?: boolean
+          default_owner_registrant?: boolean
           default_owner_user_id?: string | null
           group_id: string
           id?: never
@@ -488,8 +492,10 @@ export type Database = {
           default_breakdown_id?: number | null
           default_category_id?: number | null
           default_counterpart_id?: number | null
+          default_counterpart_registrant?: boolean
           default_item_name?: string | null
           default_owner_joint?: boolean
+          default_owner_registrant?: boolean
           default_owner_user_id?: string | null
           group_id?: string
           id?: never

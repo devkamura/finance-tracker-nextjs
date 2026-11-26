@@ -4,13 +4,15 @@
 // 既定値は、登録したときの内容（共通の既定値）を、メンバーごとに自分用に上書きできる。
 // 登録画面・設定画面（クライアント）と Server Action の入力チェックの両方から使うため server-only にはしない。
 
-import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { OWNER_JOINT_VALUE, REGISTRANT_LABEL, REGISTRANT_VALUE } from "@/lib/constants";
 import { autoBreakdownIdFor, type CategoryBreakdown } from "@/lib/receipts/breakdowns";
 import type { Counterpart, Tag } from "@/lib/receipts/labels";
 import type { ReceiptItem } from "@/types/receipt";
 
 // 支払い先の既定値。明細（ReceiptItem）と同じ形の文字列で持ち、"" は「設定しない」。
 // ownerUserId は OWNER_JOINT_VALUE（共同）またはメンバーの user id。tagIds は空なら「設定しない」。
+// 共通の既定値に限り、counterpartId・ownerUserId は REGISTRANT_VALUE（登録する人）にもなる
+// （入力時に resolveRegistrantDefaults で操作しているメンバーに置き換える。Issue #44）。
 // itemName は商品名の既定値（商品名が空の明細にだけ入れる。docs/requirements.md「支払い先の一本化」）。
 export type PayeeDefaults = Pick<
   ReceiptItem,
@@ -58,6 +60,9 @@ type DefaultColumns = {
   default_owner_joint: boolean;
   default_owner_user_id: string | null;
   default_item_name: string | null;
+  // 「登録する人」のフラグ（payees にだけある列。payee_member_defaults にはない）
+  default_counterpart_registrant?: boolean;
+  default_owner_registrant?: boolean;
 };
 
 // DBの行（payees）を Payee に変換する。
@@ -76,15 +81,26 @@ export type PayeeRow = DefaultColumns & {
 const DEFAULT_COLUMNS =
   "default_category_id, default_breakdown_id, default_counterpart_id, default_owner_joint, default_owner_user_id, default_item_name";
 
-export const PAYEE_SELECT = `id, name, ${DEFAULT_COLUMNS}, payee_default_tags(tag_id), payee_aliases(id, name), payee_hidden_members(user_id), payee_member_defaults(user_id, ${DEFAULT_COLUMNS}, payee_member_default_tags(tag_id))`;
+// 共通の既定値（payees）だけが持つ「登録する人」の列
+const REGISTRANT_COLUMNS = "default_counterpart_registrant, default_owner_registrant";
+
+export const PAYEE_SELECT = `id, name, ${DEFAULT_COLUMNS}, ${REGISTRANT_COLUMNS}, payee_default_tags(tag_id), payee_aliases(id, name), payee_hidden_members(user_id), payee_member_defaults(user_id, ${DEFAULT_COLUMNS}, payee_member_default_tags(tag_id))`;
 
 // 既定値の列とタグを PayeeDefaults に変換する
 function toDefaults(row: DefaultColumns, tags: { tag_id: number }[] | null | undefined): PayeeDefaults {
   return {
     categoryId: row.default_category_id !== null ? String(row.default_category_id) : "",
     breakdownId: row.default_breakdown_id !== null ? String(row.default_breakdown_id) : "",
-    counterpartId: row.default_counterpart_id !== null ? String(row.default_counterpart_id) : "",
-    ownerUserId: row.default_owner_joint ? OWNER_JOINT_VALUE : (row.default_owner_user_id ?? ""),
+    counterpartId: row.default_counterpart_registrant
+      ? REGISTRANT_VALUE
+      : row.default_counterpart_id !== null
+        ? String(row.default_counterpart_id)
+        : "",
+    ownerUserId: row.default_owner_registrant
+      ? REGISTRANT_VALUE
+      : row.default_owner_joint
+        ? OWNER_JOINT_VALUE
+        : (row.default_owner_user_id ?? ""),
     tagIds: (tags ?? []).map((t) => String(t.tag_id)),
     itemName: row.default_item_name ?? "",
   };
@@ -138,20 +154,64 @@ export function findPayeeByName(payees: Payee[], name: string): Payee | null {
 
 // 既定値を DB の列に変換する（Server Action で保存するとき）。
 // タグは payee_default_tags に別に保存するため含めない。
+// payees・payee_member_defaults の共通の列だけを返す（「登録する人」は相手・帰属先の列では null）。
+// 共通の既定値（payees）を保存するときは toPayeeCommonDefaultColumns を使う。
 export function toPayeeDefaultColumns(defaults: PayeeDefaults) {
+  const counterpartId =
+    defaults.counterpartId === REGISTRANT_VALUE ? "" : defaults.counterpartId;
+  const ownerUserId = defaults.ownerUserId === REGISTRANT_VALUE ? "" : defaults.ownerUserId;
   return {
     default_category_id: defaults.categoryId ? Number(defaults.categoryId) : null,
     // 内訳はカテゴリの既定値があるときだけ（DBの制約と同じ）
     default_breakdown_id:
       defaults.categoryId && defaults.breakdownId ? Number(defaults.breakdownId) : null,
-    default_counterpart_id: defaults.counterpartId ? Number(defaults.counterpartId) : null,
-    default_owner_joint: defaults.ownerUserId === OWNER_JOINT_VALUE,
-    default_owner_user_id:
-      defaults.ownerUserId && defaults.ownerUserId !== OWNER_JOINT_VALUE
-        ? defaults.ownerUserId
-        : null,
+    default_counterpart_id: counterpartId ? Number(counterpartId) : null,
+    default_owner_joint: ownerUserId === OWNER_JOINT_VALUE,
+    default_owner_user_id: ownerUserId && ownerUserId !== OWNER_JOINT_VALUE ? ownerUserId : null,
     // 前後の空白は除き、空なら設定しない
     default_item_name: defaults.itemName.trim() || null,
+  };
+}
+
+// 共通の既定値（payees）の列。toPayeeDefaultColumns に「登録する人」のフラグを足す（Issue #44）。
+export function toPayeeCommonDefaultColumns(defaults: PayeeDefaults) {
+  return {
+    ...toPayeeDefaultColumns(defaults),
+    default_counterpart_registrant: defaults.counterpartId === REGISTRANT_VALUE,
+    default_owner_registrant: defaults.ownerUserId === REGISTRANT_VALUE,
+  };
+}
+
+// 既定値の「登録する人」を、操作しているメンバー本人に置き換える（Issue #44）。
+// - 相手：本人の「メンバーの相手」。本人が相手の一覧で自分を非表示にしている・見つからないときは空欄
+//   （非表示の相手は自動で入れない、という applyPayeeDefaults のルールに統一する。2026-11-26 ユーザー確認済み）
+// - 帰属先：本人
+// 操作しているメンバーが分からないときは、どちらも空欄にする。「登録する人」以外の値はそのまま。
+// レシートの入力（自動入力）と、設定画面の「自分用にする」（共通の既定値をコピーするとき）で使う。
+export function resolveRegistrantDefaults(
+  defaults: PayeeDefaults,
+  currentUserId: string | undefined,
+  counterparts: Counterpart[]
+): PayeeDefaults {
+  if (defaults.counterpartId !== REGISTRANT_VALUE && defaults.ownerUserId !== REGISTRANT_VALUE) {
+    return defaults;
+  }
+  const ownCounterpart =
+    currentUserId === undefined
+      ? undefined
+      : counterparts.find(
+          (c) => c.kind === "member" && c.userId === currentUserId && !c.isHidden
+        );
+  return {
+    ...defaults,
+    counterpartId:
+      defaults.counterpartId === REGISTRANT_VALUE
+        ? ownCounterpart
+          ? String(ownCounterpart.id)
+          : ""
+        : defaults.counterpartId,
+    ownerUserId:
+      defaults.ownerUserId === REGISTRANT_VALUE ? (currentUserId ?? "") : defaults.ownerUserId,
   };
 }
 
@@ -282,11 +342,17 @@ export function describePayeeDefaults(
   }
   const category = context.categories.find((c) => String(c.id) === defaults.categoryId);
   const breakdown = context.breakdowns.find((b) => String(b.id) === defaults.breakdownId);
-  const counterpart = context.counterparts.find((c) => String(c.id) === defaults.counterpartId);
+  // 「登録する人」はそのまま「登録する人」と出す（Issue #44）
+  const counterpartName =
+    defaults.counterpartId === REGISTRANT_VALUE
+      ? REGISTRANT_LABEL
+      : context.counterparts.find((c) => String(c.id) === defaults.counterpartId)?.name;
   const owner =
-    defaults.ownerUserId === OWNER_JOINT_VALUE
-      ? "共同"
-      : context.members.find((m) => m.userId === defaults.ownerUserId)?.displayName;
+    defaults.ownerUserId === REGISTRANT_VALUE
+      ? REGISTRANT_LABEL
+      : defaults.ownerUserId === OWNER_JOINT_VALUE
+        ? "共同"
+        : context.members.find((m) => m.userId === defaults.ownerUserId)?.displayName;
 
   const categoryLabel = category
     ? breakdown
@@ -296,7 +362,7 @@ export function describePayeeDefaults(
   const tagNames = context.tags
     .filter((t) => defaults.tagIds.includes(String(t.id)))
     .map((t) => t.name);
-  const parts = [categoryLabel, counterpart?.name ?? "―", owner ?? "―"];
+  const parts = [categoryLabel, counterpartName ?? "―", owner ?? "―"];
   if (tagNames.length > 0) {
     parts.push(`タグ ${tagNames.join("・")}`);
   }
@@ -308,6 +374,7 @@ export function describePayeeDefaults(
 
 // 既定値の入力チェック（設定画面の Server Action）。問題がなければ null。
 // 非表示の内訳・相手は、新しく選ぶことはできないが、保存済みの値としては残せる。
+// 「登録する人」は共通の既定値でだけ選べる（allowRegistrant: true。自分用の既定値では不正。Issue #44）。
 export function validatePayeeDefaults(
   defaults: PayeeDefaults,
   context: {
@@ -317,8 +384,15 @@ export function validatePayeeDefaults(
     tags: Tag[];
     members: { userId: string }[];
   },
-  current: PayeeDefaults = EMPTY_PAYEE_DEFAULTS
+  current: PayeeDefaults = EMPTY_PAYEE_DEFAULTS,
+  options: { allowRegistrant?: boolean } = {}
 ): string | null {
+  if (defaults.counterpartId === REGISTRANT_VALUE && !options.allowRegistrant) {
+    return "相手の既定値が不正です。";
+  }
+  if (defaults.ownerUserId === REGISTRANT_VALUE && !options.allowRegistrant) {
+    return "帰属先の既定値が不正です。";
+  }
   if (defaults.categoryId && !context.categories.some((c) => String(c.id) === defaults.categoryId)) {
     return "カテゴリの既定値が不正です。";
   }
@@ -330,7 +404,7 @@ export function validatePayeeDefaults(
       return "内訳の既定値が不正です。";
     }
   }
-  if (defaults.counterpartId) {
+  if (defaults.counterpartId && defaults.counterpartId !== REGISTRANT_VALUE) {
     const counterpart = context.counterparts.find((c) => String(c.id) === defaults.counterpartId);
     if (
       !counterpart ||
@@ -342,6 +416,7 @@ export function validatePayeeDefaults(
   if (
     defaults.ownerUserId &&
     defaults.ownerUserId !== OWNER_JOINT_VALUE &&
+    defaults.ownerUserId !== REGISTRANT_VALUE &&
     defaults.ownerUserId !== current.ownerUserId &&
     !context.members.some((m) => m.userId === defaults.ownerUserId)
   ) {

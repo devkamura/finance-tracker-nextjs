@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { OWNER_JOINT_VALUE, REGISTRANT_VALUE } from "@/lib/constants";
 import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
 import type { Counterpart, Tag } from "@/lib/receipts/labels";
 import {
@@ -18,7 +18,9 @@ import {
   normalizePayeeName,
   payeeOptionLabel,
   payeeOptions,
+  resolveRegistrantDefaults,
   toPayee,
+  toPayeeCommonDefaultColumns,
   toPayeeDefaultColumns,
   validatePayeeDefaults,
   type Payee,
@@ -497,5 +499,150 @@ describe("filterPayees（設定画面の一覧の絞り込み）", () => {
     const before = payees.map((p) => p.id);
     filterPayees(payees, { visibility: "hidden", defaultsKind: "own" }, USER_A);
     expect(payees.map((p) => p.id)).toEqual(before);
+  });
+});
+
+// Issue #44：共通の既定値の相手・帰属先「登録する人」
+describe("登録する人（Issue #44）", () => {
+  // メンバーの相手：1＝A、2＝B（どちらも表示中）
+  const memberCounterparts: Counterpart[] = [
+    ...counterparts,
+    { id: 2, kind: "member", userId: USER_B, name: "B", isHidden: false },
+  ];
+  const registrant = defaults({
+    categoryId: "2",
+    counterpartId: REGISTRANT_VALUE,
+    ownerUserId: REGISTRANT_VALUE,
+  });
+
+  it("U-164: 登録する人を、操作しているメンバー本人に置き換える", () => {
+    expect(resolveRegistrantDefaults(registrant, USER_A, memberCounterparts)).toEqual({
+      ...registrant,
+      counterpartId: "1",
+      ownerUserId: USER_A,
+    });
+    expect(resolveRegistrantDefaults(registrant, USER_B, memberCounterparts)).toEqual({
+      ...registrant,
+      counterpartId: "2",
+      ownerUserId: USER_B,
+    });
+    // 片方だけ登録する人のときは、もう片方はそのまま
+    expect(
+      resolveRegistrantDefaults(
+        defaults({ counterpartId: "3", ownerUserId: REGISTRANT_VALUE }),
+        USER_B,
+        memberCounterparts
+      )
+    ).toMatchObject({ counterpartId: "3", ownerUserId: USER_B });
+  });
+
+  it("U-164: 本人のメンバーの相手が非表示・ないときは相手を空欄にし、操作している人が不明ならどちらも空欄", () => {
+    const hiddenB = memberCounterparts.map((c) => (c.id === 2 ? { ...c, isHidden: true } : c));
+    // 帰属先には非表示がないため、本人が入る
+    expect(resolveRegistrantDefaults(registrant, USER_B, hiddenB)).toMatchObject({
+      counterpartId: "",
+      ownerUserId: USER_B,
+    });
+    // B のメンバーの相手がない
+    expect(resolveRegistrantDefaults(registrant, USER_B, counterparts)).toMatchObject({
+      counterpartId: "",
+      ownerUserId: USER_B,
+    });
+    expect(resolveRegistrantDefaults(registrant, undefined, memberCounterparts)).toMatchObject({
+      counterpartId: "",
+      ownerUserId: "",
+    });
+  });
+
+  it("U-164: 登録する人を含まない既定値は変えない", () => {
+    const plain = defaults({ counterpartId: "3", ownerUserId: OWNER_JOINT_VALUE });
+    expect(resolveRegistrantDefaults(plain, USER_A, memberCounterparts)).toBe(plain);
+  });
+
+  it("U-165: 同じ支払い先を A・B が選ぶと、それぞれ本人が相手・帰属先に入る", () => {
+    const target = payee({ defaults: registrant });
+    const fill = (userId: string) =>
+      applyPayeeDefaults(
+        item(),
+        resolveRegistrantDefaults(payeeDefaultsFor(target, userId), userId, memberCounterparts),
+        { ...context, counterparts: memberCounterparts }
+      );
+    expect(fill(USER_A)).toMatchObject({ categoryId: "2", counterpartId: "1", ownerUserId: USER_A });
+    expect(fill(USER_B)).toMatchObject({ categoryId: "2", counterpartId: "2", ownerUserId: USER_B });
+    // 明細に「登録する人」の値は残らない
+    expect(Object.values(fill(USER_B))).not.toContain(REGISTRANT_VALUE);
+  });
+
+  it("U-166: DB の列との変換（共通の既定値だけフラグを持つ）", () => {
+    const row = {
+      id: 1,
+      name: "スーパー",
+      default_category_id: null,
+      default_breakdown_id: null,
+      default_counterpart_id: null,
+      default_owner_joint: false,
+      default_owner_user_id: null,
+      default_item_name: null,
+      default_counterpart_registrant: true,
+      default_owner_registrant: true,
+      payee_default_tags: [],
+      payee_aliases: [],
+      payee_hidden_members: [],
+      payee_member_defaults: [],
+    };
+    expect(toPayee(row).defaults).toMatchObject({
+      counterpartId: REGISTRANT_VALUE,
+      ownerUserId: REGISTRANT_VALUE,
+    });
+    // フラグがない（false）行は今までどおり
+    expect(
+      toPayee({ ...row, default_counterpart_registrant: false, default_owner_registrant: false })
+        .defaults
+    ).toMatchObject({ counterpartId: "", ownerUserId: "" });
+
+    expect(toPayeeCommonDefaultColumns(registrant)).toEqual({
+      default_category_id: 2,
+      default_breakdown_id: null,
+      default_counterpart_id: null,
+      default_owner_joint: false,
+      default_owner_user_id: null,
+      default_item_name: null,
+      default_counterpart_registrant: true,
+      default_owner_registrant: true,
+    });
+    expect(
+      toPayeeCommonDefaultColumns(defaults({ counterpartId: "3", ownerUserId: OWNER_JOINT_VALUE }))
+    ).toMatchObject({
+      default_counterpart_id: 3,
+      default_owner_joint: true,
+      default_counterpart_registrant: false,
+      default_owner_registrant: false,
+    });
+    // 自分用の列（payee_member_defaults）にはフラグを含めない
+    expect(toPayeeDefaultColumns(registrant)).not.toHaveProperty("default_counterpart_registrant");
+    expect(toPayeeDefaultColumns(registrant)).toMatchObject({
+      default_counterpart_id: null,
+      default_owner_user_id: null,
+    });
+  });
+
+  it("U-167: 一覧の説明と入力チェック（登録する人は共通の既定値でだけ選べる）", () => {
+    const describeContext = { categories, breakdowns, counterparts, tags, members };
+    expect(
+      describePayeeDefaults(
+        defaults({ counterpartId: REGISTRANT_VALUE, ownerUserId: REGISTRANT_VALUE }),
+        describeContext
+      )
+    ).toBe("―／登録する人／登録する人");
+
+    const common = { allowRegistrant: true };
+    expect(validatePayeeDefaults(registrant, describeContext, undefined, common)).toBeNull();
+    // 自分用（許さない）
+    expect(
+      validatePayeeDefaults(defaults({ counterpartId: REGISTRANT_VALUE }), describeContext)
+    ).toBe("相手の既定値が不正です。");
+    expect(
+      validatePayeeDefaults(defaults({ ownerUserId: REGISTRANT_VALUE }), describeContext)
+    ).toBe("帰属先の既定値が不正です。");
   });
 });

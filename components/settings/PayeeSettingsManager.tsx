@@ -25,7 +25,7 @@ import {
   updatePayee,
   updatePayeeCommonDefaults,
 } from "@/lib/actions/settings/payees";
-import { OWNER_JOINT_VALUE } from "@/lib/constants";
+import { OWNER_JOINT_VALUE, REGISTRANT_LABEL, REGISTRANT_VALUE } from "@/lib/constants";
 import {
   autoBreakdownIdFor,
   type CategoryBreakdown,
@@ -44,6 +44,7 @@ import {
   filterPayees,
   ownPayeeDefaults,
   payeeDefaultsFor,
+  resolveRegistrantDefaults,
   type PayeeListFilter,
   type Payee,
   type PayeeAlias,
@@ -714,7 +715,19 @@ function PayeeEditor({
           ) : (
             <button
               type="button"
-              onClick={() => onChange({ ...draft, own: true })}
+              // 共通の既定値をコピーして自分用にする。「登録する人」は自分用では選べないため、
+              // 自分（相手は自分のメンバーの相手）に置き換えてコピーする（Issue #44）
+              onClick={() =>
+                onChange({
+                  ...draft,
+                  own: true,
+                  defaults: resolveRegistrantDefaults(
+                    defaults,
+                    currentUserId,
+                    counterparts,
+                  ),
+                })
+              }
               disabled={isPending}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
@@ -788,6 +801,10 @@ function PayeeEditor({
           onChange={(e) => setDefaults({ counterpartId: e.target.value })}
         >
           <option value="">設定しない</option>
+          {/* 「登録する人」は共通の既定値でだけ選べる（入力するメンバー本人に置き換わる。Issue #44） */}
+          {!draft.own && (
+            <option value={REGISTRANT_VALUE}>{REGISTRANT_LABEL}</option>
+          )}
           {counterpartOptions.map((c) => (
             <option key={c.id} value={c.id}>
               {counterpartOptionLabel(c, currentUserId)}
@@ -802,6 +819,9 @@ function PayeeEditor({
           onChange={(e) => setDefaults({ ownerUserId: e.target.value })}
         >
           <option value="">設定しない</option>
+          {!draft.own && (
+            <option value={REGISTRANT_VALUE}>{REGISTRANT_LABEL}</option>
+          )}
           <option value={OWNER_JOINT_VALUE}>共同</option>
           {members.map((m) => (
             <option key={m.userId} value={m.userId}>

@@ -621,6 +621,42 @@ DBを使わないため、`lib/receipts/list-filter.flow.test.ts`（I-57）・`l
 
 ---
 
+## 追加機能：支払い先の既定値「登録する人」（Issue #44）
+
+対象：[docs/requirements.md](./requirements.md)「追加機能：支払い先の既定値「登録する人」」。テストフレームワーク: Vitest（単体・結合）。
+テストコード：U-164〜U-167 は `lib/receipts/payees.test.ts`、U-168 は `lib/actions/settings/payee-actions.test.ts`、I-63 は `supabase/tests/integration/payees.integration.test.ts`（`npm run test:integration`）。
+外部API・有料サービスへの通信は発生しない。
+既存の支払い先のテストは、「登録する人」を使わない既定値として変更なしで通ること（リグレッション。共通の既定値を保存する列に、2つのフラグ＝false が加わる分だけ期待値を足す）。
+
+### 単体テスト
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| U-164 | `lib/receipts/payees.ts`（`resolveRegistrantDefaults`） | 正常系／境界値：「登録する人」の置き換え（要件3〜5） | 相手・帰属先＝登録する人で、A／B が操作／本人のメンバーの相手が非表示・ない／操作している人が不明／登録する人でない既定値 | 相手は本人のメンバーの相手、帰属先は本人／相手は空欄（帰属先は本人）／どちらも空欄／そのまま | なし |
+| U-165 | `lib/receipts/payees.ts`（`resolveRegistrantDefaults`＋`applyPayeeDefaults`） | 正常系：自動入力（要件4・8） | 共通の既定値（相手・帰属先＝登録する人、カテゴリあり）の支払い先を、A・B がそれぞれ選ぶ | A は相手＝A・帰属先＝A、B は相手＝B・帰属先＝B が明細に入る（明細に「登録する人」の値は残らない） | なし |
+| U-166 | `lib/receipts/payees.ts`（`toPayee`・`toPayeeDefaultColumns`・`toPayeeCommonDefaultColumns`） | 正常系：DB の列との変換 | フラグ true の行／登録する人の既定値を列に変換（共通・自分用の列） | `counterpartId`・`ownerUserId` が登録する人になる／共通はフラグ true・相手と帰属先の列は null、自分用の列にはフラグを含めない | なし |
+| U-167 | `lib/receipts/payees.ts`（`describePayeeDefaults`・`validatePayeeDefaults`） | 正常系／異常系：一覧の説明と入力チェック（要件1・2・6） | 相手・帰属先＝登録する人／入力チェックで登録する人を許す（共通）／許さない（自分用） | 「―／登録する人／登録する人」／エラーなし／「相手の既定値が不正です。」「帰属先の既定値が不正です。」 | なし |
+| U-168 | `lib/actions/settings/payees.ts`（`createPayee`・`updatePayeeCommonDefaults`・`setOwnPayeeDefaults`） | 正常系／異常系：保存（要件1・2） | 相手・帰属先＝登録する人で、追加・共通の既定値の変更・自分用の既定値の保存 | 追加・共通はフラグ true で保存する／自分用はエラーを返し、DB に書き込まない | Supabase クライアント（`requireGroupMembership`）・グループのデータの取得 |
+
+### 結合テスト
+
+| No | テスト対象 | 観点 | 入力値 / 条件 | 期待結果 | モック対象 |
+|---|---|---|---|---|---|
+| I-63 | `supabase/tests/integration/payees.integration.test.ts`（ローカル Supabase） | DB の列と制約 | フラグを指定せずに支払い先を作成／相手・帰属先＝登録する人で作成・一般メンバーが変更／登録する人と相手の id、登録する人と共同・メンバーを同時に指定 | 初期値は false／保存でき、`PAYEE_SELECT`＋`toPayee` で登録する人として読める／制約で拒否される | なし |
+
+### E2Eテスト
+
+**実施しない。**（既存機能と同じく Playwright 未導入のため）画面操作の観点は次の手順で手動確認する。期待値つきの手順は `docs/仕様書/#44_…/受け入れテスト仕様書.md`。
+
+| No | シナリオ | 操作手順 | 期待結果 | モック対象 |
+|---|---|---|---|---|
+| PR-M-01 | 共通の既定値で選ぶ | 1. 設定 ＞ 支払い先で追加し、相手・帰属先に「登録する人」を選んで保存 2. 一覧を見る | プルダウンに「登録する人」がある。一覧の説明に「登録する人」と出る | なし |
+| PR-M-02 | メンバーごとに置き換わる | 1. A で登録画面を開き、PR-M-01 の支払い先を選ぶ 2. B でも同じ操作をする | A は相手・帰属先が「自分（A）」「A」、B は「自分（B）」「B」になる。保存したレシートの詳細も同じ | なし |
+| PR-M-03 | 自分用の既定値 | 1. PR-M-01 の支払い先を編集し「自分用にする」 | 相手・帰属先が本人に置き換わってコピーされる。プルダウンに「登録する人」は出ない。「共通に戻す」で「登録する人」に戻る | なし |
+| PR-M-04 | 本人の相手が非表示 | 1. 設定 ＞ 相手で自分自身を非表示にする 2. PR-M-01 の支払い先を選ぶ | 相手は空欄、帰属先は本人が入る | なし |
+
+---
+
 ## 追加機能：管理画面（グループ・管理者・ユーザー管理・支払い先管理）
 
 テストフレームワーク: Vitest（単体・結合）/ Playwright（E2E）。
