@@ -27,6 +27,9 @@ export type AnalyticsState = {
   // 特別費を含めるか（Issue #41）。初期値は false（特別費を除く）。
   // 絞り込み・分けるで特別費の項目を選んでいる間は、この値に関係なく含める（isSpecialExpenseForced）。
   includeSpecialExpense: boolean;
+  // 投資を含めるか（Issue #49）。初期値は false（カテゴリ「投資」の明細を除く）。
+  // 絞り込みで投資のカテゴリ・内訳を選んでいる間は、この値に関係なく含める（isInvestmentForced）。
+  includeInvestment: boolean;
 };
 
 // 絞り込みを、集計・一覧の絞り込みで使う条件の形にする
@@ -44,16 +47,42 @@ export function isSpecialExpenseForced(
   return filter?.dimension === "specialExpense" || split === "specialExpense";
 }
 
+// 投資のカテゴリ・内訳を絞り込みで選んでいるか。選んでいる間は「投資を含める」を ON とみなす
+// （OFF のままだと「絞り込み：カテゴリ＝投資」が0円になってしまうため。Issue #49）。
+// 「分ける」は値ごとに分けるだけなので、投資を除いても0円にはならず、強制 ON にしない。
+export function isInvestmentForced(
+  filter: AnalyticsFilter | null,
+  investmentCategoryId: string | null,
+  breakdowns: { id: number; categoryId: number }[]
+): boolean {
+  if (filter === null || investmentCategoryId === null) return false;
+  if (filter.dimension === "category") return filter.key === investmentCategoryId;
+  if (filter.dimension === "breakdown") {
+    return breakdowns.some(
+      (b) => String(b.id) === filter.key && String(b.categoryId) === investmentCategoryId
+    );
+  }
+  return false;
+}
+
 // 集計・一覧への絞り込みに使う条件。利用者が選んだ絞り込みに、
 // 特別費を除くとき（含めない かつ 強制 ON でない）だけ「通常の明細のみ」の条件を足す（Issue #41）。
+// excludeCategoryId を渡すと、そのカテゴリの明細を除く条件も足す（投資を除くとき。Issue #49）。
+// 投資を含める・強制 ON のときは、呼び出し側で null を渡す。
 export function analysisConditions(
   filter: AnalyticsFilter | null,
   split: Dimension | null,
-  includeSpecialExpense: boolean
+  includeSpecialExpense: boolean,
+  excludeCategoryId: string | null = null
 ): Conditions {
   const conditions = filterConditions(filter);
-  if (includeSpecialExpense || isSpecialExpenseForced(filter, split)) return conditions;
-  return { ...conditions, specialExpense: "normal" };
+  const withSpecial: Conditions =
+    includeSpecialExpense || isSpecialExpenseForced(filter, split)
+      ? conditions
+      : { ...conditions, specialExpense: "normal" };
+  return excludeCategoryId === null
+    ? withSpecial
+    : { ...withSpecial, excludeCategory: excludeCategoryId };
 }
 
 type StateSource = Pick<AnalyticsData, "members" | "months"> & DimensionMaster;
@@ -71,7 +100,7 @@ function validFilter(
 }
 
 // URLの値を検証して状態に変換する。不正な値は初期値
-// （全体・共同オフ・当月・円グラフ・カテゴリで分ける・絞り込みなし・月未選択・特別費を除く）に戻す。
+// （全体・共同オフ・当月・円グラフ・カテゴリで分ける・絞り込みなし・月未選択・特別費を除く・投資を除く）に戻す。
 // F4 より前の URL（推移グラフのカテゴリ category=ID）は、カテゴリの絞り込みとして読む。
 export function parseAnalyticsState(
   get: (key: string) => string | null | undefined,
@@ -95,6 +124,7 @@ export function parseAnalyticsState(
     filter,
     trendMonth: trendMonth && data.months.includes(trendMonth) ? trendMonth : null,
     includeSpecialExpense: get("special") === "1",
+    includeInvestment: get("investment") === "1",
   };
 }
 
@@ -117,6 +147,9 @@ export function serializeAnalyticsState(state: AnalyticsState): URLSearchParams 
   }
   if (state.includeSpecialExpense) {
     params.set("special", "1");
+  }
+  if (state.includeInvestment) {
+    params.set("investment", "1");
   }
   return params;
 }

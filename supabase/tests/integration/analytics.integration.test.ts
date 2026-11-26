@@ -244,7 +244,10 @@ describe("支出分析のデータ取得", () => {
       },
     ]);
     expect(data.categories.find((c) => c.id === foodId)?.costType).toBe("fixed");
-    expect(data.breakdowns).toEqual([{ id: breakdown!.id, categoryId: foodId, name: "外食" }]);
+    // 内訳の費用区分は、作ったときのカテゴリの費用区分（このグループでは食費を固定費にしている）が入る（Issue #49）
+    expect(data.breakdowns).toEqual([
+      { id: breakdown!.id, categoryId: foodId, name: "外食", costType: "fixed" },
+    ]);
     // 既定の相手とメンバー（表示名）の相手が入る
     expect(data.counterparts.map((c) => c.name)).toEqual(
       expect.arrayContaining(["ふたり", "友人", "実家"])

@@ -48,13 +48,13 @@ describe("settings/queries", () => {
   it("U-97: 内訳を画面用の形（非表示を含む）に変換する", async () => {
     const supabase = fakeSupabase({
       category_breakdowns: [
-        { id: 10, category_id: 1, name: "外食", is_hidden: false },
-        { id: 11, category_id: 1, name: "旧", is_hidden: true },
+        { id: 10, category_id: 1, name: "外食", is_hidden: false, cost_type: null },
+        { id: 11, category_id: 1, name: "旧", is_hidden: true, cost_type: "fixed" },
       ],
     });
     expect(await getCategoryBreakdowns(supabase, "group-1")).toEqual([
-      { id: 10, categoryId: 1, name: "外食", isHidden: false },
-      { id: 11, categoryId: 1, name: "旧", isHidden: true },
+      { id: 10, categoryId: 1, name: "外食", isHidden: false, costType: null },
+      { id: 11, categoryId: 1, name: "旧", isHidden: true, costType: "fixed" },
     ]);
   });
 

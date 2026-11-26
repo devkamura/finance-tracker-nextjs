@@ -1,6 +1,6 @@
 "use server";
 
-import type { CategoryBreakdown } from "@/lib/receipts/breakdowns";
+import { toBreakdownCostType, type CategoryBreakdown } from "@/lib/receipts/breakdowns";
 import { requireGroupAdmin } from "@/lib/settings/admin";
 
 export type CreateBreakdownResult =
@@ -41,7 +41,7 @@ export async function createBreakdown(
       name: trimmed,
       sort_order: (last?.sort_order ?? -1) + 1,
     })
-    .select("id, category_id, name, is_hidden")
+    .select("id, category_id, name, is_hidden, cost_type")
     .single();
 
   if (error) {
@@ -59,6 +59,7 @@ export async function createBreakdown(
       categoryId: data.category_id,
       name: data.name,
       isHidden: data.is_hidden,
+      costType: toBreakdownCostType(data.cost_type),
     },
   };
 }

@@ -66,7 +66,9 @@ export function isDimension(value: unknown): value is Dimension {
 // カテゴリ・内訳・相手はID、費用区分は fixed／variable、
 // 支払い先は登録済みの支払い先のID（紐づいていないレシートは UNREGISTERED_PAYEE_KEY）。
 // 特別費は normal／special。
-export type Conditions = Partial<Record<Dimension, string>>;
+// excludeCategory は「このカテゴリの明細を除く」条件（カテゴリID）。分析画面の「投資を含める」が
+// OFF のときに、カテゴリ「投資」を除くために使う（Issue #49）。
+export type Conditions = Partial<Record<Dimension, string>> & { excludeCategory?: string };
 
 // 明細1件（分析の集約行・一覧の明細）の、項目の値
 export type DimensionValues = {
@@ -77,6 +79,16 @@ export type DimensionValues = {
   isSpecialExpense: boolean; // 特別費か（Issue #41）
 };
 
+// カテゴリ「投資」（Issue #49）。カテゴリはアプリ共通のマスタで ID が環境ごとに違うため、名前で見分ける。
+// 分析画面の「投資を含める」が OFF のとき、このカテゴリの明細を除く。
+export const INVESTMENT_CATEGORY_NAME = "投資";
+
+// カテゴリ「投資」の ID（文字列。条件の値と同じ形）。カテゴリがなければ null。
+export function investmentCategoryId(categories: { id: number; name: string }[]): string | null {
+  const category = categories.find((c) => c.name === INVESTMENT_CATEGORY_NAME);
+  return category ? String(category.id) : null;
+}
+
 // 名前・色を決めるためのマスタ
 export type DimensionMaster = {
   categories: AnalyticsCategory[];
@@ -85,11 +97,36 @@ export type DimensionMaster = {
   payees: AnalyticsPayee[]; // 名前順
 };
 
-export type CostTypeMap = Map<number, CostType>;
+// 費用区分の設定。内訳に費用区分があればそれ、なければカテゴリの費用区分を使う（Issue #49）。
+// 費用区分は明細ごとに保存せず、集計するときの今の設定で決める。
+export type CostTypeMap = {
+  byCategory: Map<number, CostType>; // カテゴリID → 費用区分
+  byBreakdown: Map<number, CostType>; // 内訳ID → 費用区分
+};
 
-// カテゴリID → 費用区分。費用区分は明細ごとに保存せず、今のカテゴリの設定を使う（基本設計書 3.2節・Q6）。
-export function costTypeMap(categories: { id: number; costType: CostType }[]): CostTypeMap {
-  return new Map(categories.map((c) => [c.id, c.costType]));
+export function costTypeMap(
+  categories: { id: number; costType: CostType }[],
+  breakdowns: { id: number; costType?: CostType | null }[] = []
+): CostTypeMap {
+  return {
+    byCategory: new Map(categories.map((c) => [c.id, c.costType])),
+    byBreakdown: new Map(
+      breakdowns.flatMap((b) => (b.costType ? [[b.id, b.costType] as const] : []))
+    ),
+  };
+}
+
+// 明細の費用区分。内訳の費用区分 → カテゴリの費用区分の順に決める。
+// 設定の取得漏れなどで分からないときは、カテゴリの初期値の多い変動費として扱う。
+export function costTypeOf(
+  values: Pick<DimensionValues, "categoryId" | "breakdownId">,
+  costTypes: CostTypeMap
+): CostType {
+  return (
+    (values.breakdownId !== null ? costTypes.byBreakdown.get(values.breakdownId) : undefined) ??
+    costTypes.byCategory.get(values.categoryId) ??
+    "variable"
+  );
 }
 
 // 明細が、その項目でどの値に当たるか
@@ -104,8 +141,7 @@ export function dimensionKey(
     case "breakdown":
       return values.breakdownId === null ? NO_BREAKDOWN_KEY : String(values.breakdownId);
     case "costType":
-      // 設定の取得漏れなどで費用区分が分からないカテゴリは、カテゴリの初期値の多い変動費として扱う
-      return costTypes.get(values.categoryId) ?? "variable";
+      return costTypeOf(values, costTypes);
     case "payee":
       return payeeKeyOf(values.payeeId);
     case "counterpart":
@@ -121,6 +157,12 @@ export function matchesConditions(
   conditions: Conditions,
   costTypes: CostTypeMap
 ): boolean {
+  if (
+    conditions.excludeCategory !== undefined &&
+    String(values.categoryId) === conditions.excludeCategory
+  ) {
+    return false;
+  }
   return DIMENSIONS.every((dimension) => {
     const expected = conditions[dimension];
     return expected === undefined || dimensionKey(values, dimension, costTypes) === expected;
@@ -262,6 +304,10 @@ export function conditionsLabel(conditions: Conditions, master: DimensionMaster)
     parts.push(SPECIAL_EXPENSE_LABELS.special);
   } else if (conditions.specialExpense === "normal") {
     parts.push("特別費を除く");
+  }
+  // 「投資を含める」が OFF のときに付く条件（Issue #49）。「投資を除く」のように出す
+  if (conditions.excludeCategory !== undefined) {
+    parts.push(`${keyLabel("category", conditions.excludeCategory, master)}を除く`);
   }
   return parts.length > 0 ? parts.join("・") : null;
 }

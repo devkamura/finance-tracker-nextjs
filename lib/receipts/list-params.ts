@@ -21,13 +21,22 @@ import { SEARCH_PARAM_KEYS } from "@/lib/receipts/list-search";
 // 絞り込みの条件（category〜specialExpense）は、分析の「分ける」「絞り込み」の項目と同じ名前
 // （docs/全体仕様書/基本設計書.md 5.6節）。
 // payer・start・end・q は一覧画面のフィルタ欄で選ぶ条件（lib/receipts/list-search.ts。Issue #39）。
-export const LIST_PARAM_KEYS = [
-  "month",
-  "sort",
+// 絞り込みの条件のパラメータ（一覧の画面で読み書きし、「解除」でまとめて外す）。
+// 分析画面から渡される条件（カテゴリ〜特別費・除くカテゴリ・表示対象）と、フィルタ欄の条件。
+// 一覧の画面（ReceiptListView）もこの一覧を使う。条件を足すときはここに足す（Issue #49 で、
+// 画面側に別の一覧があったため「投資を除く」が一覧で捨てられる不具合があった）。
+export const LIST_CONDITION_PARAM_KEYS = [
   ...DIMENSIONS,
+  "excludeCategory", // 分析画面で「投資を含める」が OFF のときに除くカテゴリ（Issue #49）
   "scope",
   "joint",
   ...SEARCH_PARAM_KEYS,
+] as const;
+
+export const LIST_PARAM_KEYS = [
+  "month",
+  "sort",
+  ...LIST_CONDITION_PARAM_KEYS,
   "from",
   "ret",
 ] as const;
@@ -43,6 +52,7 @@ const ANALYTICS_STATE_KEYS = [
   "filterValue",
   "trendMonth",
   "special", // 特別費を含める（Issue #41）
+  "investment", // 投資を含める（Issue #49）
 ] as const;
 
 type ListParamKey = (typeof LIST_PARAM_KEYS)[number];
@@ -88,6 +98,9 @@ export function buildFilteredListHref(input: {
   for (const dimension of DIMENSIONS) {
     const value = input.conditions[dimension];
     if (value !== undefined) params.set(dimension, value);
+  }
+  if (input.conditions.excludeCategory !== undefined) {
+    params.set("excludeCategory", input.conditions.excludeCategory);
   }
   params.set("scope", input.scope.kind === "all" ? "all" : input.scope.userId);
   if (input.scope.kind === "user" && input.scope.includeJoint) params.set("joint", "1");
@@ -157,6 +170,11 @@ export function parseListFilter(
     const value = get(dimension);
     if (!value) continue;
     if (isValidConditionValue(dimension, value, master)) conditions[dimension] = value;
+  }
+  // 除くカテゴリ（投資を除く。Issue #49）。存在しないカテゴリは無視する
+  const excludeCategory = get("excludeCategory");
+  if (excludeCategory && isValidConditionValue("category", excludeCategory, master)) {
+    conditions.excludeCategory = excludeCategory;
   }
   const member = members.find((m) => m.userId === get("scope")) ?? null;
 

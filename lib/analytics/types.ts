@@ -30,6 +30,7 @@ export type AnalyticsBreakdown = {
   id: number;
   categoryId: number;
   name: string;
+  costType?: CostType | null; // 内訳の費用区分（Issue #49）。省略時はカテゴリの費用区分として扱う
 };
 
 // 相手（非表示・グループから外れたメンバーの相手も含む）

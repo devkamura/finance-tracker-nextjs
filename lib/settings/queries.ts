@@ -2,7 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { CategoryBreakdown, CostType } from "@/lib/receipts/breakdowns";
+import {
+  toBreakdownCostType,
+  type CategoryBreakdown,
+  type CostType,
+} from "@/lib/receipts/breakdowns";
 import type { Counterpart, CounterpartKind, Tag } from "@/lib/receipts/labels";
 import { PAYEE_SELECT, toPayee, type Payee, type PayeeRow } from "@/lib/receipts/payees";
 
@@ -14,7 +18,7 @@ export async function getCategoryBreakdowns(
 ): Promise<CategoryBreakdown[]> {
   const { data, error } = await supabase
     .from("category_breakdowns")
-    .select("id, category_id, name, is_hidden")
+    .select("id, category_id, name, is_hidden, cost_type")
     .eq("group_id", groupId)
     .order("sort_order")
     .order("id");
@@ -26,6 +30,7 @@ export async function getCategoryBreakdowns(
     categoryId: row.category_id,
     name: row.name,
     isHidden: row.is_hidden,
+    costType: toBreakdownCostType(row.cost_type),
   }));
 }
 

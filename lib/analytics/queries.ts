@@ -156,7 +156,12 @@ export async function getAnalyticsData(
     today,
     months,
     categories: categories.map((c) => ({ id: c.id, name: c.name, costType: c.costType })),
-    breakdowns: breakdowns.map((b) => ({ id: b.id, categoryId: b.categoryId, name: b.name })),
+    breakdowns: breakdowns.map((b) => ({
+      id: b.id,
+      categoryId: b.categoryId,
+      name: b.name,
+      costType: b.costType,
+    })),
     counterparts,
     // 支払い先は登録済みの支払い先を選択肢にする。全員が非表示にしているものは12ヶ月で使われているときだけ
     payees: buildAnalyticsPayees(payees, members, (id) => usedPayeeIds.has(id)),

@@ -11,7 +11,7 @@ type ScopeSelectorProps = {
   includeJoint: boolean;
   onChangeScope: (userId: string | null) => void;
   onChangeIncludeJoint: (value: boolean) => void;
-  // 「共同を含める」と同じ行に並べるチェックボックス（「特別費を含める」。Issue #41）
+  // 「共同を含める」と同じ行に並べるチェックボックス（「特別費を含める」「投資を含める」。Issue #41・#49）
   toggles?: ReactNode;
 };
 

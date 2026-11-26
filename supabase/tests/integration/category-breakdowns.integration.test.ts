@@ -165,4 +165,82 @@ describe("カテゴリの内訳・費用区分", () => {
       .eq("id", foodBreakdownId);
     expect(hideError).toBeNull();
   });
+
+  it("I-64: カテゴリ「投資」「保険料」があり、費用区分の初期値は固定費（Issue #49）", async () => {
+    const { data, error } = await admin
+      .from("categories")
+      .select("name, default_cost_type")
+      .in("name", ["投資", "保険料"]);
+    expect(error).toBeNull();
+    expect(data?.map((c) => [c.name, c.default_cost_type]).sort()).toEqual([
+      ["保険料", "fixed"],
+      ["投資", "fixed"],
+    ]);
+  });
+
+  it("I-65: 内訳の費用区分は管理者だけが変えられ、固定費・変動費以外（空を含む）は保存できない（Issue #49）", async () => {
+    const { data: updated, error } = await owner.client
+      .from("category_breakdowns")
+      .update({ cost_type: "fixed" })
+      .eq("id", foodBreakdownId)
+      .select("cost_type")
+      .single();
+    expect(error).toBeNull();
+    expect(updated?.cost_type).toBe("fixed");
+
+    // 一般メンバーの更新は RLS で 0 件になり、値は変わらない
+    await member.client.from("category_breakdowns").update({ cost_type: "variable" }).eq("id", foodBreakdownId);
+    const { data: afterMember } = await admin
+      .from("category_breakdowns")
+      .select("cost_type")
+      .eq("id", foodBreakdownId)
+      .single();
+    expect(afterMember?.cost_type).toBe("fixed");
+
+    const { error: invalid } = await owner.client
+      .from("category_breakdowns")
+      .update({ cost_type: "other" })
+      .eq("id", foodBreakdownId);
+    expect(invalid).not.toBeNull();
+
+    const { error: empty } = await owner.client
+      .from("category_breakdowns")
+      .update({ cost_type: null })
+      .eq("id", foodBreakdownId);
+    expect(empty).not.toBeNull();
+  });
+
+  it("I-66: 費用区分を指定せずに内訳を作ると、そのときのカテゴリの費用区分が入り、カテゴリを変えても変わらない（Issue #49）", async () => {
+    // グループの設定がないカテゴリ（日用品＝初期値の変動費）
+    const { data: daily, error: dailyError } = await owner.client
+      .from("category_breakdowns")
+      .insert({ group_id: groupId, category_id: dailyId, name: "費用区分テスト" })
+      .select("id, cost_type")
+      .single();
+    expect(dailyError).toBeNull();
+    expect(daily?.cost_type).toBe("variable");
+
+    // グループの設定で固定費にしたカテゴリでは、固定費が入る
+    const { error: settingError } = await owner.client
+      .from("category_settings")
+      .upsert({ group_id: groupId, category_id: dailyId, cost_type: "fixed" });
+    expect(settingError).toBeNull();
+    const { data: fixedOne } = await owner.client
+      .from("category_breakdowns")
+      .insert({ group_id: groupId, category_id: dailyId, name: "費用区分テスト2" })
+      .select("cost_type")
+      .single();
+    expect(fixedOne?.cost_type).toBe("fixed");
+
+    // カテゴリの費用区分を変えても、先に作った内訳の費用区分は変わらない
+    const { data: unchanged } = await admin
+      .from("category_breakdowns")
+      .select("cost_type")
+      .eq("id", daily!.id)
+      .single();
+    expect(unchanged?.cost_type).toBe("variable");
+
+    await admin.from("category_settings").delete().eq("group_id", groupId).eq("category_id", dailyId);
+    await admin.from("category_breakdowns").delete().eq("group_id", groupId).like("name", "費用区分テスト%");
+  });
 });
