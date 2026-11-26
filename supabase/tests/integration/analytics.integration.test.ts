@@ -133,10 +133,11 @@ describe("支出分析のデータ取得", () => {
     breakdownId: null,
     counterpartId: expect.any(Number),
     payeeId: null,
+    isSpecialExpense: false, // 列を指定せずに登録した明細は通常（Issue #41）
   };
 
   it("I-28: 取得上限（1,000件）を超える1,001件のレシートがすべて集計される", async () => {
-    const data = await getAnalyticsData(userA.client, groupId, userA.id, NOW);
+    const data = await getAnalyticsData(userA.client, groupId, NOW);
     const food = data.rows.filter((r) => r.month === "2026-09" && r.categoryId === foodId);
     expect(food).toEqual([
       { ...detailKeys, month: "2026-09", categoryId: foodId, ownerUserId: null, amount: 100100 },
@@ -145,17 +146,17 @@ describe("支出分析のデータ取得", () => {
 
   it("I-29: 他グループのレシートは含まれない（RLS）", async () => {
     // 自グループの集計に他グループの5,000円が混ざらない
-    const data = await getAnalyticsData(userA.client, groupId, userA.id, NOW);
+    const data = await getAnalyticsData(userA.client, groupId, NOW);
     const total = data.rows.reduce((sum, r) => sum + r.amount, 0);
     expect(total).toBe(100100 + 10 + 100);
 
     // 他グループのIDを指定しても、RLSにより1件も取得できない
-    const crossGroup = await getAnalyticsData(userA.client, otherGroupId, userA.id, NOW);
+    const crossGroup = await getAnalyticsData(userA.client, otherGroupId, NOW);
     expect(crossGroup.rows).toEqual([]);
   });
 
   it("I-30: 12ヶ月より前・翌月以降のレシートは含まれず、境界の月は含まれる", async () => {
-    const data = await getAnalyticsData(userA.client, groupId, userA.id, NOW);
+    const data = await getAnalyticsData(userA.client, groupId, NOW);
     const daily = data.rows
       .filter((r) => r.categoryId === dailyId)
       .sort((a, b) => a.month.localeCompare(b.month));
@@ -228,7 +229,7 @@ describe("支出分析のデータ取得", () => {
     });
     expect(detailError).toBeNull();
 
-    const data = await getAnalyticsData(outsider.client, otherGroupId, outsider.id, NOW);
+    const data = await getAnalyticsData(outsider.client, otherGroupId, NOW);
 
     expect(data.rows.filter((r) => r.month === "2026-08")).toEqual([
       {
@@ -238,6 +239,7 @@ describe("支出分析のデータ取得", () => {
         counterpartId: friend.id,
         payeeId: payee!.id,
         ownerUserId: outsider.id,
+        isSpecialExpense: false,
         amount: 3000,
       },
     ]);
@@ -249,8 +251,6 @@ describe("支出分析のデータ取得", () => {
     );
     expect(data.counterparts.length).toBe(4);
     // 支払い先の選択肢は登録済みの支払い先（F5）
-    expect(data.payees).toEqual([
-      { id: payee!.id, name: "居酒屋", section: "shared", sectionLabel: "グループ全体" },
-    ]);
+    expect(data.payees).toEqual([{ id: payee!.id, name: "居酒屋" }]);
   });
 });

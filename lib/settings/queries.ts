@@ -128,9 +128,8 @@ export async function getTags(supabase: SupabaseClient, groupId: string): Promis
   return (data ?? []).map((row) => ({ id: row.id, name: row.name, isHidden: row.is_hidden }));
 }
 
-// グループの支払い先を取得する（グループ全体・全員の自分用・非表示のものも含む。名前順。基本設計書 2.6節）。
-// 登録画面ではこのうちグループ全体と自分用だけを選択肢に出し（lib/receipts/payees.ts）、
-// 設定画面では相方用も閲覧のみで表示する。
+// グループの支払い先を取得する（メンバーが非表示にしているものも含む。名前順。基本設計書 2.6節）。
+// 登録画面ではこのうち自分が非表示にしていないものだけを選択肢に出す（lib/receipts/payees.ts）。
 export async function getPayees(supabase: SupabaseClient, groupId: string): Promise<Payee[]> {
   const { data, error } = await supabase
     .from("payees")

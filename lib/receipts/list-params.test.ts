@@ -16,7 +16,7 @@ const master = {
   ],
   breakdowns: [{ id: 11, categoryId: 1, name: "外食" }],
   counterparts: [{ id: 22, name: "友人" }],
-  payees: [{ id: 41, name: "A病院", section: "shared" as const, sectionLabel: "グループ全体" }],
+  payees: [{ id: 41, name: "A病院" }],
 };
 const members = [
   { userId: "user-a", displayName: "A" },
@@ -180,5 +180,21 @@ describe("list-params", () => {
     ).toBe(
       "/receipts?month=2026-07&costType=fixed&payee=unregistered&counterpart=22&scope=all&from=analytics"
     );
+  });
+
+  it("U-150: フィルタ欄の条件（支払者・期間・キーワード）も詳細画面との行き来で引き継ぐ", () => {
+    const params = pickListParams({
+      month: "2026-07",
+      payer: "user-a",
+      start: "2026-07-01",
+      end: "2026-07-07",
+      q: "牛乳",
+      open: "r-1",
+    });
+    expect(params.get("payer")).toBe("user-a");
+    expect(params.get("start")).toBe("2026-07-01");
+    expect(params.get("end")).toBe("2026-07-07");
+    expect(params.get("q")).toBe("牛乳");
+    expect(params.has("open")).toBe(false);
   });
 });

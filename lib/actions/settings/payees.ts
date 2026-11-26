@@ -10,6 +10,7 @@ import {
 import { getGroupMembers } from "@/lib/supabase/group";
 import {
   EMPTY_PAYEE_DEFAULTS,
+  ownPayeeDefaults,
   PAYEE_SELECT,
   toPayee,
   toPayeeDefaultColumns,
@@ -20,11 +21,11 @@ import {
   type PayeeRow,
 } from "@/lib/receipts/payees";
 
-// 設定 ＞ 支払い先の操作（docs/分析拡充/基本設計書.md 2.6節・4.2節）。
-// グループ全体の支払い先は管理者のみ、自分用の支払い先は登録したユーザー本人のみ編集できる。
-// 相方の自分用は閲覧のみ（RLSでも制限する）。
-
-export type PayeeScope = "shared" | "own";
+// 設定 ＞ 支払い先の操作（docs/requirements.md「追加機能：支払い先の一本化」）。
+// 登録・名前の変更・削除はグループのメンバー全員ができる（管理者と非管理者を区別しない）。
+// 既定値は、登録したときの内容が共通の既定値になる。共通の既定値は登録後もメンバー全員が変更でき、
+// 共通の変更の影響を受けたくないメンバーは自分用の既定値で上書きできる。表示／非表示・自分用の既定値は自分の分だけ変えられる。
+// 他グループの支払い先はRLSでも操作できない。
 
 export type PayeeActionResult =
   | { success: true; payee: Payee }
@@ -34,23 +35,16 @@ export type DeletePayeeResult = { success: true } | { success: false; error: str
 
 const DUPLICATE_NAME = "同じ名前の支払い先が既に存在します。";
 
-// 名前の重複（23505）のメッセージ。グループ全体と自分用の間の重複はDBのトリガー
-// （check_payee_name_across_scopes）で防いでおり、どちらと重なったかをメッセージから判断する。
+// 名前の重複（23505）のメッセージ。別名との重複はDBのトリガー（check_payee_name_not_alias）で
+// 防いでおり、メッセージから判断する。
 function duplicateNameError(error: { message?: string }): string {
-  if (error.message?.includes("conflicts with a shared payee")) {
-    return "グループ全体に同じ名前の支払い先があります。";
-  }
-  if (error.message?.includes("conflicts with an own payee")) {
-    return "メンバーの自分用に同じ名前の支払い先があります。";
-  }
   if (error.message?.includes("payee name conflicts with an alias")) {
     return "同じ名前の別名が登録されています。";
   }
   return DUPLICATE_NAME;
 }
 const EMPTY_NAME = "支払い先名を入力してください。";
-const SHARED_ADMIN_ONLY = "グループ全体の支払い先は管理者のみ編集できます。";
-const NOT_OWNER = "他のメンバーの支払い先は編集できません。";
+const NOT_FOUND = "支払い先が見つかりません。";
 
 // 既定値の入力チェック。グループのカテゴリ・内訳・相手・メンバーと照らし合わせる。
 async function checkDefaults(
@@ -73,28 +67,21 @@ async function checkDefaults(
   );
 }
 
-// 既定値のタグ（payee_default_tags）を、指定したタグに入れ替える。失敗したらエラーメッセージを返す。
-async function replaceDefaultTags(
+// 共通の既定値のタグ（payee_default_tags）を登録する（支払い先の追加・共通の既定値の変更）。
+// 失敗したらエラーメッセージを返す。
+async function insertDefaultTags(
   context: MembershipContext,
   payeeId: number,
   tagIds: string[]
 ): Promise<string | null> {
-  const { error: deleteError } = await context.supabase
-    .from("payee_default_tags")
-    .delete()
-    .eq("payee_id", payeeId);
-  if (deleteError) {
-    console.error("Failed to delete payee default tags", deleteError);
-    return "既定値のタグの保存に失敗しました。";
-  }
   if (tagIds.length === 0) {
     return null;
   }
-  const { error: insertError } = await context.supabase
+  const { error } = await context.supabase
     .from("payee_default_tags")
     .insert(tagIds.map((tagId) => ({ payee_id: payeeId, tag_id: Number(tagId) })));
-  if (insertError) {
-    console.error("Failed to insert payee default tags", insertError);
+  if (error) {
+    console.error("Failed to insert payee default tags", error);
     return "既定値のタグの保存に失敗しました。";
   }
   return null;
@@ -105,17 +92,19 @@ function withTagIds(payee: Payee, tagIds: string[]): Payee {
   return { ...payee, defaults: { ...payee.defaults, tagIds } };
 }
 
-// 対象の支払い先を編集できるか（グループ全体は管理者、自分用は本人）。編集できれば null。
-function editPermissionError(context: MembershipContext, ownerUserId: string | null) {
-  if (ownerUserId === null) {
-    return context.isAdmin ? null : SHARED_ADMIN_ONLY;
-  }
-  return ownerUserId === context.userId ? null : NOT_OWNER;
+// 支払い先を取り直す（自分のグループの支払い先だけ）。なければ null。
+async function fetchPayee(context: MembershipContext, id: number): Promise<Payee | null> {
+  const { data } = await context.supabase
+    .from("payees")
+    .select(PAYEE_SELECT)
+    .eq("id", id)
+    .eq("group_id", context.groupId)
+    .maybeSingle();
+  return data ? toPayee(data as PayeeRow) : null;
 }
 
-// 支払い先を追加する。scope が "shared" ならグループ全体、"own" なら自分用。
+// 支払い先を追加する。追加した支払い先は全員に表示される。入力した既定値が共通の既定値になる。
 export async function createPayee(input: {
-  scope: PayeeScope;
   name: string;
   defaults?: PayeeDefaults;
 }): Promise<PayeeActionResult> {
@@ -129,11 +118,6 @@ export async function createPayee(input: {
     return { success: false, error: auth.error };
   }
   const context = auth.context;
-  const ownerUserId = input.scope === "own" ? context.userId : null;
-  const permissionError = editPermissionError(context, ownerUserId);
-  if (permissionError) {
-    return { success: false, error: permissionError };
-  }
 
   const defaults = input.defaults ?? EMPTY_PAYEE_DEFAULTS;
   const defaultsError = await checkDefaults(context, defaults);
@@ -145,7 +129,6 @@ export async function createPayee(input: {
     .from("payees")
     .insert({
       group_id: context.groupId,
-      owner_user_id: ownerUserId,
       name: trimmed,
       ...toPayeeDefaultColumns(defaults),
     })
@@ -161,7 +144,7 @@ export async function createPayee(input: {
   }
   const payee = toPayee(data as PayeeRow);
 
-  const tagError = await replaceDefaultTags(context, payee.id, defaults.tagIds);
+  const tagError = await insertDefaultTags(context, payee.id, defaults.tagIds);
   if (tagError) {
     // 既定値のタグだけが欠けた支払い先を残さないよう、追加した支払い先を取り消す
     await context.supabase.from("payees").delete().eq("id", payee.id);
@@ -170,12 +153,14 @@ export async function createPayee(input: {
   return { success: true, payee: withTagIds(payee, defaults.tagIds) };
 }
 
-// 支払い先の名前・既定値の変更、または表示・非表示の切り替え。
+// 支払い先の名前の変更（メンバー全員）。共通の既定値は updatePayeeCommonDefaults、
+// 自分用の既定値は setOwnPayeeDefaults で変える。
 export async function updatePayee(
   id: number,
-  patch: { name?: string; isHidden?: boolean; defaults?: PayeeDefaults }
+  patch: { name: string }
 ): Promise<PayeeActionResult> {
-  if (patch.name !== undefined && !patch.name.trim()) {
+  const name = patch.name.trim();
+  if (!name) {
     return { success: false, error: EMPTY_NAME };
   }
 
@@ -185,39 +170,9 @@ export async function updatePayee(
   }
   const context = auth.context;
 
-  const { data: existing } = await context.supabase
-    .from("payees")
-    .select(PAYEE_SELECT)
-    .eq("id", id)
-    .eq("group_id", context.groupId)
-    .maybeSingle();
-  if (!existing) {
-    return { success: false, error: "支払い先が見つかりません。" };
-  }
-  const current = toPayee(existing as PayeeRow);
-  const permissionError = editPermissionError(context, current.ownerUserId);
-  if (permissionError) {
-    return { success: false, error: permissionError };
-  }
-
-  const values: Record<string, unknown> = {};
-  if (patch.name !== undefined) {
-    values.name = patch.name.trim();
-  }
-  if (patch.isHidden !== undefined) {
-    values.is_hidden = patch.isHidden;
-  }
-  if (patch.defaults !== undefined) {
-    const defaultsError = await checkDefaults(context, patch.defaults, current.defaults);
-    if (defaultsError) {
-      return { success: false, error: defaultsError };
-    }
-    Object.assign(values, toPayeeDefaultColumns(patch.defaults));
-  }
-
   const { data, error } = await context.supabase
     .from("payees")
-    .update(values)
+    .update({ name })
     .eq("id", id)
     .eq("group_id", context.groupId)
     .select(PAYEE_SELECT)
@@ -231,18 +186,144 @@ export async function updatePayee(
     return { success: false, error: "支払い先の更新に失敗しました。" };
   }
   if (!data) {
-    return { success: false, error: "権限がありません。" };
+    return { success: false, error: NOT_FOUND };
   }
-  const payee = toPayee(data as PayeeRow);
+  return { success: true, payee: toPayee(data as PayeeRow) };
+}
 
-  if (patch.defaults !== undefined) {
-    const tagError = await replaceDefaultTags(context, id, patch.defaults.tagIds);
-    if (tagError) {
-      return { success: false, error: tagError };
-    }
-    return { success: true, payee: withTagIds(payee, patch.defaults.tagIds) };
+// 共通の既定値を変更する（メンバー全員）。自分用の既定値を持たないメンバーの自動入力に反映される。
+// 非表示の内訳・相手・タグは、今の共通の既定値にあるときだけ残せる。
+export async function updatePayeeCommonDefaults(
+  id: number,
+  defaults: PayeeDefaults
+): Promise<PayeeActionResult> {
+  const auth = await requireGroupMembership();
+  if (!auth.ok) {
+    return { success: false, error: auth.error };
   }
-  return { success: true, payee };
+  const context = auth.context;
+
+  const current = await fetchPayee(context, id);
+  if (!current) {
+    return { success: false, error: NOT_FOUND };
+  }
+  const defaultsError = await checkDefaults(context, defaults, current.defaults);
+  if (defaultsError) {
+    return { success: false, error: defaultsError };
+  }
+
+  const { error } = await context.supabase
+    .from("payees")
+    .update(toPayeeDefaultColumns(defaults))
+    .eq("id", id)
+    .eq("group_id", context.groupId);
+  if (error) {
+    console.error("Failed to update payee common defaults", error);
+    return { success: false, error: "共通の既定値の保存に失敗しました。" };
+  }
+
+  // タグを入れ替える
+  const { error: deleteError } = await context.supabase
+    .from("payee_default_tags")
+    .delete()
+    .eq("payee_id", id);
+  const tagError = deleteError
+    ? "既定値のタグの保存に失敗しました。"
+    : await insertDefaultTags(context, id, defaults.tagIds);
+  if (tagError) {
+    if (deleteError) console.error("Failed to delete payee default tags", deleteError);
+    return { success: false, error: tagError };
+  }
+
+  const payee = await fetchPayee(context, id);
+  return payee ? { success: true, payee } : { success: false, error: NOT_FOUND };
+}
+
+// 自分用の既定値を保存する（なければ作る）。相方の既定値・共通の既定値は変えない。
+// 非表示の内訳・相手・タグは、今の自分の既定値（なければ共通の既定値）にあるときだけ残せる。
+export async function setOwnPayeeDefaults(
+  id: number,
+  defaults: PayeeDefaults
+): Promise<PayeeActionResult> {
+  const auth = await requireGroupMembership();
+  if (!auth.ok) {
+    return { success: false, error: auth.error };
+  }
+  const context = auth.context;
+
+  const current = await fetchPayee(context, id);
+  if (!current) {
+    return { success: false, error: NOT_FOUND };
+  }
+  const defaultsError = await checkDefaults(
+    context,
+    defaults,
+    ownPayeeDefaults(current, context.userId) ?? current.defaults
+  );
+  if (defaultsError) {
+    return { success: false, error: defaultsError };
+  }
+
+  const { error } = await context.supabase
+    .from("payee_member_defaults")
+    .upsert(
+      { payee_id: id, user_id: context.userId, ...toPayeeDefaultColumns(defaults) },
+      { onConflict: "payee_id,user_id" }
+    );
+  if (error) {
+    console.error("Failed to save own payee defaults", error);
+    return { success: false, error: "自分用の既定値の保存に失敗しました。" };
+  }
+
+  // タグを入れ替える
+  const { error: deleteError } = await context.supabase
+    .from("payee_member_default_tags")
+    .delete()
+    .eq("payee_id", id)
+    .eq("user_id", context.userId);
+  const { error: insertError } =
+    deleteError || defaults.tagIds.length === 0
+      ? { error: null }
+      : await context.supabase.from("payee_member_default_tags").insert(
+          defaults.tagIds.map((tagId) => ({
+            payee_id: id,
+            user_id: context.userId,
+            tag_id: Number(tagId),
+          }))
+        );
+  if (deleteError || insertError) {
+    console.error("Failed to save own payee default tags", deleteError ?? insertError);
+    return { success: false, error: "既定値のタグの保存に失敗しました。" };
+  }
+
+  const payee = await fetchPayee(context, id);
+  return payee ? { success: true, payee } : { success: false, error: NOT_FOUND };
+}
+
+// 自分用の既定値を削除し、共通の既定値に戻す（タグは cascade で消える）。
+export async function resetOwnPayeeDefaults(id: number): Promise<PayeeActionResult> {
+  const auth = await requireGroupMembership();
+  if (!auth.ok) {
+    return { success: false, error: auth.error };
+  }
+  const context = auth.context;
+  const exists = await payeeExists(context, id);
+  if (!exists.ok) {
+    return { success: false, error: exists.error };
+  }
+
+  const { error } = await context.supabase
+    .from("payee_member_defaults")
+    .delete()
+    .eq("payee_id", id)
+    .eq("user_id", context.userId);
+  if (error) {
+    console.error("Failed to reset own payee defaults", error);
+    return { success: false, error: "共通の既定値に戻せませんでした。" };
+  }
+
+  const payee = await fetchPayee(context, id);
+  return payee ? { success: true, payee } : { success: false, error: NOT_FOUND };
 }
 
 // 支払い先を削除する。登録済みのレシートで使われている支払い先は、DBの外部キーで
@@ -253,20 +334,6 @@ export async function deletePayee(id: number): Promise<DeletePayeeResult> {
     return { success: false, error: auth.error };
   }
   const context = auth.context;
-
-  const { data: existing } = await context.supabase
-    .from("payees")
-    .select("id, owner_user_id")
-    .eq("id", id)
-    .eq("group_id", context.groupId)
-    .maybeSingle();
-  if (!existing) {
-    return { success: false, error: "支払い先が見つかりません。" };
-  }
-  const permissionError = editPermissionError(context, existing.owner_user_id);
-  if (permissionError) {
-    return { success: false, error: permissionError };
-  }
 
   const { data, error } = await context.supabase
     .from("payees")
@@ -281,38 +348,68 @@ export async function deletePayee(id: number): Promise<DeletePayeeResult> {
       return {
         success: false,
         error:
-          "この支払い先は登録済みのレシートで使われているため削除できません。非表示にしてください。",
+          "この支払い先は登録済みのレシートで使われているため削除できません。使わない場合は非表示にしてください。",
       };
     }
     console.error("Failed to delete payee", error);
     return { success: false, error: "支払い先の削除に失敗しました。" };
   }
   if (!data) {
-    return { success: false, error: "権限がありません。" };
+    return { success: false, error: NOT_FOUND };
   }
   return { success: true };
+}
+
+// 自分の表示／非表示を切り替える。非表示にすると自分のプルダウンに出なくなる
+// （相方のプルダウン・過去のレシート・分析には影響しない）。相方の分は変えられない。
+export async function setPayeeHidden(id: number, hidden: boolean): Promise<PayeeActionResult> {
+  const auth = await requireGroupMembership();
+  if (!auth.ok) {
+    return { success: false, error: auth.error };
+  }
+  const context = auth.context;
+  const exists = await payeeExists(context, id);
+  if (!exists.ok) {
+    return { success: false, error: exists.error };
+  }
+
+  const { error } = hidden
+    ? await context.supabase
+        .from("payee_hidden_members")
+        .upsert(
+          { payee_id: id, user_id: context.userId },
+          { onConflict: "payee_id,user_id", ignoreDuplicates: true }
+        )
+    : await context.supabase
+        .from("payee_hidden_members")
+        .delete()
+        .eq("payee_id", id)
+        .eq("user_id", context.userId);
+  if (error) {
+    console.error("Failed to switch payee visibility", error);
+    return { success: false, error: "表示の切り替えに失敗しました。" };
+  }
+
+  const payee = await fetchPayee(context, id);
+  return payee ? { success: true, payee } : { success: false, error: NOT_FOUND };
 }
 
 export type AddPayeeAliasResult =
   | { success: true; alias: PayeeAlias; converted: number }
   | { success: false; error: string };
 
-// 対象の支払い先がグループにあり、編集できるか（グループ全体は管理者、自分用は本人）確かめる。
-async function editablePayee(
+// 対象の支払い先が自分のグループにあるか確かめる（他グループの支払い先は操作できない）。
+async function payeeExists(
   context: MembershipContext,
   payeeId: number
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data: existing } = await context.supabase
     .from("payees")
-    .select("id, owner_user_id")
+    .select("id")
     .eq("id", payeeId)
     .eq("group_id", context.groupId)
     .maybeSingle();
-  if (!existing) {
-    return { ok: false, error: "支払い先が見つかりません。" };
-  }
-  const permissionError = editPermissionError(context, existing.owner_user_id);
-  return permissionError ? { ok: false, error: permissionError } : { ok: true };
+  return existing ? { ok: true } : { ok: false, error: NOT_FOUND };
 }
 
 // 別名を追加する（docs/分析拡充/要件定義書.md 4.7節）。追加と同時に、店名が別名と一致する過去のレシートを
@@ -331,9 +428,9 @@ export async function addPayeeAlias(
     return { success: false, error: auth.error };
   }
   const context = auth.context;
-  const editable = await editablePayee(context, payeeId);
-  if (!editable.ok) {
-    return { success: false, error: editable.error };
+  const exists = await payeeExists(context, payeeId);
+  if (!exists.ok) {
+    return { success: false, error: exists.error };
   }
 
   const { data, error } = await context.supabase.rpc("add_payee_alias", {
@@ -370,9 +467,9 @@ export async function deletePayeeAlias(
     return { success: false, error: auth.error };
   }
   const context = auth.context;
-  const editable = await editablePayee(context, payeeId);
-  if (!editable.ok) {
-    return { success: false, error: editable.error };
+  const exists = await payeeExists(context, payeeId);
+  if (!exists.ok) {
+    return { success: false, error: exists.error };
   }
 
   const { data, error } = await context.supabase

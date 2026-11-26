@@ -6,6 +6,12 @@ import type { ReceiptDetailItemView } from "@/types/receipt";
 export function ReceiptItemBadges({ item }: { item: ReceiptDetailItemView }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1.5">
+      {/* 特別費の明細は目立つよう先頭に出す（Issue #41） */}
+      {item.isSpecialExpense && (
+        <span className="inline-flex items-center rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+          特別費
+        </span>
+      )}
       {/* 内訳があれば「食費 ＞ 外食」のようにカテゴリと続けて表示する */}
       <Badge
         label="カテゴリ"

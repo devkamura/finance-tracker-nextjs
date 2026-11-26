@@ -30,14 +30,20 @@ const master = {
   ],
   // 支払い先の選択肢（見出しの順。lib/analytics/payees.ts の buildAnalyticsPayees で作る形）
   payees: [
-    { id: 41, name: "myTOKYOGAS", section: "shared" as const, sectionLabel: "グループ全体" },
-    { id: 42, name: "居酒屋", section: "own" as const, sectionLabel: "自分用" },
-    { id: 43, name: "〇〇薬局", section: "partner" as const, sectionLabel: "Bさんの自分用" },
+    { id: 41, name: "myTOKYOGAS" },
+    { id: 42, name: "居酒屋" },
+    { id: 43, name: "〇〇薬局" },
   ],
 };
 const costTypes = costTypeMap(master.categories);
 
-const values = { categoryId: UTILITY, breakdownId: null, counterpartId: 21, payeeId: 41 };
+const values = {
+  categoryId: UTILITY,
+  breakdownId: null,
+  counterpartId: 21,
+  payeeId: 41,
+  isSpecialExpense: false,
+};
 
 describe("dimensions", () => {
   it("U-120: 明細の値（内訳なし・費用区分はカテゴリの設定）と、条件に当てはまるか", () => {
@@ -114,11 +120,11 @@ describe("dimensions", () => {
     expect(conditionsLabel({ payee: "unregistered" }, master)).toBe("登録外（手入力）");
   });
 
-  it("U-125: 支払い先の選択肢は見出し（グループ全体 → 自分用 → 相方の自分用）の順で、最後に登録外", () => {
+  it("U-125: 支払い先の選択肢は見出しで分けず、登録済みの支払い先の後に登録外を出す", () => {
     expect(dimensionOptions("payee", master)).toEqual([
-      { key: "41", label: "myTOKYOGAS", group: "グループ全体" },
-      { key: "42", label: "居酒屋", group: "自分用" },
-      { key: "43", label: "〇〇薬局", group: "Bさんの自分用" },
+      { key: "41", label: "myTOKYOGAS" },
+      { key: "42", label: "居酒屋" },
+      { key: "43", label: "〇〇薬局" },
       { key: "unregistered", label: "登録外（手入力）" },
     ]);
   });

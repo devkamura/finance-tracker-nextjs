@@ -69,24 +69,29 @@ create function pg_temp.tag(p text) returns bigint language sql as $$
   select id from tags where group_id = (select g from c) and name = p $$;
 
 -- ===== 支払い先 =====
--- owner：null＝グループ全体、'A'／'B'＝自分用。既定の帰属先：'joint'＝共同、'A'／'B'、null＝設定しない
+-- owner：null＝全員に表示、'A'／'B'＝その人だけ表示（相方は非表示）。p_hidden＝全員が非表示。
+-- 既定の帰属先：'joint'＝共同、'A'／'B'、null＝設定しない
 create function pg_temp.payee(p_name text, p_owner text, p_cat text, p_bd text, p_cp text,
                               p_downer text, p_tags text[] default '{}', p_hidden boolean default false)
 returns void language plpgsql as $$
 declare v_id bigint;
 begin
-  insert into payees (group_id, name, owner_user_id, is_hidden, default_category_id, default_breakdown_id,
+  insert into payees (group_id, name, default_category_id, default_breakdown_id,
                       default_counterpart_id, default_owner_joint, default_owner_user_id)
-  values ((select g from c), p_name, pg_temp.usr(p_owner), p_hidden, pg_temp.cat(p_cat),
+  values ((select g from c), p_name, pg_temp.cat(p_cat),
           case when p_bd is null then null else pg_temp.bd(p_cat, p_bd) end,
           case when p_cp is null then null else pg_temp.cp(p_cp) end,
           coalesce(p_downer = 'joint', false),
           case when p_downer in ('A', 'B') then pg_temp.usr(p_downer) end)
   returning id into v_id;
   insert into payee_default_tags (payee_id, tag_id) select v_id, pg_temp.tag(t) from unnest(p_tags) t;
+  -- メンバーごとの非表示（行がある＝そのメンバーのプルダウンに出さない）
+  insert into payee_hidden_members (payee_id, user_id)
+    select v_id, pg_temp.usr(m) from unnest(array['A', 'B']) m
+    where p_hidden or (p_owner is not null and m <> p_owner);
 end $$;
 
--- レシートで使う支払い先と、設定画面の確認用（非表示・自分用）だけを登録する
+-- レシートで使う支払い先と、設定画面の確認用（全員が非表示・片方だけ表示）だけを登録する
 select pg_temp.payee('〇〇不動産',     null, '賃料',       null,   'ふたり', 'joint');
 select pg_temp.payee('東京電力',       null, '水道光熱費', '電気', 'ふたり', 'joint');
 select pg_temp.payee('イオン',         null, '食費',       '自炊', 'ふたり', 'joint');
@@ -96,8 +101,8 @@ select pg_temp.payee('ガスト',         null, '食費',       '外食', 'ふ�
 select pg_temp.payee('マツモトキヨシ', null, null,         null,   null,     null);   -- 既定値なし
 select pg_temp.payee('A病院',          null, '医療費',     null,   null,     null);
 select pg_temp.payee('ユニクロ',       null, '衣類・ファッション', null, null, null);
-select pg_temp.payee('旧スーパー',     null, null,         null,   null,     null, '{}', true);  -- 非表示
--- 自分用
+select pg_temp.payee('旧スーパー',     null, null,         null,   null,     null, '{}', true);  -- 全員が非表示
+-- 片方だけ表示（相方は非表示）
 select pg_temp.payee('Udemy',          'A',  '学習・自己投資', null, 'A',    'A', array['サブスク']);
 select pg_temp.payee('ヨガ教室',       'B',  '娯楽',       '趣味', 'B',      'B');
 

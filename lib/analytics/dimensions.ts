@@ -20,7 +20,14 @@ import type {
 } from "@/lib/analytics/types";
 import { COST_TYPE_LABELS, type CostType } from "@/lib/receipts/breakdowns";
 
-export const DIMENSIONS = ["category", "breakdown", "costType", "payee", "counterpart"] as const;
+export const DIMENSIONS = [
+  "category",
+  "breakdown",
+  "costType",
+  "payee",
+  "counterpart",
+  "specialExpense",
+] as const;
 
 export type Dimension = (typeof DIMENSIONS)[number];
 
@@ -30,12 +37,26 @@ export const DIMENSION_LABELS: Record<Dimension, string> = {
   costType: "費用区分",
   payee: "支払い先",
   counterpart: "相手",
+  specialExpense: "特別費",
 };
 
 // 内訳のない明細の値（内訳で分けるときは「内訳なし」としてまとめる。基本設計書 3.1節）
 export const NO_BREAKDOWN_KEY = "none";
 
 const COST_TYPES: CostType[] = ["fixed", "variable"];
+
+// 特別費の項目の値（Issue #41）。通常＝特別費でない明細。
+export const SPECIAL_EXPENSE_KEYS = ["normal", "special"] as const;
+export type SpecialExpenseKey = (typeof SPECIAL_EXPENSE_KEYS)[number];
+
+export const SPECIAL_EXPENSE_LABELS: Record<SpecialExpenseKey, string> = {
+  normal: "通常",
+  special: "特別費",
+};
+
+export function isSpecialExpenseKey(value: unknown): value is SpecialExpenseKey {
+  return SPECIAL_EXPENSE_KEYS.includes(value as SpecialExpenseKey);
+}
 
 export function isDimension(value: unknown): value is Dimension {
   return DIMENSIONS.includes(value as Dimension);
@@ -44,6 +65,7 @@ export function isDimension(value: unknown): value is Dimension {
 // 項目ごとの値の条件。値はすべて文字列で持つ（URLにそのまま載せるため）。
 // カテゴリ・内訳・相手はID、費用区分は fixed／variable、
 // 支払い先は登録済みの支払い先のID（紐づいていないレシートは UNREGISTERED_PAYEE_KEY）。
+// 特別費は normal／special。
 export type Conditions = Partial<Record<Dimension, string>>;
 
 // 明細1件（分析の集約行・一覧の明細）の、項目の値
@@ -52,6 +74,7 @@ export type DimensionValues = {
   breakdownId: number | null;
   counterpartId: number;
   payeeId: number | null; // null＝登録外（手入力）
+  isSpecialExpense: boolean; // 特別費か（Issue #41）
 };
 
 // 名前・色を決めるためのマスタ
@@ -59,7 +82,7 @@ export type DimensionMaster = {
   categories: AnalyticsCategory[];
   breakdowns: AnalyticsBreakdown[];
   counterparts: AnalyticsCounterpart[];
-  payees: AnalyticsPayee[]; // 見出しの順（グループ全体 → 自分用 → 相方の自分用）
+  payees: AnalyticsPayee[]; // 名前順
 };
 
 export type CostTypeMap = Map<number, CostType>;
@@ -87,6 +110,8 @@ export function dimensionKey(
       return payeeKeyOf(values.payeeId);
     case "counterpart":
       return String(values.counterpartId);
+    case "specialExpense":
+      return values.isSpecialExpense ? "special" : "normal";
   }
 }
 
@@ -137,6 +162,8 @@ export function keyLabel(
       return payeeLabel(key, master);
     case "counterpart":
       return master.counterparts.find((c) => String(c.id) === key)?.name ?? "不明";
+    case "specialExpense":
+      return isSpecialExpenseKey(key) ? SPECIAL_EXPENSE_LABELS[key] : "不明";
   }
 }
 
@@ -166,6 +193,8 @@ export function keyColor(
         : paletteColor(master.payees.findIndex((p) => String(p.id) === key));
     case "counterpart":
       return paletteColor(master.counterparts.findIndex((c) => String(c.id) === key));
+    case "specialExpense":
+      return paletteColor(SPECIAL_EXPENSE_KEYS.indexOf(key as SpecialExpenseKey));
   }
 }
 
@@ -194,11 +223,13 @@ export function dimensionOptions(
       return COST_TYPES.map((t) => ({ key: t, label: COST_TYPE_LABELS[t] }));
     case "payee":
       return [
-        ...master.payees.map((p) => ({ key: String(p.id), label: p.name, group: p.sectionLabel })),
+        ...master.payees.map((p) => ({ key: String(p.id), label: p.name })),
         { key: UNREGISTERED_PAYEE_KEY, label: UNREGISTERED_PAYEE_LABEL },
       ];
     case "counterpart":
       return master.counterparts.map((c) => ({ key: String(c.id), label: c.name }));
+    case "specialExpense":
+      return SPECIAL_EXPENSE_KEYS.map((k) => ({ key: k, label: SPECIAL_EXPENSE_LABELS[k] }));
   }
 }
 
@@ -224,6 +255,13 @@ export function conditionsLabel(conditions: Conditions, master: DimensionMaster)
   }
   if (conditions.counterpart !== undefined) {
     parts.push(`相手：${keyLabel("counterpart", conditions.counterpart, master)}`);
+  }
+  // 特別費は、分析画面で「特別費を含める」が OFF のときにも付く条件のため、
+  // 通常（normal）は「特別費を除く」と表示する（Issue #41）
+  if (conditions.specialExpense === "special") {
+    parts.push(SPECIAL_EXPENSE_LABELS.special);
+  } else if (conditions.specialExpense === "normal") {
+    parts.push("特別費を除く");
   }
   return parts.length > 0 ? parts.join("・") : null;
 }

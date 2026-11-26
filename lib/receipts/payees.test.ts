@@ -6,12 +6,18 @@ import type { Counterpart, Tag } from "@/lib/receipts/labels";
 import {
   applyPayeeDefaults,
   describePayeeDefaults,
+  DEFAULT_PAYEE_LIST_FILTER,
   EMPTY_PAYEE_DEFAULTS,
+  filterPayees,
   findPayeeByName,
+  isPayeeHiddenFor,
+  isPayeeHiddenForAll,
   isSelectablePayee,
+  ownPayeeDefaults,
+  payeeDefaultsFor,
   normalizePayeeName,
-  payeeOptionGroups,
   payeeOptionLabel,
+  payeeOptions,
   toPayee,
   toPayeeDefaultColumns,
   validatePayeeDefaults,
@@ -64,6 +70,7 @@ function item(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     counterpartId: "1",
     tagIds: ["7"],
     ownerUserId: USER_A,
+    isSpecialExpense: false,
     ...overrides,
   };
 }
@@ -76,9 +83,9 @@ function payee(overrides: Partial<Payee> = {}): Payee {
   return {
     id: 1,
     name: "myTOKYOGAS",
-    ownerUserId: null,
-    isHidden: false,
+    hiddenUserIds: [],
     defaults: EMPTY_PAYEE_DEFAULTS,
+    memberDefaults: [],
     aliases: [],
     ...overrides,
   };
@@ -181,38 +188,109 @@ describe("applyPayeeDefaults（支払い先の既定値の自動入力）", () =
   });
 });
 
+describe("商品名の既定値（空の明細にだけ入れる）", () => {
+  it("U-142: 商品名が空の明細にだけ既定値の商品名を入れる（空白だけも空とみなす）", () => {
+    const withName = defaults({ categoryId: "2", itemName: "ガス代" });
+    expect(applyPayeeDefaults(item({ name: "" }), withName, context).name).toBe("ガス代");
+    expect(applyPayeeDefaults(item({ name: "  " }), withName, context).name).toBe("ガス代");
+  });
+
+  it("U-142: 入力済み・画像で読めた商品名は消さない（ほかの既定値は上書きする）", () => {
+    const result = applyPayeeDefaults(
+      item({ name: "牛乳", categoryId: "1" }),
+      defaults({ categoryId: "2", itemName: "ガス代" }),
+      context
+    );
+    expect(result.name).toBe("牛乳");
+    expect(result.categoryId).toBe("2");
+  });
+
+  it("U-142: 商品名の既定値がなければ、入力済みの商品名はそのまま", () => {
+    expect(applyPayeeDefaults(item({ name: "牛乳" }), defaults(), context).name).toBe("牛乳");
+    expect(applyPayeeDefaults(item({ name: "" }), defaults(), context).name).toBe("");
+  });
+
+  it("U-142: 一覧の説明に商品名を出す・商品名だけでも既定値ありとみなす", () => {
+    const describeContext = { categories, breakdowns, counterparts, tags, members };
+    expect(describePayeeDefaults(defaults({ itemName: "ガス代" }), describeContext)).toBe(
+      "―／―／―／商品名「ガス代」"
+    );
+  });
+});
+
+describe("payeeDefaultsFor（メンバーが使う既定値）", () => {
+  const common = defaults({ categoryId: "1", ownerUserId: OWNER_JOINT_VALUE });
+  const ownB = defaults({ categoryId: "2", breakdownId: "21", ownerUserId: USER_B, tagIds: ["8"] });
+  const target = payee({ defaults: common, memberDefaults: [{ userId: USER_B, defaults: ownB }] });
+
+  it("U-140: 自分用の既定値があれば自分用、なければ共通の既定値を使う", () => {
+    expect(payeeDefaultsFor(target, USER_B)).toEqual(ownB);
+    expect(payeeDefaultsFor(target, USER_A)).toEqual(common);
+    expect(payeeDefaultsFor(target, undefined)).toEqual(common);
+  });
+
+  it("U-140: 自分用の既定値は本人の分だけ返す（相方の分は返さない）", () => {
+    expect(ownPayeeDefaults(target, USER_B)).toEqual(ownB);
+    expect(ownPayeeDefaults(target, USER_A)).toBeNull();
+    expect(ownPayeeDefaults(target, undefined)).toBeNull();
+  });
+
+  it("U-140: 自分用の既定値を明細に入れる（共通の既定値の項目は残さない）", () => {
+    const result = applyPayeeDefaults(item(), payeeDefaultsFor(target, USER_B), context);
+    expect(result).toMatchObject({
+      categoryId: "2",
+      breakdownId: "21",
+      counterpartId: "",
+      ownerUserId: USER_B,
+      tagIds: ["8"],
+    });
+  });
+});
+
 describe("支払い先のプルダウン", () => {
+  // 1＝全員に表示、2＝Bが非表示、3＝Aが非表示、4＝全員が非表示
   const payees = [
-    payee({ id: 1, name: "スーパー", ownerUserId: null }),
-    payee({ id: 2, name: "Aの店", ownerUserId: USER_A }),
-    payee({ id: 3, name: "Bの店", ownerUserId: USER_B }),
-    payee({ id: 4, name: "閉店", ownerUserId: null, isHidden: true }),
+    payee({ id: 1, name: "スーパー" }),
+    payee({ id: 2, name: "Aの店", hiddenUserIds: [USER_B] }),
+    payee({ id: 3, name: "Bの店", hiddenUserIds: [USER_A] }),
+    payee({ id: 4, name: "閉店", hiddenUserIds: [USER_A, USER_B] }),
   ];
 
-  it("U-108: グループ全体と自分用の、非表示でない支払い先だけを選べる", () => {
+  it("U-108: 自分が非表示にしていない支払い先だけを選べる（相方の非表示は影響しない）", () => {
     expect(payees.filter((p) => isSelectablePayee(p, USER_A)).map((p) => p.id)).toEqual([1, 2]);
     expect(payees.filter((p) => isSelectablePayee(p, USER_B)).map((p) => p.id)).toEqual([1, 3]);
   });
 
-  it("U-108: 見出しごとに分け、相方用・非表示は選ばれているときだけ残す", () => {
-    const groups = payeeOptionGroups(payees, USER_A, "");
-    expect(groups.shared.map((p) => p.id)).toEqual([1]);
-    expect(groups.own.map((p) => p.id)).toEqual([2]);
-    expect(groups.current).toBeNull();
+  it("U-108: 見出しで分けずに1つの一覧で出し、自分が非表示にしたものは選ばれているときだけ残す", () => {
+    const result = payeeOptions(payees, USER_A, "");
+    expect(result.options.map((p) => p.id)).toEqual([1, 2]);
+    expect(result.current).toBeNull();
 
-    expect(payeeOptionGroups(payees, USER_A, "3").current?.id).toBe(3);
-    expect(payeeOptionGroups(payees, USER_A, "4").current?.id).toBe(4);
+    expect(payeeOptions(payees, USER_A, "3").current?.id).toBe(3);
+    expect(payeeOptions(payees, USER_A, "4").current?.id).toBe(4);
     // プルダウンに出ている支払い先が選ばれていても、追加の選択肢は出さない
-    expect(payeeOptionGroups(payees, USER_A, "1").current).toBeNull();
+    expect(payeeOptions(payees, USER_A, "1").current).toBeNull();
+    expect(payeeOptions(payees, USER_A, "2").current).toBeNull();
   });
 
-  it("U-108: プルダウンに出ない支払い先の表示に「〇〇さん用」「非表示」を添える", () => {
-    expect(payeeOptionLabel(payees[2], USER_A, members)).toBe("Bの店（Bさん用）");
-    expect(payeeOptionLabel(payees[3], USER_A, members)).toBe("閉店（非表示）");
-    expect(payeeOptionLabel(payee({ name: "x", ownerUserId: USER_B, isHidden: true }), USER_A, members)).toBe(
-      "x（Bさん用・非表示）"
-    );
-    expect(payeeOptionLabel(payees[0], USER_A, members)).toBe("スーパー");
+  it("U-108: 自分が非表示にしている支払い先の表示に「非表示」を添える", () => {
+    expect(payeeOptionLabel(payees[2], USER_A)).toBe("Bの店（非表示）");
+    expect(payeeOptionLabel(payees[3], USER_A)).toBe("閉店（非表示）");
+    // 相方だけが非表示にしている支払い先には添えない
+    expect(payeeOptionLabel(payees[1], USER_A)).toBe("Aの店");
+    expect(payeeOptionLabel(payees[0], USER_A)).toBe("スーパー");
+  });
+
+  it("U-134: メンバーごとの非表示と、全員が非表示かを判定する", () => {
+    expect(isPayeeHiddenFor(payees[1], USER_B)).toBe(true);
+    expect(isPayeeHiddenFor(payees[1], USER_A)).toBe(false);
+    expect(isPayeeHiddenFor(payees[1], undefined)).toBe(false);
+
+    expect(isPayeeHiddenForAll(payees[3], members)).toBe(true);
+    expect(isPayeeHiddenForAll(payees[1], members)).toBe(false);
+    expect(isPayeeHiddenForAll(payees[0], members)).toBe(false);
+    // グループから外れたメンバーの非表示は数えない
+    expect(isPayeeHiddenForAll(payee({ hiddenUserIds: [USER_A, "user-gone"] }), members)).toBe(false);
   });
 });
 
@@ -221,23 +299,51 @@ describe("既定値の変換・表示・入力チェック", () => {
     const row = {
       id: 1,
       name: "myTOKYOGAS",
-      owner_user_id: null,
-      is_hidden: false,
       default_category_id: 2,
       default_breakdown_id: 21,
       default_counterpart_id: 3,
       default_owner_joint: true,
       default_owner_user_id: null,
+      default_item_name: "ガス代",
       payee_default_tags: [{ tag_id: 7 }, { tag_id: 8 }],
       payee_aliases: [],
+      payee_hidden_members: [{ user_id: USER_B }],
+      payee_member_defaults: [
+        {
+          user_id: USER_B,
+          default_category_id: 1,
+          default_breakdown_id: null,
+          default_counterpart_id: null,
+          default_owner_joint: false,
+          default_owner_user_id: USER_B,
+          default_item_name: null,
+          payee_member_default_tags: [{ tag_id: 8 }],
+        },
+      ],
     };
     const converted = toPayee(row);
+    // 自分用の既定値は、メンバーごとに同じ形に変換する
+    expect(converted.memberDefaults).toEqual([
+      {
+        userId: USER_B,
+        defaults: {
+          categoryId: "1",
+          breakdownId: "",
+          counterpartId: "",
+          ownerUserId: USER_B,
+          tagIds: ["8"],
+          itemName: "",
+        },
+      },
+    ]);
+    expect(converted.hiddenUserIds).toEqual([USER_B]);
     expect(converted.defaults).toEqual({
       categoryId: "2",
       breakdownId: "21",
       counterpartId: "3",
       ownerUserId: OWNER_JOINT_VALUE,
       tagIds: ["7", "8"],
+      itemName: "ガス代",
     });
     // タグは別の表に保存するため、列には含めない
     expect(toPayeeDefaultColumns(converted.defaults)).toEqual({
@@ -246,7 +352,13 @@ describe("既定値の変換・表示・入力チェック", () => {
       default_counterpart_id: 3,
       default_owner_joint: true,
       default_owner_user_id: null,
+      default_item_name: "ガス代",
     });
+    // 商品名は前後の空白を除き、空なら設定しない
+    expect(toPayeeDefaultColumns(defaults({ itemName: "  水道代　" })).default_item_name).toBe(
+      "水道代"
+    );
+    expect(toPayeeDefaultColumns(defaults({ itemName: "  " })).default_item_name).toBeNull();
     expect(toPayeeDefaultColumns(defaults({ ownerUserId: USER_B }))).toMatchObject({
       default_owner_joint: false,
       default_owner_user_id: USER_B,
@@ -311,29 +423,79 @@ describe("findPayeeByName（店名に一致する支払い先）", () => {
       { id: 12, name: "オーケー青葉台店" },
     ],
   });
-  const hidden = payee({ id: 2, name: "閉店した店", isHidden: true, aliases: [{ id: 21, name: "閉店" }] });
-  const own = payee({ id: 3, name: "〇〇薬局", ownerUserId: USER_A, aliases: [{ id: 31, name: "〇〇薬局 駅前店" }] });
-  const partner = payee({ id: 4, name: "△△書店", ownerUserId: USER_B, aliases: [{ id: 41, name: "△△" }] });
-  const payees = [ok, hidden, own, partner];
+  // 全員が非表示にしている支払い先・自分（A）が非表示にしている支払い先
+  const hiddenForAll = payee({
+    id: 2,
+    name: "閉店した店",
+    hiddenUserIds: [USER_A, USER_B],
+    aliases: [{ id: 21, name: "閉店" }],
+  });
+  const hiddenForA = payee({
+    id: 4,
+    name: "△△書店",
+    hiddenUserIds: [USER_A],
+    aliases: [{ id: 41, name: "△△" }],
+  });
+  const payees = [ok, hiddenForAll, hiddenForA];
 
   it("U-126: 名前か別名が完全一致する支払い先を返す（前後の空白は無視する）", () => {
-    expect(findPayeeByName(payees, "オーケー長津田店", USER_A)).toBe(ok);
-    expect(findPayeeByName(payees, "オーケー", USER_A)).toBe(ok);
-    expect(findPayeeByName(payees, "　オーケー青葉台店 \t", USER_A)).toBe(ok);
-    // 自分用の別名も対象
-    expect(findPayeeByName(payees, "〇〇薬局 駅前店", USER_A)).toBe(own);
+    expect(findPayeeByName(payees, "オーケー長津田店")).toBe(ok);
+    expect(findPayeeByName(payees, "オーケー")).toBe(ok);
+    expect(findPayeeByName(payees, "　オーケー青葉台店 \t")).toBe(ok);
   });
 
-  it("U-126: 部分一致・非表示・相方の自分用・空の店名は一致しない", () => {
-    expect(findPayeeByName(payees, "オーケー長津田", USER_A)).toBeNull();
-    expect(findPayeeByName(payees, "オーケー長津田店 2号", USER_A)).toBeNull();
-    expect(findPayeeByName(payees, "閉店", USER_A)).toBeNull();
-    expect(findPayeeByName(payees, "△△", USER_A)).toBeNull();
-    expect(findPayeeByName(payees, "", USER_A)).toBeNull();
-    expect(findPayeeByName(payees, "   ", USER_A)).toBeNull();
+  it("U-135: 非表示にしている支払い先（自分だけ・全員）の名前・別名とも一致する", () => {
+    expect(findPayeeByName(payees, "△△書店")).toBe(hiddenForA);
+    expect(findPayeeByName(payees, "△△")).toBe(hiddenForA);
+    expect(findPayeeByName(payees, "閉店")).toBe(hiddenForAll);
+  });
+
+  it("U-126: 部分一致・空の店名は一致しない", () => {
+    expect(findPayeeByName(payees, "オーケー長津田")).toBeNull();
+    expect(findPayeeByName(payees, "オーケー長津田店 2号")).toBeNull();
+    expect(findPayeeByName(payees, "")).toBeNull();
+    expect(findPayeeByName(payees, "   ")).toBeNull();
   });
 
   it("U-126: 店名の比較では前後の空白（半角・全角・タブ・改行）だけを除く", () => {
     expect(normalizePayeeName("\u3000 オーケー 長津田\t\n ")).toBe("オーケー 長津田");
+  });
+});
+
+describe("filterPayees（設定画面の一覧の絞り込み）", () => {
+  const own = { userId: USER_A, defaults: defaults({ categoryId: "1" }) };
+  const partnerOwn = { userId: USER_B, defaults: defaults({ categoryId: "2" }) };
+  const payees = [
+    payee({ id: 1, name: "表示・共通" }),
+    payee({ id: 2, name: "表示・自分用", memberDefaults: [own] }),
+    payee({ id: 3, name: "非表示・共通", hiddenUserIds: [USER_A] }),
+    payee({ id: 4, name: "非表示・自分用", hiddenUserIds: [USER_A], memberDefaults: [own] }),
+    // 相方だけが非表示・相方だけが自分用（自分にとっては表示・共通）
+    payee({ id: 5, name: "相方の設定", hiddenUserIds: [USER_B], memberDefaults: [partnerOwn] }),
+  ];
+  const ids = (filter: Parameters<typeof filterPayees>[1]) =>
+    filterPayees(payees, filter, USER_A).map((p) => p.id);
+
+  it("U-143: 初期値は「表示中・すべて」で、自分が非表示にしている支払い先を出さない", () => {
+    expect(DEFAULT_PAYEE_LIST_FILTER).toEqual({ visibility: "visible", defaultsKind: "all" });
+    expect(ids(DEFAULT_PAYEE_LIST_FILTER)).toEqual([1, 2, 5]);
+  });
+
+  it("U-143: 自分の表示状態で絞り込む（相方の非表示は見ない）", () => {
+    expect(ids({ visibility: "hidden", defaultsKind: "all" })).toEqual([3, 4]);
+    expect(ids({ visibility: "all", defaultsKind: "all" })).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("U-143: 既定値の種類で絞り込む（相方の自分用は見ない）。表示状態と組み合わせられる", () => {
+    expect(ids({ visibility: "all", defaultsKind: "own" })).toEqual([2, 4]);
+    expect(ids({ visibility: "all", defaultsKind: "common" })).toEqual([1, 3, 5]);
+    expect(ids({ visibility: "visible", defaultsKind: "own" })).toEqual([2]);
+    expect(ids({ visibility: "hidden", defaultsKind: "common" })).toEqual([3]);
+  });
+
+  it("U-143: 元の並び順を保ち、元の一覧は変えない", () => {
+    const before = payees.map((p) => p.id);
+    filterPayees(payees, { visibility: "hidden", defaultsKind: "own" }, USER_A);
+    expect(payees.map((p) => p.id)).toEqual(before);
   });
 });

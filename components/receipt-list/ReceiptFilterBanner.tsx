@@ -6,42 +6,34 @@ import { faFilter } from "@fortawesome/free-solid-svg-icons";
 import { formatYen } from "@/lib/analytics/aggregate";
 
 type ReceiptFilterBannerProps = {
-  label: string | null; // 条件の表示名（「食費 ＞ 外食」「固定費」など）。null＝総支出
-  scopeLabel: string; // 「全体」「A」「A＋共同1/2」
-  total: number; // 該当分（按分後）の合計。分析画面のグラフの値と一致する
+  // 条件の表示名（「食費 ＞ 外食」「負担者：A＋共同1/2」「支払者：B」「10/1〜10/7」など）
+  parts: string[];
+  // 該当分の合計。明細単位の条件があるときは按分後（分析画面のグラフの値と一致する）、
+  // レシート単位の条件だけのときはレシート金額の合計
+  total: number;
+  count: number; // 該当するレシートの件数
   onClear: () => void; // 絞り込みの解除（画面側だけで行い、サーバー通信はしない）
 };
 
-// 分析画面から移ってきたときの絞り込み中の表示（詳細設計書 フェーズ3 5.3節）。
-// 絞り込みの条件と該当分の合計を示し、「解除」で通常の月別一覧に戻れるようにする。
+// 絞り込み中の表示（詳細設計書 フェーズ3 5.3節。Issue #39 でフィルタ欄の条件にも使う）。
+// 一覧が画面の下に押し出されないよう、条件・件数・合計・解除を1行にまとめる
+// （条件が長いときは条件の部分だけ折り返す）。
 // 解除は画面側だけで行う（同じ月のレシートは取得済みのため、サーバーへは取り直さない）。
-export function ReceiptFilterBanner({
-  label,
-  scopeLabel,
-  total,
-  onClear,
-}: ReceiptFilterBannerProps) {
+export function ReceiptFilterBanner({ parts, total, count, onClear }: ReceiptFilterBannerProps) {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
-      <div className="flex min-w-0 flex-col gap-1">
-        <p className="flex items-center gap-1.5 text-sm text-indigo-900">
-          <FontAwesomeIcon icon={faFilter} className="text-xs" />
-          <span className="font-medium">
-            {label ?? "総支出"} ／ {scopeLabel}
-          </span>
-          で絞り込み中
-        </p>
-        <p className="text-sm text-slate-700">
-          {label ? `${label}の合計` : "該当の合計"}：
-          <span className={`font-bold ${total < 0 ? "text-red-600" : "text-slate-900"}`}>
-            {formatYen(total)}
-          </span>
-        </p>
-      </div>
+    <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm">
+      <FontAwesomeIcon icon={faFilter} className="shrink-0 text-xs text-indigo-400" />
+      <span className="min-w-0 flex-1 font-medium text-indigo-900">{parts.join(" ／ ")}</span>
+      <span className="shrink-0 text-slate-600">
+        {count}件・
+        <span className={`font-bold ${total < 0 ? "text-red-600" : "text-slate-900"}`}>
+          {formatYen(total)}
+        </span>
+      </span>
       <button
         type="button"
         onClick={onClear}
-        className="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+        className="shrink-0 rounded-md border border-indigo-200 bg-white px-2 py-0.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
       >
         解除
       </button>

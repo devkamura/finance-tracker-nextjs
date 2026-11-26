@@ -89,15 +89,15 @@ describe("画像読み取りの支払い先", () => {
   const payee = (overrides: Partial<Payee>): Payee => ({
     id: 1,
     name: "オーケー",
-    ownerUserId: null,
-    isHidden: false,
+    hiddenUserIds: [],
     defaults: EMPTY_PAYEE_DEFAULTS,
+    memberDefaults: [],
     aliases: [],
     ...overrides,
   });
   const payees = [
     payee({ id: 1, name: "オーケー", aliases: [{ id: 11, name: "オーケー長津田店" }] }),
-    payee({ id: 2, name: "△△書店", ownerUserId: "user-b", aliases: [{ id: 21, name: "△△書店 駅前" }] }),
+    payee({ id: 2, name: "△△書店", hiddenUserIds: [USER_A], aliases: [{ id: 21, name: "△△書店 駅前" }] }),
   ];
   const ocr = (payeeName: string | null, items: OcrReceiptItem[] = []): OcrReceiptResult => ({
     payeeName,
@@ -116,8 +116,9 @@ describe("画像読み取りの支払い先", () => {
     });
   });
 
-  it("U-130: 一致しない店名・相方の自分用の別名は手入力欄に入れる", () => {
-    for (const name of ["オーケー長津田", "△△書店 駅前"]) {
+  it("U-130: 一致しない店名・自分が非表示にしている支払い先の名前と別名は手入力欄に入れる", () => {
+    // 非表示の支払い先は保存時に支払い先だけを紐づけ、既定値は入れない（U-136）
+    for (const name of ["オーケー長津田", "△△書店", "△△書店 駅前"]) {
       expect(buildOcrPatch(ocr(name), payees, CONSUMPTION_TAXES, USER_A)).toMatchObject({
         payeeSelect: SELECT_NONE_VALUE,
         payeeInputText: name,
@@ -136,6 +137,7 @@ describe("画像読み取りの支払い先", () => {
     counterpartId: "",
     tagIds: [],
     ownerUserId: "",
+    isSpecialExpense: false,
   };
   const prev: ReceiptFormState = {
     payeeSelect: "",

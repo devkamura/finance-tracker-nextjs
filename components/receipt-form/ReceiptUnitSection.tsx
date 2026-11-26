@@ -2,7 +2,7 @@
 
 import { Select } from "@/components/ui/Select";
 import { SELECT_NONE_VALUE } from "@/lib/constants";
-import { findPayeeByName, payeeOptionGroups, payeeOptionLabel } from "@/lib/receipts/payees";
+import { findPayeeByName, payeeOptionLabel, payeeOptions } from "@/lib/receipts/payees";
 import type { ReceiptFormFieldErrors } from "@/lib/validation/receipt-rules";
 import type { MasterData, ReceiptFormState } from "@/types/receipt";
 
@@ -25,14 +25,14 @@ export function ReceiptUnitSection({
   showPayerSelect = false,
   currentUserId,
 }: ReceiptUnitSectionProps) {
-  // グループ全体と自分用を見出しで分けて出す。相方用・非表示の支払い先は、
-  // 編集中のレシートで選ばれているときだけ残す（docs/分析拡充/基本設計書.md 2.7節・3.5節）。
-  const payeeGroups = payeeOptionGroups(masterData.payees, currentUserId, state.payeeSelect);
+  // 自分が非表示にしていない支払い先を出す。非表示の支払い先は、
+  // 編集中のレシートで選ばれているときだけ残す（docs/requirements.md「支払い先の一本化」）。
+  const payeeGroups = payeeOptions(masterData.payees, currentUserId, state.payeeSelect);
   // 手入力の店名が支払い先の名前か別名と一致するときは、保存時にその支払い先へ変換されることを案内する
-  // （入力中は何も変えない。docs/分析拡充/要件定義書.md 4.7節）
+  // （入力中は何も変えない。自分が非表示にしている支払い先も対象。docs/分析拡充/要件定義書.md 4.7節）
   const convertTo =
     state.payeeSelect === SELECT_NONE_VALUE
-      ? findPayeeByName(masterData.payees, state.payeeInputText, currentUserId)
+      ? findPayeeByName(masterData.payees, state.payeeInputText)
       : null;
 
   return (
@@ -51,27 +51,14 @@ export function ReceiptUnitSection({
           <option value={SELECT_NONE_VALUE}>該当なし</option>
           {payeeGroups.current && (
             <option value={payeeGroups.current.id}>
-              {payeeOptionLabel(payeeGroups.current, currentUserId, masterData.members)}
+              {payeeOptionLabel(payeeGroups.current, currentUserId)}
             </option>
           )}
-          {payeeGroups.shared.length > 0 && (
-            <optgroup label="グループ全体">
-              {payeeGroups.shared.map((payee) => (
-                <option key={payee.id} value={payee.id}>
-                  {payee.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {payeeGroups.own.length > 0 && (
-            <optgroup label="自分用">
-              {payeeGroups.own.map((payee) => (
-                <option key={payee.id} value={payee.id}>
-                  {payee.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
+          {payeeGroups.options.map((payee) => (
+            <option key={payee.id} value={payee.id}>
+              {payee.name}
+            </option>
+          ))}
         </Select>
 
         {state.payeeSelect === SELECT_NONE_VALUE && (

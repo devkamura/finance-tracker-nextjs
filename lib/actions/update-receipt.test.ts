@@ -15,29 +15,26 @@ vi.mock("@/lib/settings/queries", () => ({
     .fn()
     .mockResolvedValue([{ id: 1, kind: "default", userId: null, name: "ふたり", isHidden: false }]),
   getTags: vi.fn().mockResolvedValue([{ id: 5, name: "朝食", isHidden: false }]),
-  // 支払い先：1＝グループ全体、2＝Bさん用、3＝非表示（分析拡充 F3）。別名は F5
+  // 支払い先：1＝全員に表示、2＝自分（A）が非表示、3＝全員が非表示（支払い先の一本化）。別名は F5
   getPayees: vi.fn().mockResolvedValue([
     {
       id: 1,
       name: "セブンイレブン",
-      ownerUserId: null,
-      isHidden: false,
+      hiddenUserIds: [],
       defaults: {},
       aliases: [{ id: 11, name: "セブン-イレブン長津田店" }],
     },
     {
       id: 2,
       name: "Bの薬局",
-      ownerUserId: "user-b",
-      isHidden: false,
+      hiddenUserIds: ["user-a"],
       defaults: {},
       aliases: [{ id: 21, name: "Bの薬局 駅前店" }],
     },
     {
       id: 3,
       name: "閉店した店",
-      ownerUserId: null,
-      isHidden: true,
+      hiddenUserIds: ["user-a", "user-b"],
       defaults: {},
       aliases: [{ id: 31, name: "閉店" }],
     },
@@ -71,6 +68,7 @@ function buildItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     counterpartId: "1",
     tagIds: [],
     ownerUserId: OWNER_JOINT_VALUE,
+    isSpecialExpense: false,
     ...overrides,
   };
 }
@@ -251,7 +249,7 @@ describe("updateReceipt", () => {
     expect(result).toEqual({ success: true });
   });
 
-  it("U-111: 保存済みの支払い先なら、相方用・非表示でもそのまま保存できる", async () => {
+  it("U-111: 保存済みの支払い先なら、自分が非表示にしていてもそのまま保存できる", async () => {
     mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
     for (const payeeId of [2, 3]) {
       mockedCreateClient.mockResolvedValue(
@@ -273,7 +271,7 @@ describe("updateReceipt", () => {
     }
   });
 
-  it("U-111: 保存済みでない相方用・非表示の支払い先には変更できない", async () => {
+  it("U-111: 保存済みでない、自分が非表示にしている支払い先には変更できない", async () => {
     mockedCreateClient.mockResolvedValue(fakeSupabase());
     mockedGetCurrentMembership.mockResolvedValue({ groupId: "group-1", role: "member" });
     for (const payeeSelect of ["2", "3"]) {

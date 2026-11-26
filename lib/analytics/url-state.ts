@@ -25,11 +25,36 @@ export type AnalyticsState = {
   split: Dimension; // 円グラフの「分ける」
   filter: AnalyticsFilter | null; // 円グラフ・推移グラフ共通の「絞り込み」。null＝なし（総支出）
   trendMonth: string | null; // 推移グラフで選択中の月。null＝未選択
+  // 特別費を含めるか（Issue #41）。初期値は false（特別費を除く）。
+  // 絞り込み・分けるで特別費の項目を選んでいる間は、この値に関係なく含める（isSpecialExpenseForced）。
+  includeSpecialExpense: boolean;
 };
 
 // 絞り込みを、集計・一覧の絞り込みで使う条件の形にする
 export function filterConditions(filter: AnalyticsFilter | null): Conditions {
   return filter ? { [filter.dimension]: filter.key } : {};
+}
+
+// 特別費の項目を絞り込み・分けるで選んでいるか。選んでいる間は「特別費を含める」を ON とみなす
+// （OFF のままだと「絞り込み：特別費」が0円になってしまうため。Issue #41）。
+// 推移グラフは「分ける」を使わないため、split に null を渡す（絞り込みだけで判定する）。
+export function isSpecialExpenseForced(
+  filter: AnalyticsFilter | null,
+  split: Dimension | null
+): boolean {
+  return filter?.dimension === "specialExpense" || split === "specialExpense";
+}
+
+// 集計・一覧への絞り込みに使う条件。利用者が選んだ絞り込みに、
+// 特別費を除くとき（含めない かつ 強制 ON でない）だけ「通常の明細のみ」の条件を足す（Issue #41）。
+export function analysisConditions(
+  filter: AnalyticsFilter | null,
+  split: Dimension | null,
+  includeSpecialExpense: boolean
+): Conditions {
+  const conditions = filterConditions(filter);
+  if (includeSpecialExpense || isSpecialExpenseForced(filter, split)) return conditions;
+  return { ...conditions, specialExpense: "normal" };
 }
 
 type StateSource = Pick<AnalyticsData, "members" | "months"> & DimensionMaster;
@@ -47,7 +72,7 @@ function validFilter(
 }
 
 // URLの値を検証して状態に変換する。不正な値は初期値
-// （全体・共同オフ・当月・円グラフ・カテゴリで分ける・絞り込みなし・月未選択）に戻す。
+// （全体・共同オフ・当月・円グラフ・カテゴリで分ける・絞り込みなし・月未選択・特別費を除く）に戻す。
 // F4 より前の URL（推移グラフのカテゴリ category=ID）は、カテゴリの絞り込みとして読む。
 export function parseAnalyticsState(
   get: (key: string) => string | null | undefined,
@@ -70,6 +95,7 @@ export function parseAnalyticsState(
     split: isDimension(split) ? split : "category",
     filter,
     trendMonth: trendMonth && data.months.includes(trendMonth) ? trendMonth : null,
+    includeSpecialExpense: get("special") === "1",
   };
 }
 
@@ -89,6 +115,9 @@ export function serializeAnalyticsState(state: AnalyticsState): URLSearchParams 
   }
   if (state.trendMonth !== null) {
     params.set("trendMonth", state.trendMonth);
+  }
+  if (state.includeSpecialExpense) {
+    params.set("special", "1");
   }
   return params;
 }

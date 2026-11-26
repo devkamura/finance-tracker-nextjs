@@ -28,6 +28,7 @@ const row = (
   counterpartId: 1,
   payeeId: 1,
   ownerUserId,
+  isSpecialExpense: false,
   amount,
 });
 
@@ -239,6 +240,7 @@ describe("sumByDimension（分ける・絞り込み）", () => {
     counterpartId,
     payeeId,
     ownerUserId,
+    isSpecialExpense: false,
     amount,
   });
 
