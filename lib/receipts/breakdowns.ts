@@ -1,4 +1,4 @@
-// カテゴリの内訳（docs/分析拡充/基本設計書.md 3.1節）。
+// カテゴリの内訳（docs/全体仕様書/基本設計書.md 5.4節）。
 // 登録画面（クライアント）と Server Action の入力チェックの両方から使うため server-only にはしない。
 
 export type CategoryBreakdown = {

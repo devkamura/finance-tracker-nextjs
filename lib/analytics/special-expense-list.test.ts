@@ -1,4 +1,4 @@
-// 単体テスト：直近12ヶ月の特別費の一覧（Issue #41 要件10。docs/test-spec.md U-161〜U-162）。
+// 単体テスト：直近12ヶ月の特別費の一覧（Issue #41 要件10）。
 
 import { describe, expect, it } from "vitest";
 

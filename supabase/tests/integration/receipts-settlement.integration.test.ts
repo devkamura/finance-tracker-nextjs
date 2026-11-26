@@ -9,7 +9,7 @@ import {
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // レシート/明細/精算のRLS・RPCの実際の振る舞いを、service_roleで用意した
-// 2人グループを使って検証する（docs/basic-design.md 3〜5章）。
+// 2人グループを使って検証する（docs/全体仕様書/基本設計書.md 4章、docs/全体仕様書/用語と算出方法.md 4章）。
 describe("レシート・精算のRLS/RPC", () => {
   const admin = createServiceRoleClient();
 

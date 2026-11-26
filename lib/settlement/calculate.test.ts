@@ -291,7 +291,7 @@ describe("calculateSettlement", () => {
   });
 });
 
-// 税別の明細を税込に直した合計が、支払額と一致しないとき（docs/分析拡充/テストデータ.md の No.12・13）
+// 税別の明細を税込に直した合計が、支払額と一致しないとき（docs/全体仕様書/運用手順.md 5.1節の No.12・13）
 describe("allocateReceiptAmount（税別の明細）", () => {
   const exclusive = (price: number, taxRateMultiplier: number) => ({
     price,

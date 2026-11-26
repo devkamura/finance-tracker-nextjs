@@ -1,4 +1,4 @@
-// グラフからレシート一覧への絞り込み（docs/支出分析機能/詳細設計書.md フェーズ3 5.2節）。
+// グラフからレシート一覧への絞り込み（docs/全体仕様書/基本設計書.md 5.6節）。
 // 分析の集計（lib/analytics/queries.ts・aggregate.ts）と同じ按分・重み・符号で計算し、
 // 一覧に出す「うち〇〇円」の合計がグラフの値と必ず一致するようにする。
 
@@ -9,7 +9,7 @@ import { allocateReceiptAmount } from "@/lib/settlement/calculate";
 import type { ReceiptListItem } from "@/types/receipt";
 
 export type DrilldownFilter = {
-  // カテゴリ・内訳・費用区分・支払い先・相手・特別費の条件（なし＝総支出。docs/分析拡充/詳細設計書.md F4 4章）
+  // カテゴリ・内訳・費用区分・支払い先・相手・特別費の条件（なし＝総支出。docs/全体仕様書/基本設計書.md 5.6節）
   conditions: Conditions;
   scope: Scope;
 };

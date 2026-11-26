@@ -142,7 +142,7 @@ describe("buildAnalyticsRows", () => {
   });
 
   it("U-124: 税別の明細を税込に直した合計と支払額が違うときも、按分した金額をカテゴリごとに合計する", () => {
-    // docs/分析拡充/テストデータ.md の No.13（明細ごとの合計 1,520、支払額 1,521）
+    // docs/全体仕様書/運用手順.md 5.1節の No.13（明細ごとの合計 1,520、支払額 1,521）
     const rows = buildAnalyticsRows([
       buildReceipt({
         amount: 1521,

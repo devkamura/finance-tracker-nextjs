@@ -10,7 +10,7 @@ import {
 import { getCurrentMembership, getGroupMembers } from "@/lib/supabase/group";
 import { createClient } from "@/lib/supabase/server";
 
-// 設定 ＞ 支払い先（docs/requirements.md「追加機能：支払い先の一本化」）。
+// 設定 ＞ 支払い先（docs/全体仕様書/基本設計書.md 5.3節）。
 // 支払い先はグループで1つの一覧。メンバー全員が編集でき、表示／非表示は自分の分だけ切り替える。
 export default async function PayeeSettingsPage() {
   const supabase = await createClient();

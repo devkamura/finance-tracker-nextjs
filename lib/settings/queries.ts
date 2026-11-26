@@ -87,7 +87,7 @@ export async function getCounterparts(
   });
 }
 
-// 分析・レシート一覧の絞り込みで表示する相手の名前（docs/分析拡充/詳細設計書.md F4 2章）。
+// 分析・レシート一覧の絞り込みで表示する相手の名前（docs/全体仕様書/基本設計書.md 5.5節）。
 // 非表示の相手に加え、グループから外れたメンバーの相手も、既存の明細の集計に出てくるため含める
 // （名前は一覧・詳細の表示と同じく unknown）。並び順→登録順。
 export async function getCounterpartNames(

@@ -124,7 +124,7 @@ describe("グループベース管理画面機能のRLS/RPC", () => {
   });
 
   it("I-05: 一般メンバーも自グループの支払い先をINSERTでき、他グループにはINSERTできない", async () => {
-    // 支払い先の登録・編集・削除はメンバー全員ができる（docs/requirements.md「支払い先の一本化」）
+    // 支払い先の登録・編集・削除はメンバー全員ができる（docs/全体仕様書/基本設計書.md 4章）
     const { error } = await memberA1.client.from("payees").insert({
       group_id: groupAId,
       name: "一般メンバーが登録した支払い先",

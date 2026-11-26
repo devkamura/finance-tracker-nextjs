@@ -1,6 +1,6 @@
-// 支出分析画面にサーバーから一括で渡すデータの型（docs/支出分析機能/詳細設計書.md 4.2節）。
+// 支出分析画面にサーバーから一括で渡すデータの型（docs/全体仕様書/基本設計書.md 5.5節）。
 // 明細1件ずつではなく「月×カテゴリ×内訳×相手×支払い先×帰属先×特別費」で合計した行を渡す
-// （集計結果は同じで、データ量を抑えるため。docs/分析拡充/詳細設計書.md F4 2章）。
+// （集計結果は同じで、データ量を抑えるため。docs/全体仕様書/基本設計書.md 5.5節）。
 // 費用区分はカテゴリから求めるため行には持たない（基本設計書 3.2節）。
 
 import type { AnalyticsPayee } from "@/lib/analytics/payees";
@@ -55,7 +55,7 @@ export type AnalyticsData = {
   rows: AnalyticsRow[];
 };
 
-// 表示対象（docs/支出分析機能/基本設計書.md 3.2節）
+// 表示対象（docs/全体仕様書/用語と算出方法.md 3.2節）
 export type Scope =
   | { kind: "all" }
   | { kind: "user"; userId: string; includeJoint: boolean };

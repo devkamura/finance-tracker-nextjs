@@ -9,7 +9,7 @@ import {
 
 // ローカルSupabaseスタック（`supabase start`）への実接続が必要な結合テスト。
 // 分析拡充 F1：カテゴリの内訳・費用区分のRLSと、明細の内訳の整合性を検証する
-// （docs/分析拡充/基本設計書.md 4章）。
+// （docs/全体仕様書/基本設計書.md 3章・4章）。
 describe("カテゴリの内訳・費用区分", () => {
   const admin = createServiceRoleClient();
 

@@ -9,7 +9,7 @@ type AnalyticsConditionsPanelProps = {
   children: ReactNode; // 表示対象・絞り込み・分けるの選択欄
 };
 
-// 分析画面の条件（表示対象・絞り込み・分ける）をまとめた折りたたみ（docs/分析拡充/詳細設計書.md F4 5章）。
+// 分析画面の条件（表示対象・絞り込み・分ける）をまとめた折りたたみ（docs/全体仕様書/基本設計書.md 5.5節）。
 // スマホでは選択欄を並べるとグラフが画面の下に押し出されるため、最初は閉じておき、
 // 今の条件を1行で見せる。条件を変えるときだけ開く（開閉は画面の中だけで、URLには残さない）。
 export function AnalyticsConditionsPanel({ summary, children }: AnalyticsConditionsPanelProps) {

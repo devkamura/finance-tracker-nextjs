@@ -51,7 +51,7 @@ const SPLIT_HELP =
 const selectClass =
   "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-900";
 
-// 分析画面の「絞り込み」「分ける」（docs/分析拡充/基本設計書.md 2.9節、詳細設計書 F4 5章）。
+// 分析画面の「絞り込み」「分ける」（docs/全体仕様書/基本設計書.md 5.5節）。
 // 絞り込みは項目（カテゴリ・内訳など）を選んでから、その値（食費など）を選ぶ。
 // 項目を選んだときは、選択肢の先頭の値で絞り込む。選択肢のない項目は選べないようにする。
 export function SplitFilterControls({

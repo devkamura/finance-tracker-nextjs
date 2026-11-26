@@ -1,4 +1,4 @@
-// 単体テスト：登録・編集画面の特別費フラグと保存（Issue #41。docs/test-spec.md U-158・U-163）。
+// 単体テスト：登録・編集画面の特別費フラグと保存（Issue #41）。
 
 import { describe, expect, it } from "vitest";
 

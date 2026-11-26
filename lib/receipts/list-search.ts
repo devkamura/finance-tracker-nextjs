@@ -1,4 +1,4 @@
-// レシート一覧のフィルタ（Issue #39。docs/requirements.md「追加機能：レシート一覧のフィルタ」）。
+// レシート一覧のフィルタ（Issue #39。docs/全体仕様書/要件定義書.md 4.5節）。
 // 一覧画面で自分で選ぶ条件のうち、レシート単位で判定するもの（支払者・期間・キーワード）を扱う。
 // 負担者（scope・joint）とカテゴリなどの明細単位の条件は、分析画面からの絞り込みと同じ
 // lib/receipts/list-params.ts（parseListFilter）と lib/analytics/drilldown.ts で扱う。
